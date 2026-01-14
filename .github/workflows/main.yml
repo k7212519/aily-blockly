@@ -91,9 +91,9 @@ jobs:
           # electron-builder 签名配置
           CSC_LINK: ${{ secrets.APPLE_SIGNING_CERT }}
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_SIGNING_PASSWORD }}
-          # Apple 公证配置
+          # Apple 公证配置（electron-builder 要求的变量名）
           APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       # --- 如果 electron-builder 公证失败，手动公证 ---
