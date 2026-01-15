@@ -1037,6 +1037,7 @@ function createWindow() {
     titleBarStyle: isDarwin ? 'hiddenInset' : 'default',
     alwaysOnTop: false,
     autoHideMenuBar: true,
+    icon: path.join(__dirname, "../public/icon.ico"),
     webPreferences: {
       nodeIntegration: true,
       webSecurity: false,
