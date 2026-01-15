@@ -42,12 +42,16 @@
       {
         "from": "child/scripts",
         "to": "app/child/scripts"
+      },
+      {
+        "from": "public/icon.ico",
+        "to": "app/icon.ico"
       }
     ],
     "win": {
       "target": "nsis",
       "sign": false,
-      "signAndEditExecutable": true,
+      "signAndEditExecutable": false,
       "artifactName": "aily-blockly-${version}.${ext}",
       "icon": "public/icon.ico",
       "fileAssociations": [
@@ -69,12 +73,6 @@
     "mac": {
       "icon": "public/icon-512.ico",
       "artifactName": "aily-blockly-${version}-arm64.${ext}",
-      "category": "public.app-category.developer-tools",
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist",
-      "notarize": true,
       "fileAssociations": [
         {
           "ext": "abi",
@@ -104,7 +102,7 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
+      "createDesktopShortcut": false,
       "perMachine": true,
       "allowElevation": true,
       "deleteAppDataOnUninstall": true,
