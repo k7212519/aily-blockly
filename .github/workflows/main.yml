@@ -45,7 +45,7 @@ jobs:
           Write-Host "Embedding icon into executable..."
           Write-Host "Exe path: $exePath"
           Write-Host "Icon path: $iconPath"
-          node -e "const rcedit = require('rcedit'); rcedit('$exePath', { icon: '$iconPath' }).then(() => console.log('Icon embedded successfully!')).catch(e => { console.error(e); process.exit(1); })"
+          node -e "const rceditModule = require('rcedit'); const rcedit = typeof rceditModule === 'function' ? rceditModule : rceditModule.default; rcedit('$exePath', { icon: '$iconPath' }).then(() => console.log('Icon embedded successfully!')).catch(e => { console.error(e); process.exit(1); })"
         shell: pwsh
 
       - name: Build NSIS Installer
