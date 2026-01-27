@@ -8,6 +8,8 @@ on:
 
 jobs:
   # 任务 1：Windows 客户端构建 (新增，用于向 SignPath 证明构建能力)
+  jobs:
+  # 任务 1：Windows 客户端构建
   build-windows:
     runs-on: windows-latest
     steps:
@@ -43,44 +45,34 @@ jobs:
         env:
           NODE_ENV: production
 
-      # 上传未签名的安装程序供 SignPath 签名
-      - name: Upload unsigned installer for SignPath
-        uses: actions/upload-artifact@v4
-        id: upload-unsigned
-        with:
-          name: AilyBlockly-Windows-Unsigned
-          path: dist/aily-blockly/*.exe
-          retention-days: 1
+      # ================== SignPath 集成开始 ==================
+      
+      - name: Get Installer Path
+        id: get_installer
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Path "dist/aily-blockly/*.exe" | Select-Object -First 1
+          if ($null -eq $installer) { Write-Error "No exe found"; exit 1 }
+          echo "path=$($installer.FullName)" >> $env:GITHUB_OUTPUT
 
-      # --- SignPath 代码签名 ---
-      - name: Sign with SignPath
+      - name: Sign Installer with SignPath
         uses: signpath/github-action-submit-signing-request@v1
         with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: aily-blockly
-          signing-policy-slug: release-signing
-          artifact-configuration-slug: windows-installer
-          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
+          organization-id: 'bd01a768-a9e3-4a62-945d-fcfdc37a299e'
+          project-slug: 'aily-blockly' 
+          signing-policy-slug: 'test-signing'
+          artifact-file: '${{ steps.get_installer.outputs.path }}'
           wait-for-completion: true
-          output-artifact-directory: dist/aily-blockly-signed
-        id: signpath-signing
 
-      - name: Replace unsigned with signed artifact
-        run: |
-          if (Test-Path "dist/aily-blockly-signed/*.exe") {
-            Copy-Item -Path "dist/aily-blockly-signed/*.exe" -Destination "dist/aily-blockly/" -Force
-            Write-Host "✅ Signed installer copied successfully"
-          } else {
-            Write-Host "⚠️ No signed artifact found, using unsigned"
-          }
-      
+      # ================== SignPath 集成结束 ==================
+
       - name: Archive Windows Artifact
         uses: actions/upload-artifact@v4
         with:
           name: AilyBlockly-Windows-Package
-          path: dist/aily-blockly/ # 包含所有输出：exe, yml 等
-
+          path: dist/aily-blockly/
+  
   # 任务 2：macOS 客户端构建
   build-macos:
     runs-on: macos-latest
