@@ -526,6 +526,7 @@
         "CODE_SENT": "Verification code sent, please check your email",
         "CODE_SEND_FAILED": "Failed to send verification code, please try again",
         "ENTER_CODE": "Please enter verification code",
+        "CODE_SENDING": "Please get verification code first",
         "LOGGING_IN": "Logging in...",
         "LOGIN": "Login",
         "SELECT_METHOD": "Click to select login method",

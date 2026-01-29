@@ -190,9 +190,6 @@ export class LoginComponent {
     }
   }
 
-  // 保存发送验证码后返回的token
-  private verificationToken = '';
-
   /**
    * 发送邮箱验证码
    */
@@ -214,13 +211,11 @@ export class LoginComponent {
       return;
     }
 
-    this.isSendingCode = true;
-
     try {
       this.authService.sendEmailCode(this.inputEmail, altchaToken).subscribe({
         next: (response) => {
           if (response.status === 200) {
-            this.verificationToken = response.data.token;
+            this.isSendingCode = true;
             this.message.success(this.translate.instant('LOGIN.CODE_SENT'));
             this.startCountdown();
           } else {
@@ -235,13 +230,11 @@ export class LoginComponent {
           this.message.error(this.translate.instant('LOGIN.CODE_SEND_FAILED'));
         },
         complete: () => {
-          this.isSendingCode = false;
         },
       });
     } catch (error) {
       console.error('发送验证码过程中出错:', error);
       this.message.error(this.translate.instant('LOGIN.CODE_SEND_FAILED'));
-      this.isSendingCode = false;
     }
   }
 
@@ -273,10 +266,15 @@ export class LoginComponent {
       return;
     }
 
+    if (!this.isSendingCode) {
+      this.message.warning(this.translate.instant('LOGIN.CODE_SENDING'));
+      return;
+    }
+
     this.isWaiting = true;
 
     try {
-      this.authService.loginByEmail(this.inputEmail, this.inputCode, this.verificationToken).subscribe({
+      this.authService.loginByEmail(this.inputEmail, this.inputCode).subscribe({
         next: (response) => {
           if (response.status === 200 && response.data) {
             this.message.success(this.translate.instant('LOGIN.LOGIN_SUCCESS'));
