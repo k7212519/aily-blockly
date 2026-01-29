@@ -74,6 +74,16 @@ export function processI18n(sourceJson, i18nData) {
 
         // 检查i18n中是否有对应类型的块
         if (i18nData[blockType]) {
+            // 处理 tooltip 字段
+            if (i18nData[blockType].tooltip !== undefined) {
+                block.tooltip = i18nData[blockType].tooltip;
+            }
+
+            // 处理 helpUrl 字段
+            if (i18nData[blockType].helpUrl !== undefined) {
+                block.helpUrl = i18nData[blockType].helpUrl;
+            }
+
             // 检查所有可能的message字段
             let messageIndex = 0;
             // 循环检查原始块中的每个messageX字段
