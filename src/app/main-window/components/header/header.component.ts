@@ -778,8 +778,8 @@ export class HeaderComponent implements OnDestroy {
         return;
       }
 
-      // 调用烧录方法，传入串口（NoticeService 会在 projectService 中处理进度显示）
-      await this.projectService.flashSoftdevice(subItem.data, this.serialService.currentPort);
+      // 通过 UploaderService 调用烧录方法（使用 ActionService 分发到 _UploaderService）
+      await this.uploaderService.flashSoftdevice(subItem.data, this.serialService.currentPort);
     }
   }
 
