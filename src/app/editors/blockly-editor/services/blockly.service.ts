@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import * as Blockly from 'blockly';
-import { processI18n, processJsonVar, processStaticFilePath } from '../components/blockly/abf';
+import { processI18n, processJsonVar, processStaticFilePath, processToolboxI18n } from '../components/blockly/abf';
 import { TranslateService } from '@ngx-translate/core';
 import { ElectronService } from '../../../services/electron.service';
 
@@ -121,8 +121,9 @@ export class BlocklyService {
         const toolboxFileIsExist = this.electronService.exists(this.electronService.pathJoin(libPackagePath, 'toolbox.json'));
         if (toolboxFileIsExist) {
           let toolbox = JSON.parse(this.electronService.readFile(this.electronService.pathJoin(libPackagePath, 'toolbox.json')));
+          // 处理 toolbox 多语言（包括 name 和 labels）
           if (i18nData) {
-            toolbox.name = i18nData.toolbox_name;
+            toolbox = processToolboxI18n(toolbox, i18nData);
           }
           this.loadLibToolbox(toolbox);
         }
