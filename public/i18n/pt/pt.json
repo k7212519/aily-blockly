@@ -507,12 +507,19 @@
         "BOARD_UNINSTALL_COMPLETE": "Placa desinstalada com sucesso",
         "BOARD_DEPS_INSTALL_COMPLETE": "Dependências da placa instaladas com sucesso",
         "BOARD_DEPS_INSTALL_FAILED": "Falha ao instalar dependências da placa",
+        "DEPS_INSTALL_COMPLETE": "Dependências instaladas com sucesso",
         "DEPS_UNINSTALL_COMPLETE": "Dependências desinstaladas com sucesso",
         "DEPS_UNINSTALL_FAILED": "Falha ao desinstalar dependências",
         "NAME_REQUIRED": "O nome de {{type}} não pode estar vazio",
         "TYPE_TOOL": "Ferramenta",
         "TYPE_SDK": "SDK",
-        "TYPE_COMPILER": "Compilador"
+        "TYPE_COMPILER": "Compilador",
+        "INSTALLING_TITLE": "Instalando",
+        "INSTALL_COMPLETE_TITLE": "Instalação Concluída",
+        "INSTALL_FAILED_TITLE": "Instalação Falhou",
+        "UNINSTALLING_TITLE": "Desinstalando",
+        "UNINSTALL_COMPLETE_TITLE": "Desinstalação Concluída",
+        "UNINSTALL_FAILED_TITLE": "Desinstalação Falhou"
     },
     "BLOCKLY_EDITOR": {
         "INSTALLING_DEPS": "Instalando dependências",

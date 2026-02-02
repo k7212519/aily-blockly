@@ -507,12 +507,19 @@
         "BOARD_UNINSTALL_COMPLETE": "ボードのアンインストールが完了しました",
         "BOARD_DEPS_INSTALL_COMPLETE": "ボードの依存関係のインストールが完了しました",
         "BOARD_DEPS_INSTALL_FAILED": "ボードの依存関係のインストールに失敗しました",
+        "DEPS_INSTALL_COMPLETE": "依存関係のインストールが完了しました",
         "DEPS_UNINSTALL_COMPLETE": "依存関係のアンインストールが完了しました",
         "DEPS_UNINSTALL_FAILED": "依存関係のアンインストールに失敗しました",
         "NAME_REQUIRED": "{{type}}名は空にできません",
         "TYPE_TOOL": "ツール",
         "TYPE_SDK": "SDK",
-        "TYPE_COMPILER": "コンパイラ"
+        "TYPE_COMPILER": "コンパイラ",
+        "INSTALLING_TITLE": "インストール中",
+        "INSTALL_COMPLETE_TITLE": "インストール完了",
+        "INSTALL_FAILED_TITLE": "インストール失敗",
+        "UNINSTALLING_TITLE": "アンインストール中",
+        "UNINSTALL_COMPLETE_TITLE": "アンインストール完了",
+        "UNINSTALL_FAILED_TITLE": "アンインストール失敗"
     },
     "BLOCKLY_EDITOR": {
         "INSTALLING_DEPS": "依存関係をインストール中",

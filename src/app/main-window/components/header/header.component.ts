@@ -769,6 +769,9 @@ export class HeaderComponent implements OnDestroy {
       }
     }
 
+    // 触发预编译操作：配置变更后自动触发预编译
+    this.builderService.triggerPreprocess('config-changed');
+
     // 判断是否是nRF5的softdevice选择，如果是则直接烧录softdevice
     if (this.projectService.currentBoardConfig['core']?.indexOf('nRF5') > -1 &&
       subItem.key === 'softdevice') {

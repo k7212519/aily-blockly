@@ -507,12 +507,19 @@
         "BOARD_UNINSTALL_COMPLETE": "Плата успешно удалена",
         "BOARD_DEPS_INSTALL_COMPLETE": "Зависимости платы успешно установлены",
         "BOARD_DEPS_INSTALL_FAILED": "Ошибка установки зависимостей платы",
+        "DEPS_INSTALL_COMPLETE": "Зависимости успешно установлены",
         "DEPS_UNINSTALL_COMPLETE": "Зависимости успешно удалены",
         "DEPS_UNINSTALL_FAILED": "Ошибка удаления зависимостей",
         "NAME_REQUIRED": "Имя {{type}} не может быть пустым",
         "TYPE_TOOL": "Инструмент",
         "TYPE_SDK": "SDK",
-        "TYPE_COMPILER": "Компилятор"
+        "TYPE_COMPILER": "Компилятор",
+        "INSTALLING_TITLE": "Установка",
+        "INSTALL_COMPLETE_TITLE": "Установка завершена",
+        "INSTALL_FAILED_TITLE": "Ошибка установки",
+        "UNINSTALLING_TITLE": "Удаление",
+        "UNINSTALL_COMPLETE_TITLE": "Удаление завершено",
+        "UNINSTALL_FAILED_TITLE": "Ошибка удаления"
     },
     "BLOCKLY_EDITOR": {
         "INSTALLING_DEPS": "Установка зависимостей",

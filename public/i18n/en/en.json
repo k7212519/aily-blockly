@@ -563,12 +563,19 @@
         "BOARD_UNINSTALL_COMPLETE": "Board uninstalled successfully",
         "BOARD_DEPS_INSTALL_COMPLETE": "Board dependencies installed successfully",
         "BOARD_DEPS_INSTALL_FAILED": "Board dependencies installation failed",
+        "DEPS_INSTALL_COMPLETE": "Dependencies installed successfully",
         "DEPS_UNINSTALL_COMPLETE": "Dependencies uninstalled successfully",
         "DEPS_UNINSTALL_FAILED": "Dependencies uninstallation failed",
         "NAME_REQUIRED": "{{type}} name cannot be empty",
         "TYPE_TOOL": "Tool",
         "TYPE_SDK": "SDK",
-        "TYPE_COMPILER": "Compiler"
+        "TYPE_COMPILER": "Compiler",
+        "INSTALLING_TITLE": "Installing",
+        "INSTALL_COMPLETE_TITLE": "Installation Complete",
+        "INSTALL_FAILED_TITLE": "Installation Failed",
+        "UNINSTALLING_TITLE": "Uninstalling",
+        "UNINSTALL_COMPLETE_TITLE": "Uninstallation Complete",
+        "UNINSTALL_FAILED_TITLE": "Uninstallation Failed"
     },
     "BLOCKLY_EDITOR": {
         "INSTALLING_DEPS": "Installing dependencies",
