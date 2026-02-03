@@ -358,6 +358,7 @@
         "DOCUMENTATION": "문서",
         "FEEDBACK": "피드백",
         "NO_PINMAP": "이 보드에 대한 핀 맵을 사용할 수 없습니다",
+        "PINMAP_PARSE_ERROR": "핀 맵 파싱 실패",
         "NO_DOCUMENTATION": "이 보드에 대한 문서를 사용할 수 없습니다"
     },
     "SERIAL": {

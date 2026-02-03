@@ -362,6 +362,7 @@
         "DOCUMENTATION": "Documentation",
         "FEEDBACK": "Retour d'information",
         "NO_PINMAP": "Schéma des broches non disponible pour cette carte",
+        "PINMAP_PARSE_ERROR": "Échec de l'analyse du schéma des broches",
         "NO_DOCUMENTATION": "Documentation non disponible pour cette carte"
     },
     "SERIAL": {

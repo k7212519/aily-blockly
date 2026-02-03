@@ -362,6 +362,7 @@
         "DOCUMENTATION": "التوثيق",
         "FEEDBACK": "ملاحظات",
         "NO_PINMAP": "خريطة الدبابيس غير متوفرة لهذه اللوحة",
+        "PINMAP_PARSE_ERROR": "فشل تحليل خريطة الدبابيس",
         "NO_DOCUMENTATION": "التوثيق غير متوفر لهذه اللوحة"
     },
     "SERIAL": {

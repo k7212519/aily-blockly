@@ -362,6 +362,7 @@
         "DOCUMENTATION": "文檔",
         "FEEDBACK": "反饋",
         "NO_PINMAP": "該開發板沒有提供引腳圖",
+        "PINMAP_PARSE_ERROR": "引腳圖解析失敗",
         "NO_DOCUMENTATION": "該開發板沒有提供文檔鏈接"
     },
     "SERIAL": {

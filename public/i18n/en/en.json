@@ -411,6 +411,7 @@
         "DOCUMENTATION": "Documentation",
         "FEEDBACK": "Feedback",
         "NO_PINMAP": "Pin map not available for this board",
+        "PINMAP_PARSE_ERROR": "Pin map parsing failed",
         "NO_DOCUMENTATION": "Documentation not available for this board"
     },
     "SERIAL": {
