@@ -1220,9 +1220,16 @@ function configureBlockFields(block: any, fields: FieldConfig): {
         try {
           // 处理对象格式的字段值
           let actualValue: string;
+          // 🔑 保存原始的 name 属性，用于变量字段的名称查找
+          let variableNameFromConfig: string | undefined = undefined;
           
           if (typeof value === 'object' && value !== null) {
-            // 如果是对象格式 {id: "xxx"} 或 {name: "xxx"}
+            // 如果是对象格式 {id: "xxx", name: "xxx"} 或 {name: "xxx"}
+            // 🔧 对于变量字段，优先保存 name 属性供后续使用
+            if ((value as any).name) {
+              variableNameFromConfig = (value as any).name;
+            }
+            
             if ((value as any).id) {
               // 传入了 {id: "xxx"} 格式，提取值（会在后续验证是否为真实变量ID）
               actualValue = (value as any).id;
@@ -1318,8 +1325,40 @@ function configureBlockFields(block: any, fields: FieldConfig): {
             const variableMap = workspace?.getVariableMap?.();
             let finalVariableId: string | null = null;
             
-            // 🎯 首先检查传入的值是否已经是一个有效的变量ID（无论是否标记为显式ID）
-            if (variableMap) {
+            // � 获取字段期望的变量类型
+            const field = block.getField(fieldName);
+            const expectedTypes: string[] = field?.variableTypes_ || [''];
+            // console.log(`🔍 字段 ${fieldName} 期望的变量类型:`, expectedTypes);
+            
+            // 🎯 策略：优先使用变量名查找，因为变量ID在不同工作区中会变化
+            // 如果配置中包含 name 属性，优先使用 name 来查找变量
+            if (variableNameFromConfig && variableMap) {
+              // 🆕 优先查找匹配类型的变量
+              if (expectedTypes.length > 0 && expectedTypes[0] !== '') {
+                // 有特定类型要求，先尝试查找匹配类型的变量
+                for (const expectedType of expectedTypes) {
+                  const varsOfType = workspace.getVariablesOfType?.(expectedType) || [];
+                  const matchedVar = varsOfType.find((v: any) => v.name === variableNameFromConfig);
+                  if (matchedVar) {
+                    finalVariableId = matchedVar.getId();
+                    console.log(`✅ 通过变量名和类型找到变量: "${variableNameFromConfig}" (类型: ${expectedType}) → ID: ${finalVariableId}`);
+                    break;
+                  }
+                }
+              }
+              
+              // 如果没找到匹配类型的，再尝试无类型查找（兼容旧行为）
+              if (!finalVariableId) {
+                const varByName = variableMap.getVariable?.(variableNameFromConfig);
+                if (varByName) {
+                  finalVariableId = varByName.getId();
+                  console.log(`✅ 通过变量名找到变量: "${variableNameFromConfig}" → ID: ${finalVariableId}`);
+                }
+              }
+            }
+            
+            // 如果通过 name 没找到，再尝试检查 actualValue 是否是有效的变量ID
+            if (!finalVariableId && variableMap) {
               const existingVarById = variableMap.getVariableById?.(actualValue);
               if (existingVarById) {
                 // console.log(`✅ 检测到值已经是有效的变量ID: ${actualValue} → 变量名: ${existingVarById.name}`);
@@ -1327,28 +1366,32 @@ function configureBlockFields(block: any, fields: FieldConfig): {
               }
             }
             
-            // 如果不是有效的变量ID，则当作变量名处理（查找或创建变量）
+            // 如果仍然没找到，当作变量名处理（查找或创建变量）
             if (!finalVariableId) {
-              // 🔍 检测是否看起来像变量ID（通常是长随机字符串）
-              const looksLikeVariableId = /^[a-zA-Z0-9_-]{10,}$/.test(actualValue) || 
-                                          /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(actualValue);
+              // 🔑 如果有 variableNameFromConfig，使用它；否则使用 actualValue
+              const nameToUse = variableNameFromConfig || actualValue;
               
-              if (looksLikeVariableId) {
-                // ⚠️ 传入的值看起来像变量ID但不是有效ID，记录错误提示LLM
-                const errorMsg = `变量字段 "${fieldName}" 的值 "${actualValue}" 看起来像变量ID，但不是工作区中有效的变量ID`;
-                const suggestion = `请使用变量名（如 "myVar", "counter"）而不是变量ID。系统会自动处理变量名到ID的转换。`;
-                console.warn(`⚠️ ${errorMsg}`);
-                console.warn(`💡 ${suggestion}`);
+              // 🔍 只有当使用 actualValue 且它看起来像随机ID时才警告
+              if (!variableNameFromConfig) {
+                const looksLikeVariableId = /^[a-zA-Z0-9_\-\|\[\]`@#$%^&*(){}!;:'",.<>/?\\+=~]{10,}$/.test(actualValue);
                 
-                failedFields.push({
-                  fieldName,
-                  value: actualValue,
-                  error: errorMsg,
-                  suggestion
-                });
+                if (looksLikeVariableId) {
+                  // ⚠️ 传入的值看起来像变量ID但不是有效ID
+                  const errorMsg = `变量字段 "${fieldName}" 的值 "${actualValue}" 看起来像变量ID，但不是工作区中有效的变量ID`;
+                  const suggestion = `请使用变量名（如 "myVar", "counter"）而不是变量ID。系统会自动处理变量名到ID的转换。`;
+                  console.warn(`⚠️ ${errorMsg}`);
+                  console.warn(`💡 ${suggestion}`);
+                  
+                  failedFields.push({
+                    fieldName,
+                    value: actualValue,
+                    error: errorMsg,
+                    suggestion
+                  });
+                }
               }
               
-              console.log(`🔍 "${actualValue}" 不是有效的变量ID，当作变量名处理...`);
+              console.log(`🔍 使用变量名查找/创建变量: "${nameToUse}"`);
               
               let variableType: string | undefined = undefined;
               if (typeof value === 'object' && value !== null && (value as any).type) {
@@ -1356,13 +1399,13 @@ function configureBlockFields(block: any, fields: FieldConfig): {
                 console.log(`🔍 从字段配置提取变量类型: ${variableType}`);
               }
               
-              // 🔧 启用自动创建变量（保持向后兼容）
-              finalVariableId = handleVariableField(block, actualValue, true, variableType, true);
+              // 🔧 使用变量名查找或创建变量
+              finalVariableId = handleVariableField(block, nameToUse, true, variableType, true);
             }
             
             if (finalVariableId) {
               block.setFieldValue(finalVariableId, fieldName);
-              console.log(`✅ 变量字段设置成功: ${fieldName} = ${finalVariableId} (原始值: ${actualValue})`);
+              console.log(`✅ 变量字段设置成功: ${fieldName} = ${finalVariableId} (变量名: ${variableNameFromConfig || actualValue})`);
               configSuccess = true;
             } else {
               console.warn(`⚠️ 变量字段处理失败，使用原值: ${fieldName} = ${actualValue}`);
@@ -1393,12 +1436,13 @@ function configureBlockFields(block: any, fields: FieldConfig): {
             if (field.getOptions) {
               try {
                 const options = field.getOptions();
-                availableOptions = options.map((opt: any) => opt[1] || opt[0]);
+                // 注意：使用 ?? 而非 || ，因为空字符串 "" 是有效的选项值
+                availableOptions = options.map((opt: any) => opt[1] ?? opt[0]);
                 console.log(`🔍 下拉菜单可用选项:`, availableOptions);
                 
-                // 1. 首先尝试精确匹配
+                // 1. 首先尝试精确匹配（注意：空字符串是有效值）
                 for (const option of options) {
-                  const optionValue = option[1] || option[0];
+                  const optionValue = option[1] ?? option[0];
                   if (optionValue === actualValue) {
                     matchedOption = optionValue;
                     // console.log(`✅ 精确匹配选项: "${actualValue}"`);
@@ -1410,7 +1454,7 @@ function configureBlockFields(block: any, fields: FieldConfig): {
                 if (!matchedOption) {
                   const actualValueLower = String(actualValue).toLowerCase();
                   for (const option of options) {
-                    const optionValue = option[1] || option[0];
+                    const optionValue = option[1] ?? option[0];
                     if (typeof optionValue === 'string' && optionValue.toLowerCase() === actualValueLower) {
                       matchedOption = optionValue;
                       console.log(`🔄 大小写不敏感匹配: "${actualValue}" -> "${matchedOption}"`);
@@ -1424,7 +1468,7 @@ function configureBlockFields(block: any, fields: FieldConfig): {
                   const actualValueLower = String(actualValue).toLowerCase();
                   for (const option of options) {
                     const displayText = option[0];
-                    const optionValue = option[1] || option[0];
+                    const optionValue = option[1] ?? option[0];
                     if (typeof displayText === 'string' && displayText.toLowerCase() === actualValueLower) {
                       matchedOption = optionValue;
                       console.log(`🔄 显示文本匹配: "${actualValue}" (显示) -> "${matchedOption}" (值)`);
@@ -1437,8 +1481,8 @@ function configureBlockFields(block: any, fields: FieldConfig): {
               }
             }
             
-            if (matchedOption) {
-              // 找到匹配的选项，设置值
+            if (matchedOption !== null) {
+              // 找到匹配的选项，设置值（注意：空字符串 "" 也是有效的匹配值）
               try {
                 block.setFieldValue(matchedOption, fieldName);
                 
@@ -3921,6 +3965,75 @@ async function manuallyCreateInputs(block: any, count: number, prefix: string, i
 }
 
 /**
+ * 将 EXTRA_N 字段映射到块上实际存在的未配置字段
+ * 
+ * DSL 解析时，对于动态扩展添加的字段（如 dht_init 的 PIN），由于不知道实际字段名，
+ * 会暂时使用 EXTRA_0, EXTRA_1 等临时名称。
+ * 
+ * 在块创建并执行动态扩展后，这些字段实际已存在于块上，
+ * 此函数将 EXTRA_N 的值映射到这些实际字段。
+ */
+function remapExtraFieldsToActualFields(block: any, fields: Record<string, any>): Record<string, any> {
+  // 收集所有 EXTRA_N 字段
+  const extraFields: Array<{ key: string; value: any; index: number }> = [];
+  const normalFields: Record<string, any> = {};
+  
+  for (const [key, value] of Object.entries(fields)) {
+    const extraMatch = key.match(/^EXTRA_(\d+)$/);
+    if (extraMatch) {
+      extraFields.push({ key, value, index: parseInt(extraMatch[1], 10) });
+    } else {
+      normalFields[key] = value;
+    }
+  }
+  
+  // 如果没有 EXTRA_N 字段，直接返回
+  if (extraFields.length === 0) {
+    return fields;
+  }
+  
+  // 按索引排序
+  extraFields.sort((a, b) => a.index - b.index);
+  
+  // 获取块上已配置的字段名
+  const configuredFields = new Set(Object.keys(normalFields));
+  
+  // 获取块上所有可用的字段名
+  const availableFields: string[] = [];
+  try {
+    const inputList = block.inputList || [];
+    for (const input of inputList) {
+      const fieldRow = input.fieldRow || [];
+      for (const field of fieldRow) {
+        if (field.name && !configuredFields.has(field.name)) {
+          availableFields.push(field.name);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('获取块字段列表失败:', e);
+  }
+  
+  // 将 EXTRA_N 字段映射到未配置的实际字段
+  const result = { ...normalFields };
+  
+  for (let i = 0; i < extraFields.length && i < availableFields.length; i++) {
+    const actualFieldName = availableFields[i];
+    const extraValue = extraFields[i].value;
+    result[actualFieldName] = extraValue;
+    console.log(`🔄 动态字段映射: EXTRA_${extraFields[i].index} → ${actualFieldName} = ${extraValue}`);
+  }
+  
+  // 如果还有剩余的 EXTRA_N 字段无法映射，保留原名（会在 configureBlockFields 中报错）
+  for (let i = availableFields.length; i < extraFields.length; i++) {
+    result[extraFields[i].key] = extraFields[i].value;
+    console.warn(`⚠️ 无法映射字段 EXTRA_${extraFields[i].index}，块上没有更多未配置的字段`);
+  }
+  
+  return result;
+}
+
+/**
  * 应用动态扩展到块
  * 这个函数检查块是否需要动态输入，并根据配置添加所需的输入
  */
@@ -4216,9 +4329,20 @@ async function configureBlockInputs(
                 updatedInputs.push(inputName);
               } else {
                 console.warn(`⚠️ 子块 ${childBlock.type} 没有可用的连接点`);
+                failedBlocks.push({
+                  blockType: childBlock.type,
+                  error: `子块没有可用的连接点（outputConnection 或 previousConnection）`
+                });
               }
+            } else if (!childBlock) {
+              // 子块创建失败的情况已经在 createBlockFromConfig 中收集
+              console.warn(`❌ 子块创建失败: ${inputConfig.block?.type || 'unknown'}`);
             } else {
-              console.warn(`❌ 子块创建失败或输入没有连接点`);
+              console.warn(`❌ 输入 "${inputName}" 没有连接点`);
+              failedBlocks.push({
+                blockType: `${block.type}.${inputName}`,
+                error: `输入 "${inputName}" 没有连接点，无法连接子块`
+              });
             }
         } else if (inputConfig.shadow) {
           // console.log('👤 创建影子块...');
@@ -4245,9 +4369,19 @@ async function configureBlockInputs(
               updatedInputs.push(inputName);
             } else {
               console.warn(`⚠️ 影子块 ${shadowBlock.type} 没有可用的连接点`);
+              failedBlocks.push({
+                blockType: shadowBlock.type,
+                error: `影子块没有可用的连接点`
+              });
             }
+          } else if (!shadowBlock) {
+            console.warn(`❌ 影子块创建失败: ${inputConfig.shadow?.type || 'unknown'}`);
           } else {
-            console.warn(`❌ 影子块创建失败或输入没有连接点`);
+            console.warn(`❌ 输入 "${inputName}" 没有连接点`);
+            failedBlocks.push({
+              blockType: `${block.type}.${inputName}`,
+              error: `输入 "${inputName}" 没有连接点，无法设置影子块`
+            });
           }
         } else {
           // console.log(`ℹ️ 输入 "${inputName}" 没有块或影子配置`);
@@ -4300,9 +4434,8 @@ async function configureBlockInputs(
             console.warn(`⚠️ 无法从 shadow/block 配置中提取 ${inputName} 的值`);
           }
         } else {
-          console.warn(`❌ 输入 "${inputName}" 在块 ${block.type} 中不存在`);
-          // 列出可用的输入
-          const availableInputs = [];
+          // 🆕 输入不存在，记录到失败列表
+          const availableInputs: string[] = [];
           if (block.inputList) {
             for (let i = 0; i < block.inputList.length; i++) {
               const inp = block.inputList[i];
@@ -4311,12 +4444,23 @@ async function configureBlockInputs(
               }
             }
           }
-          // console.log('可用的输入列表:', availableInputs);
+          console.warn(`❌ 输入 "${inputName}" 在块 ${block.type} 中不存在`);
+          
+          // 收集错误信息，包含可用输入提示
+          failedBlocks.push({
+            blockType: `${block.type}.${inputName}`,
+            error: `输入 "${inputName}" 不存在，可用输入: [${availableInputs.join(', ')}]`
+          });
         }
       }
       } catch (inputError) {
         // 单个输入处理失败，记录错误但继续处理其他输入
         console.warn(`⚠️ 处理输入 "${inputName}" 时出错，继续处理其他输入:`, inputError);
+        // 🆕 收集输入处理失败
+        failedBlocks.push({
+          blockType: `${block.type}.${inputName}`,
+          error: `处理输入失败: ${inputError instanceof Error ? inputError.message : String(inputError)}`
+        });
       }
     }
     
@@ -4326,6 +4470,11 @@ async function configureBlockInputs(
     }
   } catch (error) {
     console.warn('❌ 配置块输入时出错:', error);
+    // 🆕 收集整体错误
+    failedBlocks.push({
+      blockType: block.type,
+      error: `配置输入时出错: ${error instanceof Error ? error.message : String(error)}`
+    });
   }
 
   return { updatedInputs, extractedNext, failedBlocks };
@@ -4357,18 +4506,44 @@ export async function createBlockFromConfig(
     // 如果是字符串，创建一个文本块
     if (typeof config === 'string') {
       // console.log(`🔨 创建文本块: ${config}`);
-      const textBlock = await createBlockSafely(workspace, 'text', { x: 100, y: 100 }, false);
-      if (textBlock) {
-        textBlock.setFieldValue(config, 'TEXT');
-        // console.log(`✅ 文本块创建成功: ${config}`);
-        return { block: textBlock, totalBlocks: 1, failedBlocks };
+      try {
+        const textBlock = await createBlockSafely(workspace, 'text', { x: 100, y: 100 }, false);
+        if (textBlock) {
+          textBlock.setFieldValue(config, 'TEXT');
+          // console.log(`✅ 文本块创建成功: ${config}`);
+          return { block: textBlock, totalBlocks: 1, failedBlocks };
+        }
+        failedBlocks.push({
+          blockType: 'text',
+          error: `文本块创建返回 null`
+        });
+        return { block: null, totalBlocks: 0, failedBlocks };
+      } catch (textBlockError) {
+        failedBlocks.push({
+          blockType: 'text',
+          error: `文本块创建失败: ${textBlockError instanceof Error ? textBlockError.message : String(textBlockError)}`
+        });
+        return { block: null, totalBlocks: 0, failedBlocks };
       }
-      return { block: null, totalBlocks: 0, failedBlocks };
     }
     
     // console.log(`🔨 创建块类型: ${config.type}`);
     const position = config.position || { x: 0, y: 0 };
-    const block = await createBlockSafely(workspace, config.type, position, false);
+    
+    // 🆕 单独捕获 createBlockSafely 的错误
+    let block: any = null;
+    try {
+      block = await createBlockSafely(workspace, config.type, position, false);
+    } catch (createError) {
+      console.warn(`❌ createBlockSafely 抛出异常: ${config.type}`, createError);
+      const suggestion = generateBlockFailureSuggestion(config.type);
+      failedBlocks.push({
+        blockType: config.type,
+        error: createError instanceof Error ? createError.message : String(createError),
+        suggestion
+      });
+      return { block: null, totalBlocks: 0, failedBlocks };
+    }
     
     if (!block) {
       console.warn(`❌ 块创建失败: ${config.type}`);
@@ -4393,6 +4568,12 @@ export async function createBlockFromConfig(
     
     // 检查并应用动态扩展
     await applyDynamicExtensions(block, config);
+    
+    // 🆕 动态字段映射：将 EXTRA_N 字段映射到块上实际存在的未配置字段
+    // 这对于动态扩展添加的字段（如 dht_init 的 PIN）特别重要
+    if (config.fields) {
+      config.fields = remapExtraFieldsToActualFields(block, config.fields);
+    }
     
     if (config.fields) {
       // console.log('🏷️ 配置块字段...');
@@ -4436,9 +4617,24 @@ export async function createBlockFromConfig(
           totalBlocks += nextResult.totalBlocks;
         } catch (connectionError) {
           console.warn(`⚠️ next连接失败: ${connectionError}`);
+          // 🆕 收集 next 连接失败
+          failedBlocks.push({
+            blockType: `${block.type} -> ${nextBlock.type}`,
+            error: `next 连接失败: ${connectionError instanceof Error ? connectionError.message : String(connectionError)}`
+          });
         }
       } else {
-        console.warn('⚠️ next连接失败: 连接点不可用');
+        const reason = !nextBlock ? 'next块创建失败' : 
+                       !block.nextConnection ? `${block.type} 无 nextConnection` : 
+                       `${nextBlock.type} 无 previousConnection`;
+        console.warn(`⚠️ next连接失败: ${reason}`);
+        // 🆕 收集 next 连接失败
+        if (nextBlock) {
+          failedBlocks.push({
+            blockType: `${block.type} -> ${nextBlock.type}`,
+            error: `next 连接失败: ${reason}`
+          });
+        }
       }
     }
     
@@ -4446,58 +4642,21 @@ export async function createBlockFromConfig(
     return { block, totalBlocks, failedBlocks };
   } catch (error) {
     console.warn('❌ 从配置创建块时出错:', error);
+    // 🆕 收集整体创建失败
+    const blockType = typeof config === 'string' ? 'text' : config.type;
+    failedBlocks.push({
+      blockType,
+      error: error instanceof Error ? error.message : String(error)
+    });
     return { block: null, totalBlocks: 0, failedBlocks };
   }
 }
 
 /**
  * 🆕 生成块创建失败的建议
- * 根据块类型推断可能所属的库，并生成读取文档的建议
  */
 function generateBlockFailureSuggestion(blockType: string): string {
-  // 根据块类型前缀推断库名
-  const libraryPrefixes: Record<string, string> = {
-    'arduino_': 'Arduino 核心库',
-    'io_': 'Arduino IO 库',
-    'serial_': 'Serial 串口库',
-    'dht_': 'DHT 温湿度传感器库',
-    'servo_': 'Servo 舵机库',
-    'lcd_': 'LCD 显示屏库',
-    'oled_': 'OLED 显示屏库',
-    'neopixel_': 'NeoPixel LED 库',
-    'motor_': 'Motor 电机库',
-    'ultrasonic_': 'Ultrasonic 超声波库',
-    'ir_': 'IR 红外库',
-    'wifi_': 'WiFi 网络库',
-    'mqtt_': 'MQTT 通信库',
-    'blinker_': 'Blinker 物联网库',
-    'math_': 'Math 数学库',
-    'text_': 'Text 文本库',
-    'lists_': 'Lists 列表库',
-    'controls_': 'Controls 控制流库',
-    'logic_': 'Logic 逻辑库',
-    'procedures_': 'Procedures 函数库',
-    'variables_': 'Variables 变量库',
-  };
-  
-  let libraryHint = '未知库';
-  let readmeHint = '';
-  
-  for (const [prefix, libName] of Object.entries(libraryPrefixes)) {
-    if (blockType.startsWith(prefix)) {
-      libraryHint = libName;
-      // 提取库的简短名称用于 README 路径提示
-      const libShortName = prefix.replace('_', '');
-      readmeHint = `建议查询 "${blockType}" 或相关库的块定义，或查阅 ${libShortName} 库的 README 文档了解正确的块类型和用法。`;
-      break;
-    }
-  }
-  
-  if (!readmeHint) {
-    readmeHint = `建议使用 grep 搜索可用的库并读取相关文档。块类型 "${blockType}" 可能不存在或拼写错误。`;
-  }
-  
-  return `⚠️ 块类型 "${blockType}" 无效 (可能属于 ${libraryHint})。${readmeHint}`;
+  return `块类型 "${blockType}" 不存在或定义无效，请使用 get_block_info_tool 查询或阅读对应库的 README`;
 }
 
 /**
@@ -6440,10 +6599,11 @@ export async function getWorkspaceOverviewTool(args?: any): Promise<ToolUseResul
       return !hasConnections;
     }).length;
 
+    // 🔇 树形图已被 DSL 替代，暂时注释掉
     // 生成树状结构文本
-    if (includeTree) {
-      structureTree = generateTreeStructure(rootBlocks, allBlocksInfo, groupBy);
-    }
+    // if (includeTree) {
+    //   structureTree = generateTreeStructure(rootBlocks, allBlocksInfo, groupBy);
+    // }
 
     // 生成完整代码
     let lintResult = null;
@@ -7385,20 +7545,20 @@ function formatWorkspaceOverviewText(
   lines.push(`  • 孤立块数: ${statistics.isolatedBlocks}`);
   lines.push(`  • 变量数量: ${statistics.variableCount || 0}`);
   
-  // 🎯 新增：动态输入块统计信息
-  if (statistics.dynamicInputBlocks > 0) {
-    lines.push(`  • 动态输入块数: ${statistics.dynamicInputBlocks}`);
-    
-    // 按模式显示动态块分布
-    if (Object.keys(statistics.dynamicBlocksByPattern).length > 0) {
-      lines.push('    - 按输入模式分布:');
-      Object.entries(statistics.dynamicBlocksByPattern)
-        .sort(([,a], [,b]) => (b as number) - (a as number))
-        .forEach(([pattern, count]) => {
-          lines.push(`      · ${pattern}: ${count} 个`);
-        });
-    }
-  }
+  // 🔇 动态输入块统计已被 DSL 替代，暂时注释掉
+  // if (statistics.dynamicInputBlocks > 0) {
+  //   lines.push(`  • 动态输入块数: ${statistics.dynamicInputBlocks}`);
+  //   
+  //   // 按模式显示动态块分布
+  //   if (Object.keys(statistics.dynamicBlocksByPattern).length > 0) {
+  //     lines.push('    - 按输入模式分布:');
+  //     Object.entries(statistics.dynamicBlocksByPattern)
+  //       .sort(([,a], [,b]) => (b as number) - (a as number))
+  //       .forEach(([pattern, count]) => {
+  //         lines.push(`      · ${pattern}: ${count} 个`);
+  //       });
+  //   }
+  // }
   
   lines.push('');
   
@@ -7418,20 +7578,21 @@ function formatWorkspaceOverviewText(
     lines.push('');
   }
   
-  // 块类型分布
-  lines.push('📈 块类型分布:');
-  Object.entries(statistics.blocksByType)
-    .sort(([,a], [,b]) => (b as number) - (a as number))
-    .forEach(([type, count]) => {
-      lines.push(`  • ${type}: ${count} 个`);
-    });
-  lines.push('');
+  // 🔇 块类型分布已被 DSL 替代，暂时注释掉
+  // lines.push('📈 块类型分布:');
+  // Object.entries(statistics.blocksByType)
+  //   .sort(([,a], [,b]) => (b as number) - (a as number))
+  //   .forEach(([type, count]) => {
+  //     lines.push(`  • ${type}: ${count} 个`);
+  //   });
+  // lines.push('');
 
+  // 🔇 树形图已被 DSL 替代，暂时注释掉
   // 树状结构
-  if (options.includeTree && structure.structureTree) {
-    lines.push(structure.structureTree);
-    lines.push('');
-  }
+  // if (options.includeTree && structure.structureTree) {
+  //   lines.push(structure.structureTree);
+  //   lines.push('');
+  // }
 
   // 生成的代码
   if (options.includeCode && structure.generatedCode) {
@@ -10167,65 +10328,77 @@ async function getCurrentProjectInfo(projectService?: any): Promise<{
 // =============================================================================
 
 /**
- * 生成块的 .abi 格式示例
- * 参考多个 readme 的格式规范:
- * - 有字段时: "fields":{"FIELD":"value",...}
- * - 有输入时: "inputs":{"INPUT":{"block":{...}},...}
- * - 两者都有: "fields":{...},"inputs":{...}
- * - 变量字段: "VAR":{"id":"var_id"}
+ * 生成块的 ABS (Aily Block Syntax) 格式示例
+ * ABS 是 Aily 项目的块语法格式，用于简洁地描述 Blockly 块结构
+ * 格式说明:
+ * - 变量字段: $varName
+ * - 字符串字段: "text"
+ * - 下拉字段: ENUM_VALUE
+ * - 数字输入: math_number(n)
+ * - 命名输入: @InputName: value_block()
  */
-function generateAbiFormat(block: any): string {
-  const fieldParts: string[] = [];
-  const inputParts: string[] = [];
+function generateAbsFormat(block: any): string {
+  const params: string[] = [];
+  const namedInputs: string[] = [];
   
-  // 处理字段
+  // 处理字段参数（按顺序添加到括号内）
   if (block.fields && block.fields.length > 0) {
     for (const field of block.fields) {
       if (field.type === 'variable') {
-        // 变量字段使用对象格式
-        fieldParts.push(`"${field.name}":{"id":"var_id"}`);
+        // 变量字段使用 $varName 格式
+        params.push('$varName');
       } else if (field.type === 'dropdown') {
         const defaultVal = getDropdownDefaultValue(field);
         if (defaultVal) {
-          fieldParts.push(`"${field.name}":"${defaultVal}"`);
+          // 检查是否是动态字段（PIN/WIRE 等）
+          if (field.name === 'PIN' || field.name === 'WIRE') {
+            // 动态字段，添加占位符说明
+            params.push(field.name === 'WIRE' ? 'Wire' : '2');
+          } else {
+            params.push(defaultVal);
+          }
         }
       } else if (field.type === 'text') {
-        const val = field.defaultValue || 'name';
-        fieldParts.push(`"${field.name}":"${val}"`);
+        const val = field.defaultValue || 'text';
+        params.push(`"${val}"`);
       } else if (field.type === 'number') {
         const val = field.defaultValue || '0';
-        fieldParts.push(`"${field.name}":"${val}"`);
+        params.push(val);
       }
     }
   }
   
-  // 处理输入
+  // 处理值输入（添加到括号内或使用命名输入格式）
   if (block.inputs && block.inputs.length > 0) {
     for (const input of block.inputs) {
-      inputParts.push(`"${input.name}":{"block":{...}}`);
+      if (input.type === 'value') {
+        // 值输入：简单情况用 math_number/text 等，复杂情况用 @InputName:
+        if (block.inputs.length === 1) {
+          params.push('math_number(n)');
+        } else {
+          namedInputs.push(`@${input.name}: value_block()`);
+        }
+      } else if (input.type === 'statement') {
+        // 语句输入：缩进子块
+        namedInputs.push(`@${input.name}:\n        statement_block()`);
+      }
     }
   }
   
-  // 组装结果
-  const parts: string[] = [];
-  if (fieldParts.length > 0) {
-    parts.push(`"fields":{${fieldParts.join(',')}}`);
-  }
-  if (inputParts.length > 0) {
-    parts.push(`"inputs":{${inputParts.join(',')}}`);
+  // 组装 ABS 格式
+  let abs = `${block.type}(${params.join(', ')})`;
+  
+  // 如果有命名输入，添加到下面
+  if (namedInputs.length > 0) {
+    abs += '\n    ' + namedInputs.join('\n    ');
   }
   
-  if (parts.length === 0) {
-    return '`{}`';
+  // 截断过长内容
+  if (abs.length > 80) {
+    abs = abs.substring(0, 77) + '...';
   }
   
-  // 组合并截断过长内容
-  let result = parts.join(',');
-  if (result.length > 80) {
-    result = result.substring(0, 77) + '...';
-  }
-  
-  return '`' + result + '`';
+  return '`' + abs + '`';
 }
 
 /**
@@ -10292,14 +10465,14 @@ function collectFieldTypeExamples(blocks: any[]): Record<string, { format: strin
         switch (field.type) {
           case 'variable':
             examples[fieldTypeKey] = {
-              format: fieldTypeFormats['field_variable'],
-              sample: `"${field.name}": {"id": "name"}`
+              format: '$varName',
+              sample: `$myVar`
             };
             break;
           case 'text':
             examples[fieldTypeKey] = {
-              format: fieldTypeFormats['field_input'],
-              sample: `"${field.name}": "${field.defaultValue || 'value'}"`
+              format: '"字符串"',
+              sample: `"${field.defaultValue || 'Hello'}"`
             };
             break;
           case 'dropdown':
@@ -10308,32 +10481,32 @@ function collectFieldTypeExamples(blocks: any[]): Record<string, { format: strin
             const optVal = getDropdownDefaultValue(field);
             if (isDynamic) {
               examples['field_dropdown(动态)'] = {
-                format: '字符串(动态)',
-                sample: `"${field.name}": "${optVal}"`
+                format: '枚举值',
+                sample: optVal
               };
             } else if (!examples[fieldTypeKey]) {
               examples[fieldTypeKey] = {
-                format: fieldTypeFormats['field_dropdown'],
-                sample: `"${field.name}": "${optVal}"`
+                format: '枚举值',
+                sample: optVal
               };
             }
             break;
           case 'number':
             examples[fieldTypeKey] = {
-              format: '数值字符串',
-              sample: `"${field.name}": "${field.defaultValue || '0'}"`
+              format: '数字',
+              sample: field.defaultValue || '100'
             };
             break;
           case 'checkbox':
             examples[fieldTypeKey] = {
-              format: '布尔值',
-              sample: `"${field.name}": true`
+              format: 'TRUE/FALSE',
+              sample: 'TRUE'
             };
             break;
           case 'colour':
             examples[fieldTypeKey] = {
-              format: '颜色字符串',
-              sample: `"${field.name}": "${field.defaultValue || '#ff0000'}"`
+              format: '"#颜色"',
+              sample: `"${field.defaultValue || '#ff0000'}"`
             };
             break;
         }
@@ -10352,14 +10525,14 @@ function collectFieldTypeExamples(blocks: any[]): Record<string, { format: strin
   // 添加输入类型示例
   if (hasInputValue && !examples['input_value']) {
     examples['input_value'] = {
-      format: '块连接',
-      sample: `"inputs": {"VALUE": {"block": {...}}}`
+      format: '值块(参数)',
+      sample: `math_number(10)`
     };
   }
   if (hasInputStatement && !examples['input_statement']) {
     examples['input_statement'] = {
-      format: '语句块连接',
-      sample: `"inputs": {"DO": {"block": {...}}}`
+      format: '缩进子块',
+      sample: `块名()\\n    子块()`
     };
   }
   
@@ -10397,6 +10570,76 @@ function collectDropdownOptions(blocks: any[]): Record<string, string[]> {
   }
   
   return options;
+}
+
+/**
+ * 收集块的下拉选项（增强版，包含描述和动态选项检测）
+ */
+function collectDropdownOptionsFromBlocks(blocks: any[]): Record<string, { values: string[]; description: string; isDynamic: boolean }> {
+  const options: Record<string, { values: string[]; description: string; isDynamic: boolean }> = {};
+  
+  for (const block of blocks) {
+    if (!block.fields) continue;
+    
+    for (const field of block.fields) {
+      if (field.type !== 'dropdown') continue;
+      
+      // 已有的选项跳过（同名字段只收集一次）
+      if (options[field.name]) continue;
+      
+      // 检查是否是动态选项
+      const isDynamic = typeof field.options === 'string' && field.options.startsWith('${');
+      
+      if (isDynamic) {
+        // 动态选项，标注来源
+        const dynamicSource = field.options.replace(/\$\{board\.(\w+)\}/, '$1');
+        options[field.name] = {
+          values: [`(动态: ${dynamicSource})`],
+          description: `根据开发板配置动态生成`,
+          isDynamic: true
+        };
+      } else if (field.options && Array.isArray(field.options)) {
+        // 静态选项，提取值
+        const values = field.options.map((opt: any) => {
+          if (Array.isArray(opt)) {
+            return String(opt[1] || opt[0] || '');
+          }
+          return String(opt);
+        }).filter(Boolean);
+        
+        if (values.length > 0) {
+          options[field.name] = {
+            values,
+            description: inferFieldDescription(field.name, values),
+            isDynamic: false
+          };
+        }
+      }
+    }
+  }
+  
+  return options;
+}
+
+/**
+ * 推断字段描述
+ */
+function inferFieldDescription(fieldName: string, values: string[]): string {
+  const nameLower = fieldName.toLowerCase();
+  
+  if (nameLower.includes('type')) return '类型选择';
+  if (nameLower.includes('pin')) return '引脚选择';
+  if (nameLower.includes('port')) return '端口选择';
+  if (nameLower.includes('speed') || nameLower.includes('baud')) return '波特率/速度';
+  if (nameLower.includes('mode')) return '模式选择';
+  if (nameLower.includes('op') || nameLower.includes('operator')) return '运算符';
+  
+  // 根据值推断
+  if (values.some(v => v.includes('Wire') || v.includes('I2C'))) return 'I2C 接口';
+  if (values.some(v => v.includes('Serial'))) return '串口选择';
+  if (values.some(v => v.includes('HIGH') || v.includes('LOW'))) return '电平状态';
+  
+  return '-';
 }
 
 /**
@@ -10588,9 +10831,12 @@ export async function analyzeLibraryBlocksTool(
       report += `## ${libraryName}\n\n`;
       
       if (knowledge.blocks.length > 0) {
-        // 生成块定义表格
-        report += `| 块类型 | 连接 | 字段/输入 | .abi格式 | 生成代码 |\n`;
-        report += `|--------|------|----------|----------|----------|\n`;
+        // 检测有动态扩展的块
+        const dynamicBlocks: string[] = [];
+        
+        // 生成块定义表格（省略生成代码列，建议读取generator.js了解具体实现）
+        report += `| 块类型 | 连接 | 字段/输入 | ABS格式 |\n`;
+        report += `|--------|------|----------|---------|\n`;
         
         for (const block of knowledge.blocks) {
           const blockType = block.type;
@@ -10605,10 +10851,19 @@ export async function analyzeLibraryBlocksTool(
           }
           const connectionType = connectionParts.length > 0 ? connectionParts.join('/') : '独立块';
           
-          // 字段/输入信息
+          // 字段/输入信息（过滤掉 _DYNAMIC_ 标记）
           const fieldInputParts: string[] = [];
+          let hasDynamicExtension = false;
+          
           if (block.fields && block.fields.length > 0) {
             for (const field of block.fields) {
+              // 检测动态扩展标记
+              if (field.name === '_DYNAMIC_') {
+                hasDynamicExtension = true;
+                dynamicBlocks.push(blockType);
+                continue;
+              }
+              
               const fieldTypeStr = field.type === 'variable' ? 'field_variable' : 
                                    field.type === 'dropdown' ? 'field_dropdown' :
                                    field.type === 'text' ? 'field_input' :
@@ -10623,23 +10878,33 @@ export async function analyzeLibraryBlocksTool(
               fieldInputParts.push(`${input.name}(${inputTypeStr})`);
             }
           }
-          const fieldInputStr = fieldInputParts.length > 0 ? fieldInputParts.join(', ') : '-';
           
-          // .abi格式示例 - 已经包含反引号格式
-          const abiFormat = generateAbiFormat(block);
+          // 如果有动态扩展，在字段列添加标记
+          let fieldInputStr = fieldInputParts.length > 0 ? fieldInputParts.join(', ') : '-';
+          if (hasDynamicExtension) {
+            fieldInputStr += ', **+动态字段**';
+          }
           
-          // 生成代码（从 generatorInfo 提取）
-          const generatedCode = block.generatorInfo?.generatedCode || '-';
+          // ABS格式示例 - 已经包含反引号格式
+          const absFormat = generateAbsFormat(block);
           
-          report += `| \`${blockType}\` | ${connectionType} | ${fieldInputStr} | ${abiFormat} | \`${generatedCode}\` |\n`;
+          report += `| \`${blockType}\` | ${connectionType} | ${fieldInputStr} | ${absFormat} |\n`;
         }
         
         report += '\n';
         
-        // 添加字段类型映射说明
-        report += `### 字段类型映射\n\n`;
-        report += `| 类型 | .abi格式 | 示例 |\n`;
-        report += `|------|----------|------|\n`;
+        // 如果有动态扩展的块，添加提示信息
+        if (dynamicBlocks.length > 0) {
+          report += `### ⚠️ 动态扩展提示\n\n`;
+          report += `以下块具有动态扩展，实际参数可能根据其他字段值动态变化：\n`;
+          report += `- ${dynamicBlocks.map(b => `\`${b}\``).join('、')}\n\n`;
+          report += `**建议**：读取该库的 \`generator.js\` 文件了解完整的参数用法和动态行为。\n\n`;
+        }
+        
+        // 添加 ABS 参数类型映射说明
+        report += `### ABS参数类型映射\n\n`;
+        report += `| 类型 | ABS格式 | 示例 |\n`;
+        report += `|------|---------|------|\n`;
         
         const fieldTypeExamples = collectFieldTypeExamples(knowledge.blocks);
         for (const [fieldType, example] of Object.entries(fieldTypeExamples)) {
@@ -10661,6 +10926,21 @@ export async function analyzeLibraryBlocksTool(
         }
         
         report += '\n';
+        
+        // 收集并添加参数枚举选项表格
+        const dropdownOptions = collectDropdownOptionsFromBlocks(knowledge.blocks);
+        if (Object.keys(dropdownOptions).length > 0) {
+          report += `### 参数选项\n\n`;
+          report += `| 参数 | 可选值 | 说明 |\n`;
+          report += `|------|--------|------|\n`;
+          
+          for (const [fieldName, options] of Object.entries(dropdownOptions)) {
+            const optionsStr = options.values.slice(0, 10).join(', ') + (options.values.length > 10 ? '...' : '');
+            report += `| ${fieldName} | ${optionsStr} | ${options.description || '-'} |\n`;
+          }
+          
+          report += '\n';
+        }
       }
     }
 
