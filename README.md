@@ -102,6 +102,7 @@ Other content can be found in [package.json](./package.json)
 [copilot](https://github.com/microsoft/vscode-copilot-chat)  
 
 ## Additional Rights Statement  
+This software is released under the GPL license. Users may not use the software itself for commercial services. Hardware works developed using this software are not restricted by the GPL, and users may decide on their own release and usage methods.  
 For derivatives or modifications based on this project, without the consent of the project leader (Naihe col), the following activities are prohibited:
 1. Information about relevant rights holders and sponsors of this project must not be removed, and such information must appear on the software startup page.
 2. The online service content attached to this project must not be removed.
