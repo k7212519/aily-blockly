@@ -687,26 +687,26 @@ export class DialogComponent implements OnInit, OnChanges, OnDestroy {
       // 检查是否遇到 </think> 标签
       if (inThinkBlock && content.substring(i, i + 8) === '</think>') {
         inThinkBlock = false;
-        // // 将 think 内容转换为 aily-think 代码块
-        // if (thinkContent.trim()) {
-        //   // 使用 base64 编码 content 避免换行符转义问题
-        //   const encodedContent = btoa(encodeURIComponent(thinkContent.trim()));
-        //   const thinkData = {
-        //     content: encodedContent,
-        //     isComplete: true,
-        //     encoded: true
-        //   };
-        //   // 确保代码块前后有正确的换行
-        //   result += '```aily-think\n' + JSON.stringify(thinkData) + '\n```';
-        // }
-        // thinkContent = '';
+        // 将 think 内容转换为 aily-think 代码块
+        if (thinkContent.trim()) {
+          // 使用 base64 编码 content 避免换行符转义问题
+          const encodedContent = btoa(encodeURIComponent(thinkContent.trim()));
+          const thinkData = {
+            content: encodedContent,
+            isComplete: true,
+            encoded: true
+          };
+          // 确保代码块前后有正确的换行
+          result += '```aily-think\n' + JSON.stringify(thinkData) + '\n```';
+        }
+        thinkContent = '';
         i += 8; // 跳过 </think>
         continue;
       }
       
       // 收集 think 块内的内容或添加到结果中
       if (inThinkBlock) {
-        // thinkContent += content[i];
+        thinkContent += content[i];
       } else {
         result += content[i];
       }
@@ -714,18 +714,18 @@ export class DialogComponent implements OnInit, OnChanges, OnDestroy {
       i++;
     }
     
-    // // 如果内容结束时仍在 think 块内（流式传输中），显示正在思考的状态
-    // if (inThinkBlock && thinkContent.trim()) {
-    //   // 使用 base64 编码 content 避免换行符转义问题
-    //   const encodedContent = btoa(encodeURIComponent(thinkContent.trim()));
-    //   const thinkData = {
-    //     content: encodedContent,
-    //     isComplete: false,
-    //     encoded: true
-    //   };
-    //   // 确保代码块前后有正确的换行
-    //   result += '```aily-think\n' + JSON.stringify(thinkData) + '\n```';
-    // }
+    // 如果内容结束时仍在 think 块内（流式传输中），显示正在思考的状态
+    if (inThinkBlock && thinkContent.trim()) {
+      // 使用 base64 编码 content 避免换行符转义问题
+      const encodedContent = btoa(encodeURIComponent(thinkContent.trim()));
+      const thinkData = {
+        content: encodedContent,
+        isComplete: false,
+        encoded: true
+      };
+      // 确保代码块前后有正确的换行
+      result += '```aily-think\n' + JSON.stringify(thinkData) + '\n```';
+    }
     
     return result;
   }

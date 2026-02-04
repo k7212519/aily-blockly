@@ -205,7 +205,7 @@ async function importFromAbs(
       
       return {
         is_error: true,
-        content: `ABS 解析失败:\n${errorMessages}\n\n请检查 ABS 文件语法`
+        content: `ABS 解析失败:\n${errorMessages}\n\n请检查 ABS 文件语法，读取对应库 reademe_ai.md 或使用 \`get_block_info_tool\` 查询正确的块定义和参数格式。`
       };
     }
     

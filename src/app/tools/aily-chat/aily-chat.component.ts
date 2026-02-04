@@ -287,8 +287,8 @@ export class AilyChatComponent implements OnDestroy {
    * @param text 显示文本
    */
   private completeToolCall(toolId: string, toolName: string, state: ToolCallState, text: string): void {
-    // 如果存在历史状态文本，使用它；否则使用传入的文本
-    const displayText = this.toolCallStates[toolId] || text;
+    // 优先使用传入的文本，如果为空则使用历史状态文本
+    const displayText = text || this.toolCallStates[toolId] || '';
 
     const toolCallInfo: ToolCallInfo = {
       id: toolId,
@@ -2180,7 +2180,11 @@ ${JSON.stringify(errData)}
                       resultState = "warn";
                       resultText = `读取异常, 即将重试`;
                     } else {
-                      resultText = `读取${readFileName}文件成功`;
+                      if (readFileName === 'project.abs') {
+                        resultText = `读取项目文件成功`;
+                      } else {
+                        resultText = `读取${readFileName}文件成功`;
+                      }
                     }
                     // } else {
                     //   if (libNickName) {
@@ -2229,7 +2233,11 @@ ${JSON.stringify(errData)}
                       resultState = "warn";
                       resultText = `编辑${editFileName}文件异常, 即将重试`;
                     } else {
-                      resultText = `编辑${editFileName}文件成功`;
+                      if (editFileName === 'project.abs') {
+                        resultText = `编辑项目文件成功`;
+                      } else {
+                        resultText = `编辑${editFileName}文件成功`;
+                      }
                     }
                     break;
                   case 'delete_file':
@@ -2887,16 +2895,20 @@ ${JSON.stringify(errData)}
                   //   resultText = 'ABS 语法帮助';
                   //   break;
                   case 'sync_abs_file':
-                    this.startToolCall(toolCallId, data.tool_name, `同步 ABS 文件 (${toolArgs.operation})...`, toolArgs);
+                    if (toolArgs.operation === 'import') {
+                      this.startToolCall(toolCallId, data.tool_name, "正在加载图形化代码...", toolArgs);
+                    }
+                    // this.startToolCall(toolCallId, data.tool_name, `同步 ABS 文件 (${toolArgs.operation})...`, toolArgs);
                     toolResult = await syncAbsFileHandler(toolArgs, this.projectService, this.electronService, this.absAutoSyncService);
                     if (toolResult?.is_error) {
                       resultState = "warn";
                       resultText = 'ABS 文件同步失败';
                     } else {
                       const op = toolArgs.operation;
-                      resultText = op === 'export' ? '已导出 ABS 文件' 
-                        : op === 'import' ? '已从 ABS 导入（已保存版本）' 
-                        : 'ABS 状态查询完成';
+                      // export 时不显示状态
+                      resultText = op === 'import' ? '加载图形化代码完成' 
+                        // : op === 'status' ? 'ABS 状态查询完成'
+                        : '';  // status 与 export 不显示
                     }
                     break;
                   case 'abs_version_control':
@@ -3363,8 +3375,8 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
 <toolResult>${toolResult?.content || '工具执行完成，无返回内容'}</toolResult>\n<info>如果想结束对话，转交给用户，可以使用[to_xxx]，这里的xxx为user</info>`;
             }
 
-            // 显示工具完成状态（除了 todo_write_tool）
-            if (data.tool_name !== 'todo_write_tool') {
+            // 显示工具完成状态（除了 todo_write_tool，以及 resultText 为空的情况）
+            if (data.tool_name !== 'todo_write_tool' && resultText) {
               let finalState: ToolCallState;
               switch (resultState) {
                 case "error":
