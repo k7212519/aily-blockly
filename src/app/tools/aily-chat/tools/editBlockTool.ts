@@ -3496,7 +3496,7 @@ function analyzeExistingInputs(block: any, blockType: string): any {
  * 这是一个最小的后备列表，只包含Blockly核心的确定支持动态输入的块
  */
 function detectCoreBlocklyDynamicBlocks(blockType: string): any {
-  const coreBlocks = {
+  const coreBlocks: Record<string, any> = {
     'text_join': {
       supportsDynamic: true,
       inputPattern: 'ADD',
@@ -3527,6 +3527,15 @@ function detectCoreBlocklyDynamicBlocks(blockType: string): any {
       extraStateKey: 'elseIfCount', 
       hasElseKey: 'hasElse',
       defaultCount: 0,
+      minCount: 0,
+      maxCount: 20
+    },
+    'controls_switch': {
+      supportsDynamic: true,
+      inputPattern: 'CASE',
+      extraStateKey: 'caseCount',
+      hasDefaultKey: 'hasDefault',
+      defaultCount: 0,  // 默认只有 CASE0/DO0
       minCount: 0,
       maxCount: 20
     }
@@ -3804,6 +3813,83 @@ async function applyDynamicExtraState(block: any, extraState: any, dynamicSuppor
     // console.log(`✅ controls_if 插件模拟操作完成`);
   }
   
+  // controls_switch 块（caseCount + hasDefault 模式）- 模拟 switch_case_mutator 插件行为
+  else if (blockType === 'controls_switch' && (extraState.caseCount !== undefined || extraState.hasDefault !== undefined)) {
+    // console.log(`🔢 controls_switch 设置 extraState:`, extraState);
+    
+    const targetCaseCount = extraState.caseCount || 0;
+    const targetHasDefault = extraState.hasDefault !== undefined ? extraState.hasDefault : true;
+    const currentCaseCount = block.caseCount_ || 0;
+    const currentHasDefault = block.hasDefault_ !== undefined ? block.hasDefault_ : true;
+    
+    // console.log(`🎯 目标状态: caseCount=${targetCaseCount}, hasDefault=${targetHasDefault}`);
+    // console.log(`📊 当前状态: caseCount=${currentCaseCount}, hasDefault=${currentHasDefault}`);
+    
+    // 🔧 模拟插件的 plus() 方法来添加 case
+    if (targetCaseCount > currentCaseCount) {
+      const addCount = targetCaseCount - currentCaseCount;
+      // console.log(`➕ 需要添加 ${addCount} 个 case`);
+      
+      for (let i = 0; i < addCount; i++) {
+        if (block.plus && typeof block.plus === 'function') {
+          // console.log(`🔄 调用插件的 plus() 方法 ${i + 1}/${addCount}`);
+          block.plus();
+        } else if (block.addCaseInput_ && typeof block.addCaseInput_ === 'function') {
+          // console.log(`🔄 调用 addCaseInput_() 方法 ${i + 1}/${addCount}`);
+          block.addCaseInput_();
+        } else {
+          console.warn(`⚠️ 无法找到添加 case 的方法`);
+          break;
+        }
+      }
+    }
+    // 🔧 模拟插件的 minus() 方法来删除 case  
+    else if (targetCaseCount < currentCaseCount) {
+      const removeCount = currentCaseCount - targetCaseCount;
+      // console.log(`➖ 需要删除 ${removeCount} 个 case`);
+      
+      for (let i = 0; i < removeCount; i++) {
+        const indexToRemove = currentCaseCount - i;
+        if (block.minus && typeof block.minus === 'function') {
+          // console.log(`🔄 调用插件的 minus(${indexToRemove}) 方法 ${i + 1}/${removeCount}`);
+          block.minus(indexToRemove);
+        } else if (block.removeCaseInput_ && typeof block.removeCaseInput_ === 'function') {
+          // console.log(`🔄 调用 removeCaseInput_() 方法 ${i + 1}/${removeCount}`);
+          block.removeCaseInput_();
+        } else {
+          console.warn(`⚠️ 无法找到删除 case 的方法`);
+          break;
+        }
+      }
+    }
+    
+    // 🔧 处理 DEFAULT 输入
+    if (targetHasDefault !== currentHasDefault) {
+      if (targetHasDefault && !block.getInput('DEFAULT')) {
+        // console.log(`➕ 添加 DEFAULT 输入`);
+        block.hasDefault_ = true;
+        try {
+          block.appendStatementInput('DEFAULT')
+            .appendField(Blockly?.Msg?.['CONTROLS_SWITCH_DEFAULT'] || 'default');
+          // console.log(`✅ DEFAULT 输入创建成功`);
+        } catch (error) {
+          console.warn(`❌ 创建 DEFAULT 输入失败:`, error);
+        }
+      } else if (!targetHasDefault && block.getInput('DEFAULT')) {
+        // console.log(`➖ 删除 DEFAULT 输入`);
+        block.hasDefault_ = false;
+        try {
+          block.removeInput('DEFAULT');
+          // console.log(`✅ DEFAULT 输入删除成功`);
+        } catch (error) {
+          console.warn(`❌ 删除 DEFAULT 输入失败:`, error);
+        }
+      }
+    }
+    
+    // console.log(`✅ controls_switch 插件模拟操作完成`);
+  }
+  
   // procedures 块（params 模式）
   else if ((blockType.startsWith('procedures_def') || blockType.startsWith('procedures_call')) && extraState.params) {
     // console.log(`🔢 ${blockType} 设置 params:`, extraState.params);
@@ -3820,8 +3906,8 @@ async function applyDynamicExtraState(block: any, extraState: any, dynamicSuppor
     }
   }
   
-  // blinker_widget_print 等（extraCount 模式）- 模拟 dynamic-inputs 插件行为
-  else if ((blockType === 'blinker_widget_print' || blockType.includes('_print')) && extraState.extraCount !== undefined) {
+  // dynamic-inputs 插件（extraCount 模式）- 检测 plus() 方法而不是硬编码块类型
+  else if (extraState.extraCount !== undefined && (block.plus || block.addInput_)) {
     // console.log(`🔢 ${blockType} 设置 extraCount: ${extraState.extraCount}`);
     
     const targetExtraCount = extraState.extraCount || 0;
@@ -4034,6 +4120,105 @@ function remapExtraFieldsToActualFields(block: any, fields: Record<string, any>)
 }
 
 /**
+ * 将 EXTRA_N 输入映射到块上实际存在的未配置值输入
+ * 
+ * ABS 解析时，对于动态扩展添加的输入（如 blinker_init_wifi 的 AUTH, SSID, PSWD），
+ * 由于不知道实际输入名，会暂时使用 EXTRA_0, EXTRA_1 等临时名称。
+ * 
+ * 在块创建、设置字段并执行动态扩展后，这些输入实际已存在于块上，
+ * 此函数将 EXTRA_N 的值映射到这些实际输入。
+ */
+function remapExtraInputsToActualInputs(block: any, inputs: Record<string, any>): Record<string, any> {
+  // 收集所有 EXTRA_N 输入
+  const extraInputs: Array<{ key: string; value: any; index: number }> = [];
+  const normalInputs: Record<string, any> = {};
+  
+  for (const [key, value] of Object.entries(inputs)) {
+    const extraMatch = key.match(/^EXTRA_(\d+)$/);
+    if (extraMatch) {
+      extraInputs.push({ key, value, index: parseInt(extraMatch[1], 10) });
+    } else {
+      normalInputs[key] = value;
+    }
+  }
+  
+  // 如果没有 EXTRA_N 输入，直接返回
+  if (extraInputs.length === 0) {
+    return inputs;
+  }
+  
+  // 按索引排序
+  extraInputs.sort((a, b) => a.index - b.index);
+  
+  // 获取已配置的输入名
+  const configuredInputs = new Set(Object.keys(normalInputs));
+  
+  // 获取块上所有可用的值输入（排除已配置的和语句输入）
+  const availableInputs: string[] = [];
+  try {
+    const inputList = block.inputList || [];
+    for (const input of inputList) {
+      // type === 1 表示值输入 (INPUT_VALUE)
+      // type === 3 表示语句输入 (NEXT_STATEMENT)
+      if (input.name && input.type === 1 && !configuredInputs.has(input.name)) {
+        availableInputs.push(input.name);
+      }
+    }
+  } catch (e) {
+    console.warn('获取块输入列表失败:', e);
+  }
+  
+  // 将 EXTRA_N 输入映射到未配置的实际输入
+  const result = { ...normalInputs };
+  
+  // 检查是否需要扩展动态输入
+  const neededInputCount = extraInputs.length;
+  let currentAvailableCount = availableInputs.length;
+  
+  // 如果 EXTRA_N 数量超过可用输入，尝试扩展动态输入
+  if (neededInputCount > currentAvailableCount && block.plus && typeof block.plus === 'function') {
+    const inputsToAdd = neededInputCount - currentAvailableCount;
+    console.log(`🔧 动态输入扩展: 需要 ${neededInputCount} 个输入，当前有 ${currentAvailableCount} 个，需要添加 ${inputsToAdd} 个`);
+    
+    for (let i = 0; i < inputsToAdd; i++) {
+      try {
+        block.plus();
+        console.log(`  ✅ 调用 block.plus() 添加第 ${i + 1} 个输入`);
+      } catch (e) {
+        console.warn(`  ⚠️ 调用 block.plus() 失败:`, e);
+        break;
+      }
+    }
+    
+    // 重新获取可用输入列表
+    availableInputs.length = 0;
+    const inputList = block.inputList || [];
+    for (const input of inputList) {
+      if (input.name && input.type === 1 && !configuredInputs.has(input.name)) {
+        availableInputs.push(input.name);
+      }
+    }
+    currentAvailableCount = availableInputs.length;
+    console.log(`  📋 扩展后可用输入: [${availableInputs.join(', ')}]`);
+  }
+  
+  for (let i = 0; i < extraInputs.length && i < availableInputs.length; i++) {
+    const actualInputName = availableInputs[i];
+    const extraValue = extraInputs[i].value;
+    result[actualInputName] = extraValue;
+    console.log(`🔄 动态输入映射: EXTRA_${extraInputs[i].index} → ${actualInputName}`);
+  }
+  
+  // 如果还有剩余的 EXTRA_N 输入无法映射，保留原名（会在 configureBlockInputs 中报错）
+  for (let i = availableInputs.length; i < extraInputs.length; i++) {
+    result[extraInputs[i].key] = extraInputs[i].value;
+    console.warn(`⚠️ 无法映射输入 EXTRA_${extraInputs[i].index}，块上没有更多未配置的值输入`);
+  }
+  
+  return result;
+}
+
+/**
  * 应用动态扩展到块
  * 这个函数检查块是否需要动态输入，并根据配置添加所需的输入
  */
@@ -4057,14 +4242,17 @@ async function applyDynamicExtensions(block: any, config: any): Promise<void> {
       const inputNames = Object.keys(config.inputs);
       // console.log('🔍 检测到输入配置:', inputNames);
       
-      // 检查是否需要动态扩展输入
-      if (block.type === 'blinker_widget_print' || block.type.includes('_print')) {
+      // 检查是否需要动态扩展输入 - 通过检测 plus() 方法或 INPUT 模式
+      const hasInputPattern = inputNames.some(name => /^INPUT\d+$/.test(name));
+      const hasDynamicInputsPlugin = block.plus && typeof block.plus === 'function';
+      
+      if (hasInputPattern && hasDynamicInputsPlugin) {
         // console.log('🔧 检测到使用 dynamic-inputs 插件的块类型，准备扩展');
         await extendBlockWithDynamicInputs(block, config.inputs);
         
         // 根据实际输入数量计算并设置 extraCount
-        const inputCount = inputNames.filter(name => name.startsWith('INPUT')).length;
-        const minInputs = 1; // dynamic-inputs 默认最小输入数
+        const inputCount = inputNames.filter(name => /^INPUT\d+$/.test(name)).length;
+        const minInputs = block.minInputs || 1; // 从块获取最小输入数，默认1
         const extraCount = Math.max(0, inputCount - minInputs);
         // console.log(`📊 计算得到的输入数量: ${inputCount}, extraCount: ${extraCount}`);
         
@@ -4322,6 +4510,24 @@ async function configureBlockInputs(
             
             if (childBlock && input.connection) {
               // console.log(`✅ 子块创建成功: ${childBlock.type} (ID: ${childBlock.id})`);
+              
+              // 🆕 检查并清理已连接的旧块（可能是动态扩展自动创建的默认块）
+              const existingConnection = input.connection.targetConnection;
+              if (existingConnection) {
+                const existingBlock = existingConnection.getSourceBlock();
+                if (existingBlock && existingBlock !== childBlock) {
+                  // console.log(`🧹 清理输入 "${inputName}" 已连接的旧块: ${existingBlock.type} (ID: ${existingBlock.id})`);
+                  try {
+                    // 先断开连接
+                    input.connection.disconnect();
+                    // 删除旧块（可能是动态扩展自动创建的默认 text 块）
+                    existingBlock.dispose(true);
+                  } catch (e) {
+                    console.warn(`清理旧块失败:`, e);
+                  }
+                }
+              }
+              
               const connectionToUse = childBlock.outputConnection || childBlock.previousConnection;
               if (connectionToUse) {
                 input.connection.connect(connectionToUse);
@@ -4357,6 +4563,20 @@ async function configureBlockInputs(
           
           if (shadowBlock && input.connection) {
             // console.log(`✅ 影子块创建成功: ${shadowBlock.type} (ID: ${shadowBlock.id})`);
+            
+            // 🆕 检查并清理已连接的旧块（可能是动态扩展自动创建的默认块）
+            const existingConnection = input.connection.targetConnection;
+            if (existingConnection) {
+              const existingBlock = existingConnection.getSourceBlock();
+              if (existingBlock && existingBlock !== shadowBlock) {
+                try {
+                  input.connection.disconnect();
+                  existingBlock.dispose(true);
+                } catch (e) {
+                  console.warn(`清理旧块失败:`, e);
+                }
+              }
+            }
             
             // 正确设置影子块
             const connectionToUse = shadowBlock.outputConnection || shadowBlock.previousConnection;
@@ -4579,6 +4799,12 @@ export async function createBlockFromConfig(
       // console.log('🏷️ 配置块字段...');
       configureBlockFields(block, config.fields);
       // console.log('✅ 字段配置完成');
+    }
+    
+    // 🆕 动态输入映射：将 EXTRA_N 输入映射到块上实际存在的未配置值输入
+    // 这对于动态扩展添加的输入（如 blinker_init_wifi 的 AUTH, SSID, PSWD）特别重要
+    if (config.inputs) {
+      config.inputs = remapExtraInputsToActualInputs(block, config.inputs);
     }
     
     if (config.inputs) {

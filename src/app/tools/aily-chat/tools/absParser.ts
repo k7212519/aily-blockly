@@ -120,7 +120,16 @@ function getBlockMeta(blockType: string): Partial<BlockMeta> | undefined {
   if (dynamicMetas) {
     const dynamicMeta = dynamicMetas.get(blockType);
     if (dynamicMeta) {
-      return convertDynamicMeta(dynamicMeta);
+      const converted = convertDynamicMeta(dynamicMeta);
+      
+      // 对于动态输入块（如 text_join），如果动态定义的 valueInputNames 为空，
+      // 使用回退定义中的默认输入名称
+      const fallback = FALLBACK_BLOCKS[blockType];
+      if (fallback?.valueInputNames && (!converted.valueInputNames || converted.valueInputNames.length === 0)) {
+        converted.valueInputNames = fallback.valueInputNames;
+      }
+      
+      return converted;
     }
   }
   
@@ -190,6 +199,11 @@ const FALLBACK_BLOCKS: Record<string, Partial<BlockMeta>> = {
     hasStatementInput: true, 
     statementInputNames: ['DO0', 'ELSE'],
     valueInputNames: ['IF0']
+  },
+  'controls_switch': {
+    hasStatementInput: true,
+    statementInputNames: ['DO0', 'DEFAULT'],
+    valueInputNames: ['SWITCH', 'CASE0']
   },
   'controls_repeat_ext': { 
     hasStatementInput: true, 
@@ -659,13 +673,20 @@ export class BlocklyAbsParser {
     const positionalArgs: string[] = [];
     
     for (const arg of args) {
-      // 检查是否是命名参数（KEY=value，但要避免匹配函数调用中的 = ）
+      // 检查是否是命名参数（KEY=value 格式）
+      // 格式：标识符=值，值可以是任何表达式（包括函数调用）
       const namedMatch = arg.match(/^([A-Z_][A-Z0-9_]*)=(.+)$/i);
-      if (namedMatch && !arg.includes('(')) {
-        namedArgs[namedMatch[1].toUpperCase()] = namedMatch[2];
-      } else {
-        positionalArgs.push(arg);
+      if (namedMatch) {
+        // 确保 = 左边是纯标识符（不是比较表达式的一部分）
+        const keyPart = namedMatch[1];
+        const valuePart = namedMatch[2];
+        // 如果 key 是有效的输入名（大写字母开头），视为命名参数
+        if (/^[A-Z_][A-Z0-9_]*$/i.test(keyPart)) {
+          namedArgs[keyPart.toUpperCase()] = valuePart;
+          continue;
+        }
       }
+      positionalArgs.push(arg);
     }
     
     // 处理命名参数
@@ -710,22 +731,38 @@ export class BlocklyAbsParser {
         }
       }
       
-      // 处理剩余的位置参数（可能是动态扩展添加的字段）
-      // 使用 EXTRA_0, EXTRA_1 等作为临时字段名
-      let extraIndex = 0;
+      // 处理剩余的位置参数（可能是动态扩展添加的输入）
+      // 使用动态检测确定输入名模式（如 ADD2, ADD3... 或 INPUT0, INPUT1...）
+      let extraInputIndex = meta.valueInputNames?.length || 0;  // 从已有输入数量开始
+      
       while (argIndex < positionalArgs.length) {
         const arg = positionalArgs[argIndex];
-        const fieldName = `EXTRA_${extraIndex}`;
+        
+        // 根据块类型决定输入名 - 使用动态检测
+        let inputName: string;
+        const coreConfig = CORE_DYNAMIC_BLOCKS[blockType];
+        if (coreConfig) {
+          // 核心动态块：使用已知的输入模式
+          const patternStr = coreConfig.inputPattern.source;
+          const prefixMatch = patternStr.match(/^\^?\(?([A-Z]+)/);
+          const prefix = prefixMatch ? prefixMatch[1] : 'INPUT';
+          inputName = `${prefix}${extraInputIndex}`;
+        } else {
+          // 尝试使用 INPUT 作为默认前缀（适用于 dynamic-inputs 插件）
+          // 如果不匹配，后续的 EXTRA_N 映射会处理
+          inputName = `INPUT${extraInputIndex}`;
+        }
+        
         if (!this.isComplexExpression(arg)) {
-          fields[fieldName] = this.parseFieldValue(arg);
+          fields[inputName] = this.parseFieldValue(arg);
         } else {
           const valueNode = this.parseInlineValue(arg);
           if (valueNode) {
-            inlineInputs[fieldName] = valueNode;
+            inlineInputs[inputName] = valueNode;
           }
         }
         argIndex++;
-        extraIndex++;
+        extraInputIndex++;
       }
     } else {
       // 未知块类型，尝试智能分配
@@ -742,24 +779,45 @@ export class BlocklyAbsParser {
     fields: Record<string, any>,
     inlineInputs: Record<string, AbsNode>
   ): void {
+    // 检查是否是已知的核心动态块
+    const coreConfig = CORE_DYNAMIC_BLOCKS[blockType];
+    
     // 常见的字段名模式
-    const commonFieldNames = ['SERIAL', 'PIN', 'MODE', 'OP', 'SPEED', 'VALUE', 'TEXT', 'NUM', 'VAR'];
+    const commonFieldNames = ['WIDGET', 'SERIAL', 'PIN', 'MODE', 'OP', 'SPEED', 'VALUE', 'TEXT', 'NUM', 'VAR'];
     const commonInputNames = ['VAR', 'VALUE', 'A', 'B', 'NUM', 'BOOL', 'TEXT', 'PIN'];
+    
+    let fieldIndex = 0;
+    let inputIndex = 0;
     
     for (let i = 0; i < args.length; i++) {
       const arg = args[i];
       
       // 检查是否是复杂表达式（包含函数调用或变量引用）
       if (this.isComplexExpression(arg)) {
-        const inputName = i < commonInputNames.length ? commonInputNames[i] : `INPUT${i}`;
+        // 确定输入名 - 优先使用核心块配置，否则默认 INPUT 前缀
+        let inputName: string;
+        if (coreConfig) {
+          // 核心动态块：使用已知的输入模式
+          const patternStr = coreConfig.inputPattern.source;
+          const prefixMatch = patternStr.match(/^\^?\(?([A-Z]+)/);
+          const prefix = prefixMatch ? prefixMatch[1] : 'INPUT';
+          inputName = `${prefix}${inputIndex}`;
+        } else {
+          // 未知块：默认使用 INPUT 前缀（适用于 dynamic-inputs 插件）
+          // 这样可以自动支持任何使用 dynamic-inputs 插件的块
+          inputName = `INPUT${inputIndex}`;
+        }
+        
         const valueNode = this.parseInlineValue(arg);
         if (valueNode) {
           inlineInputs[inputName] = valueNode;
         }
+        inputIndex++;
       } else {
         // 简单值作为字段
-        const fieldName = i < commonFieldNames.length ? commonFieldNames[i] : `FIELD${i}`;
+        const fieldName = fieldIndex < commonFieldNames.length ? commonFieldNames[fieldIndex] : `FIELD${fieldIndex}`;
         fields[fieldName] = this.parseFieldValue(arg);
+        fieldIndex++;
       }
     }
   }
@@ -968,6 +1026,8 @@ export class BlocklyAbsParser {
       'do': 'DO0',
       'then': 'DO0',
       'else': 'ELSE',
+      'default': 'DEFAULT',
+      'switch': 'SWITCH',
       'times': 'TIMES',
       'from': 'FROM',
       'to': 'TO',
@@ -978,7 +1038,30 @@ export class BlocklyAbsParser {
       'frame': 'FRAME',
     };
     
-    return nameMap[name.toLowerCase()] || name.toUpperCase();
+    // 直接映射
+    if (nameMap[name.toLowerCase()]) {
+      return nameMap[name.toLowerCase()];
+    }
+    
+    // 处理带编号的 do (do1, do2...) -> DO1, DO2...
+    const doMatch = name.match(/^do(\d+)$/i);
+    if (doMatch) {
+      return `DO${doMatch[1]}`;
+    }
+    
+    // 处理带编号的 case (case0, case1...) -> CASE0, CASE1...
+    const caseMatch = name.match(/^case(\d+)$/i);
+    if (caseMatch) {
+      return `CASE${caseMatch[1]}`;
+    }
+    
+    // 处理带编号的 if (if1, if2...) -> IF1, IF2...
+    const ifMatch = name.match(/^if(\d+)$/i);
+    if (ifMatch) {
+      return `IF${ifMatch[1]}`;
+    }
+    
+    return name.toUpperCase();
   }
   
   /**
@@ -1068,19 +1151,95 @@ export class BlocklyAbsParser {
 // =============================================================================
 
 /**
- * 动态块配置
- * 用于根据输入自动推断 extraState
+ * 核心 Blockly 块的硬编码配置（作为后备）
+ * 只包含 Blockly 核心块，其他块通过动态检测
  */
-const DYNAMIC_BLOCK_CONFIGS: Record<string, {
+const CORE_DYNAMIC_BLOCKS: Record<string, {
   inputPattern: RegExp;
   extraStateKey: string;
   defaultCount?: number;
+  baseCount?: number;
 }> = {
   'text_join': { inputPattern: /^ADD(\d+)$/, extraStateKey: 'itemCount', defaultCount: 2 },
   'lists_create_with': { inputPattern: /^ADD(\d+)$/, extraStateKey: 'itemCount', defaultCount: 3 },
   'controls_if': { inputPattern: /^(IF|DO)(\d+)$/, extraStateKey: 'elseIfCount' },
   'controls_ifelse': { inputPattern: /^(IF|DO)(\d+)$/, extraStateKey: 'elseIfCount' },
+  'controls_switch': { inputPattern: /^(CASE|DO)(\d+)$/, extraStateKey: 'caseCount', defaultCount: 1 },
 };
+
+/**
+ * 动态检测输入模式
+ * 根据输入名称自动推断动态块配置
+ */
+function detectDynamicInputPattern(inputKeys: string[]): {
+  inputPattern: RegExp;
+  extraStateKey: string;
+  baseCount: number;
+  prefix: string;
+} | null {
+  // 检测 ADD 模式 (text_join, lists_create_with)
+  const addInputs = inputKeys.filter(key => /^ADD\d+$/.test(key));
+  if (addInputs.length > 0) {
+    return {
+      inputPattern: /^ADD(\d+)$/,
+      extraStateKey: 'itemCount',
+      baseCount: 0,  // itemCount = 总数量
+      prefix: 'ADD'
+    };
+  }
+  
+  // 检测 INPUT 模式 (dynamic-inputs 插件)
+  const inputInputs = inputKeys.filter(key => /^INPUT\d+$/.test(key));
+  if (inputInputs.length > 0) {
+    return {
+      inputPattern: /^INPUT(\d+)$/,
+      extraStateKey: 'extraCount',
+      baseCount: 1,  // extraCount = 总数量 - 1 (默认有 INPUT0)
+      prefix: 'INPUT'
+    };
+  }
+  
+  // 检测 ARG 模式 (procedures)
+  const argInputs = inputKeys.filter(key => /^ARG\d+$/.test(key));
+  if (argInputs.length > 0) {
+    return {
+      inputPattern: /^ARG(\d+)$/,
+      extraStateKey: 'params',
+      baseCount: 0,
+      prefix: 'ARG'
+    };
+  }
+  
+  return null;
+}
+
+/**
+ * 获取块的动态配置
+ * 优先使用核心块配置，否则尝试动态检测
+ */
+function getDynamicBlockConfig(blockType: string, inputKeys: string[]): {
+  inputPattern: RegExp;
+  extraStateKey: string;
+  baseCount: number;
+  prefix: string;
+} | null {
+  // 优先使用核心块配置
+  const coreConfig = CORE_DYNAMIC_BLOCKS[blockType];
+  if (coreConfig) {
+    // 从 inputPattern 提取前缀
+    const patternStr = coreConfig.inputPattern.source;
+    const prefixMatch = patternStr.match(/^\^?\(?([A-Z]+)/);
+    return {
+      inputPattern: coreConfig.inputPattern,
+      extraStateKey: coreConfig.extraStateKey,
+      baseCount: coreConfig.baseCount || 0,
+      prefix: prefixMatch ? prefixMatch[1] : 'INPUT'
+    };
+  }
+  
+  // 动态检测
+  return detectDynamicInputPattern(inputKeys);
+}
 
 /**
  * 从 inputs 配置智能推断 extraState
@@ -1092,10 +1251,8 @@ function inferExtraStateFromInputs(
 ): Record<string, any> | null {
   if (!inputs) return null;
   
-  const config = DYNAMIC_BLOCK_CONFIGS[blockType];
-  if (!config) return null;
-  
   const inputKeys = Object.keys(inputs);
+  if (inputKeys.length === 0) return null;
   
   // 特殊处理 controls_if/controls_ifelse
   if (blockType === 'controls_if' || blockType === 'controls_ifelse') {
@@ -1118,7 +1275,46 @@ function inferExtraStateFromInputs(
     return Object.keys(result).length > 0 ? result : null;
   }
   
-  // 通用处理：text_join, lists_create_with 等
+  // 特殊处理 controls_switch
+  if (blockType === 'controls_switch') {
+    // 计算 CASE 输入的最大编号
+    const caseNumbers = inputKeys
+      .filter(key => /^CASE\d+$/.test(key))
+      .map(key => parseInt(key.replace('CASE', ''), 10))
+      .filter(n => !isNaN(n));
+    
+    // 也检查 DO 输入（因为可能只有 DO 没有 CASE）
+    const doNumbers = inputKeys
+      .filter(key => /^DO\d+$/.test(key))
+      .map(key => parseInt(key.replace('DO', ''), 10))
+      .filter(n => !isNaN(n));
+    
+    // 合并并取最大值
+    const allNumbers = [...caseNumbers, ...doNumbers];
+    const hasDefault = inputKeys.includes('DEFAULT');
+    
+    const result: Record<string, any> = {};
+    
+    if (allNumbers.length > 0) {
+      const maxNumber = Math.max(...allNumbers);
+      // caseCount 是额外添加的 case 数量（不包括默认的 CASE0/DO0）
+      // 如果 maxNumber = 1，表示有 CASE0 和 CASE1，额外添加了 1 个
+      if (maxNumber > 0) {
+        result['caseCount'] = maxNumber;
+      }
+    }
+    
+    // hasDefault 控制是否显示 DEFAULT 输入
+    // 必须显式设置，因为 Blockly 默认 hasDefault_ = true
+    result['hasDefault'] = hasDefault;
+    
+    return result;
+  }
+  
+  // 通用处理：使用动态检测
+  const config = getDynamicBlockConfig(blockType, inputKeys);
+  if (!config) return null;
+  
   const pattern = config.inputPattern;
   const matchingInputs = inputKeys.filter(key => pattern.test(key));
   if (matchingInputs.length === 0) return null;
@@ -1131,8 +1327,13 @@ function inferExtraStateFromInputs(
   
   if (maxNumber < 0) return null;
   
-  // itemCount = maxNumber + 1（因为从0开始）
-  return { [config.extraStateKey]: maxNumber + 1 };
+  // 计算 extraStateKey 的值
+  // - 对于 text_join, lists_create_with: itemCount = maxNumber + 1（因为从0开始）
+  // - 对于 dynamic-inputs 块: extraCount = 输入数量 - baseCount（额外输入数量）
+  const totalInputs = maxNumber + 1;  // 从0开始计数
+  const extraCount = totalInputs - config.baseCount;
+  
+  return { [config.extraStateKey]: extraCount > 0 ? extraCount : totalInputs };
 }
 
 // =============================================================================

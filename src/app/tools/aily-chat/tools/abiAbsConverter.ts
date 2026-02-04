@@ -125,6 +125,11 @@ function convertBlockToAbs(block: any, indentLevel: number, context: ConversionC
     return convertControlsIfToAbs(block, indentLevel, context);
   }
   
+  // 特殊处理 controls_switch：使用命名输入格式
+  if (block.type === 'controls_switch') {
+    return convertControlsSwitchToAbs(block, indentLevel, context);
+  }
+  
   // 构建主块行
   const blockCall = buildBlockCall(block, context);
   const idComment = context.includeBlockIds ? `  # id: ${block.id}` : '';
@@ -171,15 +176,19 @@ function convertControlsIfToAbs(block: any, indentLevel: number, context: Conver
   lines.push(`${indent}controls_if()${idComment}`);
   
   if (block.inputs) {
-    // 收集所有 IF/DO 对
-    const ifIndices: number[] = [];
+    // 收集所有 IF/DO 对的索引（同时检查 IF 和 DO，因为可能一个有内容另一个没有）
+    const indicesSet = new Set<number>();
     for (const inputName of Object.keys(block.inputs)) {
-      const match = inputName.match(/^IF(\d+)$/);
-      if (match) {
-        ifIndices.push(parseInt(match[1]));
+      const ifMatch = inputName.match(/^IF(\d+)$/);
+      if (ifMatch) {
+        indicesSet.add(parseInt(ifMatch[1]));
+      }
+      const doMatch = inputName.match(/^DO(\d+)$/);
+      if (doMatch) {
+        indicesSet.add(parseInt(doMatch[1]));
       }
     }
-    ifIndices.sort((a, b) => a - b);
+    const ifIndices = Array.from(indicesSet).sort((a, b) => a - b);
     
     // 输出每个 IF/DO 对
     for (const idx of ifIndices) {
@@ -213,6 +222,84 @@ function convertControlsIfToAbs(block: any, indentLevel: number, context: Conver
 }
 
 /**
+ * 特殊处理 controls_switch 块
+ * 使用 @SWITCH:/@CASE0:/@DO0:/@DEFAULT: 格式
+ * 
+ * 结构：
+ * controls_switch()
+ *     @SWITCH: <值>
+ *     @CASE0: <值>
+ *     @DO0:
+ *         <语句>
+ *     @CASE1: <值>
+ *     @DO1:
+ *         <语句>
+ *     @DEFAULT:
+ *         <语句>
+ */
+function convertControlsSwitchToAbs(block: any, indentLevel: number, context: ConversionContext): string[] {
+  const lines: string[] = [];
+  const indent = context.indent(indentLevel);
+  const childIndent = context.indent(indentLevel + 1);
+  
+  // 主块行
+  const idComment = context.includeBlockIds ? `  # id: ${block.id}` : '';
+  lines.push(`${indent}controls_switch()${idComment}`);
+  
+  if (block.inputs) {
+    // @SWITCH: 选择值
+    const switchInput = block.inputs['SWITCH'];
+    if (switchInput?.block) {
+      const switchAbs = formatBlockAsValue(switchInput.block, context);
+      lines.push(`${childIndent}@SWITCH: ${switchAbs}`);
+    }
+    
+    // 收集所有 CASE/DO 对的索引（同时检查 CASE 和 DO，因为可能一个有内容另一个没有）
+    const indicesSet = new Set<number>();
+    for (const inputName of Object.keys(block.inputs)) {
+      const caseMatch = inputName.match(/^CASE(\d+)$/);
+      if (caseMatch) {
+        indicesSet.add(parseInt(caseMatch[1]));
+      }
+      const doMatch = inputName.match(/^DO(\d+)$/);
+      if (doMatch) {
+        indicesSet.add(parseInt(doMatch[1]));
+      }
+    }
+    const caseIndices = Array.from(indicesSet).sort((a, b) => a - b);
+    
+    // 输出每个 CASE/DO 对
+    for (const idx of caseIndices) {
+      const caseInput = block.inputs[`CASE${idx}`];
+      const doInput = block.inputs[`DO${idx}`];
+      
+      // @CASEn: 条件值
+      if (caseInput?.block) {
+        const caseAbs = formatBlockAsValue(caseInput.block, context);
+        lines.push(`${childIndent}@CASE${idx}: ${caseAbs}`);
+      }
+      
+      // @DOn: 执行体
+      if (doInput?.block) {
+        lines.push(`${childIndent}@DO${idx}:`);
+        const doLines = convertBlockChainToAbs(doInput.block, indentLevel + 2, context);
+        lines.push(...doLines);
+      }
+    }
+    
+    // @DEFAULT: 默认分支
+    const defaultInput = block.inputs['DEFAULT'];
+    if (defaultInput?.block) {
+      lines.push(`${childIndent}@DEFAULT:`);
+      const defaultLines = convertBlockChainToAbs(defaultInput.block, indentLevel + 2, context);
+      lines.push(...defaultLines);
+    }
+  }
+  
+  return lines;
+}
+
+/**
  * 转换块链（处理 next 连接）
  */
 function convertBlockChainToAbs(block: any, indentLevel: number, context: ConversionContext): string[] {
@@ -234,11 +321,8 @@ function convertBlockChainToAbs(block: any, indentLevel: number, context: Conver
 /**
  * 构建块调用字符串
  * 
- * 由于 ABS 导入现在直接使用 createBlockFromConfig，动态扩展字段会被 Blockly 自动处理。
- * 因此这里统一使用位置参数格式，保持 ABS 简洁。
- * 
- * 对于动态块（如 dht_init），其动态添加的字段（如 PIN）在运行时由 Blockly 扩展自动创建，
- * 不需要在 ABS 中特殊处理。
+ * 使用简单的位置参数格式，保持 ABS 语法简洁易学。
+ * 导入时，系统会在创建块并触发动态扩展后，自动获取块上实际的输入并按顺序连接。
  */
 function buildBlockCall(block: any, context: ConversionContext): string {
   const args: string[] = [];
@@ -253,7 +337,7 @@ function buildBlockCall(block: any, context: ConversionContext): string {
     }
   }
   
-  // 收集值输入参数（非语句输入）
+  // 收集值输入参数（非语句输入）- 使用位置参数格式
   if (block.inputs) {
     const statementInputs = new Set(getStatementInputs(block));
     
@@ -384,50 +468,106 @@ function formatBlockAsValue(block: any, context: ConversionContext): string {
 
 /**
  * 获取块的语句输入名称
+ * 
+ * 采用多层检测策略（结合动态元数据和子块推断）：
+ * 1. 从动态块定义获取已知的语句输入
+ * 2. 从子块特征推断动态添加的语句输入（mutator 场景）
+ * 3. 使用启发式规则补充（输入名模式匹配）
+ * 
+ * 这种组合策略能同时处理：
+ * - 静态定义的块（从 block.json 获取）
+ * - 动态扩展的块（如 controls_switch 使用 mutator 添加的 case）
  */
 function getStatementInputs(block: any): string[] {
-  // 优先从动态加载的块定义获取
+  if (!block.inputs) return [];
+  
+  const result = new Set<string>();
+  
+  // 1. 从动态块定义获取已知的语句输入名称
   const dynamicMetas = getGlobalBlockMetas();
   if (dynamicMetas) {
     const meta = dynamicMetas.get(block.type);
     if (meta && meta.statementInputNames.length > 0) {
-      return meta.statementInputNames.filter(name => block.inputs?.[name]);
-    }
-  }
-  
-  // 回退到内置定义
-  const knownStatementInputs: Record<string, string[]> = {
-    'arduino_setup': ['ARDUINO_SETUP'],
-    'arduino_loop': ['ARDUINO_LOOP'],
-    'controls_if': ['DO0', 'DO1', 'DO2', 'DO3', 'DO4', 'ELSE'],
-    'controls_repeat_ext': ['DO'],
-    'controls_repeat': ['DO'],
-    'controls_whileUntil': ['DO'],
-    'controls_for': ['DO'],
-    'controls_forEach': ['DO'],
-    'controls_flow_statements': [],
-    'procedures_defnoreturn': ['STACK'],
-    'procedures_defreturn': ['STACK'],
-    'procedures_callnoreturn': [],
-    'procedures_callreturn': [],
-  };
-  
-  // 使用已知定义
-  if (knownStatementInputs[block.type]) {
-    return knownStatementInputs[block.type].filter(name => block.inputs?.[name]);
-  }
-  
-  // 通用规则：检测可能的语句输入
-  const result: string[] = [];
-  if (block.inputs) {
-    for (const inputName of Object.keys(block.inputs)) {
-      if (isLikelyStatementInput(inputName)) {
-        result.push(inputName);
+      // 添加元数据中定义的语句输入（仅当块中实际存在时）
+      for (const name of meta.statementInputNames) {
+        if (block.inputs[name]) {
+          result.add(name);
+        }
       }
     }
   }
   
-  return result;
+  // 2. 从子块特征推断 - 检查子块是否是语句块
+  // 这能捕获 mutator 动态添加的语句输入（如 controls_switch 的 DO1, DO2...）
+  for (const [inputName, inputValue] of Object.entries(block.inputs)) {
+    const input = inputValue as any;
+    if (input?.block && isStatementBlock(input.block)) {
+      result.add(inputName);
+    }
+  }
+  
+  // 3. 启发式规则：通过输入名模式匹配补充
+  // 用于处理没有子块但名称模式明确是语句输入的情况
+  for (const inputName of Object.keys(block.inputs)) {
+    if (isLikelyStatementInput(inputName)) {
+      result.add(inputName);
+    }
+  }
+  
+  return Array.from(result);
+}
+
+/**
+ * 判断一个块是否是语句块（statement block）
+ * 
+ * 语句块的特征：
+ * 1. 没有 output（值块有 output）
+ * 2. 有 previousStatement 和/或 nextStatement
+ * 3. 已知的语句块类型
+ */
+function isStatementBlock(block: any): boolean {
+  if (!block || !block.type) return false;
+  
+  // 如果从动态定义中可以判断
+  const dynamicMetas = getGlobalBlockMetas();
+  if (dynamicMetas) {
+    const meta = dynamicMetas.get(block.type);
+    if (meta) {
+      // 有输出的是值块，不是语句块
+      if (meta.hasOutput) return false;
+      // 明确有语句连接的是语句块
+      if (meta.hasPrevious || meta.hasNext) return true;
+    }
+  }
+  
+  // 已知的值块类型（这些块返回值，不是语句）
+  const knownValueBlocks = new Set([
+    'math_number', 'math_arithmetic', 'math_single', 'math_trig',
+    'math_constant', 'math_number_property', 'math_round', 'math_modulo',
+    'math_constrain', 'math_random_int', 'math_random_float',
+    'text', 'text_join', 'text_length', 'text_isEmpty', 'text_indexOf',
+    'text_charAt', 'text_getSubstring', 'text_changeCase', 'text_trim',
+    'logic_boolean', 'logic_compare', 'logic_operation', 'logic_negate', 'logic_ternary',
+    'variables_get',
+    'lists_create_with', 'lists_repeat', 'lists_length', 'lists_isEmpty',
+    'lists_indexOf', 'lists_getIndex', 'lists_split',
+    'colour_picker', 'colour_random', 'colour_rgb', 'colour_blend',
+  ]);
+  
+  if (knownValueBlocks.has(block.type)) {
+    return false;
+  }
+  
+  // 以常见前缀开头的块通常是值块
+  const valueBlockPrefixes = ['math_', 'text_', 'logic_', 'colour_', 'lists_'];
+  for (const prefix of valueBlockPrefixes) {
+    if (block.type.startsWith(prefix) && !block.type.includes('set') && !block.type.includes('print')) {
+      return false;
+    }
+  }
+  
+  // 默认认为是语句块
+  return true;
 }
 
 /**
@@ -437,6 +577,7 @@ function isLikelyStatementInput(inputName: string): boolean {
   const patterns = [
     /^DO\d*$/,           // DO, DO0, DO1...
     /^ELSE$/,            // ELSE
+    /^DEFAULT$/,         // DEFAULT (switch-case)
     /^HANDLER$/,         // HANDLER
     /^STACK$/,           // STACK
     /^SUBSTACK\d*$/,     // SUBSTACK, SUBSTACK1...
@@ -455,13 +596,32 @@ function normalizeInputNameForAbs(inputName: string): string {
     'DO0': 'do',
     'DO': 'do',
     'ELSE': 'else',
+    'DEFAULT': 'default',
     'IF0': 'condition',
     'HANDLER': 'handler',
     'ARDUINO_SETUP': 'setup',
     'ARDUINO_LOOP': 'loop',
   };
   
-  return mapping[inputName] || inputName.toLowerCase();
+  // 直接映射
+  if (mapping[inputName]) {
+    return mapping[inputName];
+  }
+  
+  // 处理带编号的 DO (DO1, DO2...) -> do1, do2...
+  const doMatch = inputName.match(/^DO(\d+)$/);
+  if (doMatch) {
+    const index = parseInt(doMatch[1]);
+    return index === 0 ? 'do' : `do${index}`;
+  }
+  
+  // 处理带编号的 CASE (CASE0, CASE1...) -> case0, case1...
+  const caseMatch = inputName.match(/^CASE(\d+)$/);
+  if (caseMatch) {
+    return `case${caseMatch[1]}`;
+  }
+  
+  return inputName.toLowerCase();
 }
 
 /**

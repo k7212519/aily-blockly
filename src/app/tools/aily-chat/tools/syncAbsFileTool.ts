@@ -1005,34 +1005,10 @@ async function incrementalUpdate(
     }
   }
   
-  // 🆕 清理多余的独立块（可能是之前失败导入产生的）
-  // 增量更新后，工作区应该只有新 ABS 定义的根块
-  const finalTopBlocks = workspace.getTopBlocks(false);
-  const expectedRootBlockCount = newBlocks.length;
-  
-  if (finalTopBlocks.length > expectedRootBlockCount) {
-    console.log(`⚠️ 检测到多余的独立块: 期望 ${expectedRootBlockCount} 个，实际 ${finalTopBlocks.length} 个`);
-    
-    // 重新计算当前工作区所有根块的签名
-    const finalSignatures = new Set<string>();
-    for (const block of finalTopBlocks) {
-      const serialized = serializeWorkspaceBlock(block);
-      const signature = computeBlockChainSignature(serialized);
-      
-      // 检查这个签名是否在新 ABS 的根块中（而不是子块）
-      if (newSignatureMap.has(signature)) {
-        finalSignatures.add(signature);
-      } else {
-        // 这是一个不该存在的独立块，删除它
-        console.log(`🧹 清理多余独立块: ${block.type} (ID: ${block.id})`);
-        try {
-          block.dispose(true);
-        } catch (e) {
-          console.warn(`清理块失败: ${block.type}`, e);
-        }
-      }
-    }
-  }
+  // 注意：不再执行"清理多余独立块"逻辑
+  // 之前的逻辑有 bug：它基于 BlockConfig 签名判断，但创建后的块签名可能不同
+  // （因为块 ID 变化、动态扩展改变结构等原因）
+  // 这会导致刚创建的正确块被错误删除
   
   return {
     added: addedCount,

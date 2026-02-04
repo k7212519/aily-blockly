@@ -2092,8 +2092,8 @@ ${JSON.stringify(errData)}
                           this.projectService.projectOpen(projectPath);
                         }
                       }
-                      console.log(`命令${displayCommand}执行成功`);
-                      resultText = `命令${displayCommand}执行成功`
+                      console.log(`命令 ${displayCommand} 执行成功`);
+                      resultText = `命令 ${displayCommand} 执行成功`
                     } else {
                       // npm install 失败时不重试，避免重复加载库
                       if (isNpmInstall) {
@@ -2101,9 +2101,9 @@ ${JSON.stringify(errData)}
                         resultState = "done";  // 标记为完成，不触发重试
                         resultText = `npm install命令执行失败，请检查网络或依赖配置`;
                       } else {
-                        console.log(`命令${displayCommand}执行异常, 即将重试`);
+                        console.log(`命令 ${displayCommand} 执行异常, 即将重试`);
                         resultState = "warn";
-                        resultText = `命令${displayCommand}执行异常, 即将重试`;
+                        resultText = `命令 ${displayCommand} 执行异常, 即将重试`;
                       }
                     }
                     break;
@@ -2136,9 +2136,9 @@ ${JSON.stringify(errData)}
                     toolResult = await listDirectoryTool(toolArgs);
                     if (toolResult?.is_error) {
                       resultState = "warn";
-                      resultText = `获取${distFolderName}目录内容异常, 即将重试`;
+                      resultText = `获取 ${distFolderName} 目录内容异常, 即将重试`;
                     } else {
-                      resultText = `获取${distFolderName}目录内容成功`;
+                      resultText = `获取 ${distFolderName} 目录内容成功`;
                     }
                     break;
                   case 'read_file':
@@ -2181,7 +2181,9 @@ ${JSON.stringify(errData)}
                       resultText = `读取异常, 即将重试`;
                     } else {
                       if (readFileName === 'project.abs') {
-                        resultText = `读取项目文件成功`;
+                        resultText = `读取 项目文件 成功`;
+                      } else if (libNickName) {
+                        resultText = `了解 ${libNickName} 使用方法成功`;
                       } else {
                         resultText = `读取${readFileName}文件成功`;
                       }
@@ -2207,9 +2209,9 @@ ${JSON.stringify(errData)}
                     toolResult = await createFileTool(toolArgs, this.securityContext);
                     if (toolResult?.is_error) {
                       resultState = "warn";
-                      resultText = `创建${createFileName}文件异常, 即将重试`;
+                      resultText = `创建 ${createFileName} 文件异常, 即将重试`;
                     } else {
-                      resultText = `创建${createFileName}文件成功`;
+                      resultText = `创建 ${createFileName} 文件成功`;
                     }
                     break;
                   case 'create_folder':
@@ -2219,9 +2221,9 @@ ${JSON.stringify(errData)}
                     toolResult = await createFolderTool(toolArgs);
                     if (toolResult?.is_error) {
                       resultState = "warn";
-                      resultText = `创建${createFolderName}文件夹异常, 即将重试`;
+                      resultText = `创建 ${createFolderName} 文件夹异常, 即将重试`;
                     } else {
-                      resultText = `创建${createFolderName}文件夹成功`;
+                      resultText = `创建 ${createFolderName} 文件夹成功`;
                     }
                     break;
                   case 'edit_file':
@@ -2234,9 +2236,9 @@ ${JSON.stringify(errData)}
                       resultText = `编辑${editFileName}文件异常, 即将重试`;
                     } else {
                       if (editFileName === 'project.abs') {
-                        resultText = `编辑项目文件成功`;
+                        resultText = `编辑 项目文件 成功`;
                       } else {
-                        resultText = `编辑${editFileName}文件成功`;
+                        resultText = `编辑 ${editFileName} 文件成功`;
                       }
                     }
                     break;
@@ -2247,9 +2249,9 @@ ${JSON.stringify(errData)}
                     toolResult = await deleteFileTool(toolArgs, this.securityContext);
                     if (toolResult?.is_error) {
                       resultState = "warn";
-                      resultText = `删除${deleteFileName}文件异常, 即将重试`;
+                      resultText = `删除 ${deleteFileName} 文件异常, 即将重试`;
                     } else {
-                      resultText = `删除${deleteFileName}文件成功`;
+                      resultText = `删除 ${deleteFileName} 文件成功`;
                     }
                     break;
                   case 'delete_folder':
@@ -2259,9 +2261,9 @@ ${JSON.stringify(errData)}
                     toolResult = await deleteFolderTool(toolArgs, this.securityContext);
                     if (toolResult?.is_error) {
                       resultState = "warn";
-                      resultText = `删除${deleteFolderName}文件夹异常, 即将重试`;
+                      resultText = `删除 ${deleteFolderName} 文件夹异常, 即将重试`;
                     } else {
-                      resultText = `删除${deleteFolderName}文件夹成功`;
+                      resultText = `删除 ${deleteFolderName} 文件夹成功`;
                     }
                     break;
                   case 'check_exists':
@@ -2362,12 +2364,12 @@ ${JSON.stringify(errData)}
                     toolResult = await searchBoardsLibrariesTool.handler(toolArgs, this.configService);
                     if (toolResult?.is_error) {
                       resultState = "error";
-                      resultText = `搜索${searchTypeDisplay}失败: ` + (toolResult?.content || '未知错误');
+                      resultText = `搜索 ${searchTypeDisplay} 失败: ` + (toolResult?.content || '未知错误');
                     } else {
                       const totalMatches = toolResult.metadata?.totalMatches || 0;
                       // 显示搜索内容，截取前20个字符
                       const searchSummary = searchDisplayText.length > 20 ? searchDisplayText.substring(0, 20) + '...' : searchDisplayText;
-                      resultText = `搜索${searchTypeDisplay}「${searchSummary}」完成，找到 ${totalMatches} 个匹配项`;
+                      resultText = `搜索 ${searchTypeDisplay} 「${searchSummary}」完成，找到 ${totalMatches} 个匹配项`;
                     }
                     break;
                   case 'get_hardware_categories':
@@ -2391,11 +2393,11 @@ ${JSON.stringify(errData)}
                     toolResult = await getHardwareCategoriesTool.handler(toolArgs, this.configService);
                     if (toolResult.is_error) {
                       resultState = "error";
-                      resultText = `获取${catType}分类失败: ` + (toolResult.content || '未知错误');
+                      resultText = `获取 ${catType} 分类失败: ` + (toolResult.content || '未知错误');
                     } else {
                       const categoryCount = toolResult.metadata?.categories?.length || 0;
                       const totalCount = toolResult.metadata?.total || 0;
-                      resultText = `获取${catType}${dimensionDisplay}分类完成，共 ${categoryCount} 个分类，涵盖 ${totalCount} 个${catType}`;
+                      resultText = `获取 ${catType} ${dimensionDisplay} 分类完成，共 ${categoryCount} 个分类，涵盖 ${totalCount} 个${catType}`;
                     }
                     break;
                   case 'get_board_parameters':
