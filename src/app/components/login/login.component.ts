@@ -98,10 +98,11 @@ export class LoginComponent {
    */
   async loginByGithub() {
     try {
-      const altchaToken = await this.verifyAltcha();
-      if (altchaToken === null) {
-        return;
-      }
+      // TODO: 临时注释掉验证逻辑
+      // const altchaToken = await this.verifyAltcha();
+      // if (altchaToken === null) {
+      //   return;
+      // }
 
       // 直接通过 HTTP 请求启动 GitHub OAuth 流程
       this.authService.startGitHubOAuth().subscribe({
@@ -133,12 +134,16 @@ export class LoginComponent {
       return;
     }
 
-    const altchaToken = await this.verifyAltcha();
-    if (altchaToken === null) {
-      return;
-    }
-
+    // 立即显示加载状态，避免用户感觉按钮无响应
     this.isWaiting = true;
+
+    // TODO: 临时注释掉验证逻辑
+    // const altchaToken = await this.verifyAltcha();
+    // if (altchaToken === null) {
+    //   this.isWaiting = false;
+    //   return;
+    // }
+    const altchaToken = '';
 
     try {
       const loginData = {
