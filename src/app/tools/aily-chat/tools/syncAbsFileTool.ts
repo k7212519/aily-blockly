@@ -726,6 +726,28 @@ function normalizeFieldValue(value: any): string {
 }
 
 /**
+ * 找到块配置中的第一个子块（用于调试对比）
+ */
+function findFirstChildBlock(blockConfig: any): any {
+  if (!blockConfig) return null;
+  
+  // 优先从 inputs 中找
+  if (blockConfig.inputs) {
+    for (const [inputName, inputValue] of Object.entries(blockConfig.inputs) as [string, any][]) {
+      if (inputValue.block) return inputValue.block;
+      if (inputValue.shadow) return inputValue.shadow;
+    }
+  }
+  
+  // 然后从 next 中找
+  if (blockConfig.next?.block) {
+    return blockConfig.next.block;
+  }
+  
+  return null;
+}
+
+/**
  * 计算块链的签名（用于比较是否相同）
  * 签名包含：块类型、字段值、输入连接、next 连接
  * 注意：不包含位置信息和块 ID
@@ -745,21 +767,41 @@ function computeBlockChainSignature(block: any): string {
     return false;
   };
   
-  // 字段名规范化映射（处理 INPUT0/PIN 等不一致）
-  const normalizeFieldName = (name: string): string => {
-    // INPUT0, INPUT1 等 -> PIN（某些块用 INPUT0 表示 PIN）
-    if (/^INPUT\d+$/.test(name)) return `PIN`;
-    return name;
-  };
+  // 标准字段名列表（这些字段名在签名中保留原名）
+  const standardFieldNames = new Set(['VAR', 'TYPE', 'NAME', 'TEXT', 'NUM', 'VALUE', 'OP', 'MODE', 'BOOL', 'ITEM']);
   
   // 字段值（排序后连接，跳过空值和 UI 字段）
+  // EXTRA_N 字段和非标准字段只按值参与签名，使用 _DYN_VAL:value 格式
   if (block.fields) {
-    const fieldPairs = Object.entries(block.fields)
+    const normalFields: string[] = [];
+    const dynamicValues: string[] = [];
+    
+    const sortedEntries = Object.entries(block.fields)
       .filter(([k, v]) => !isUIField(k) && v !== null && v !== undefined && v !== '')
-      .sort(([a], [b]) => normalizeFieldName(a).localeCompare(normalizeFieldName(b)))
-      .map(([k, v]) => `${normalizeFieldName(k)}=${normalizeFieldValue(v)}`);
-    if (fieldPairs.length > 0) {
-      parts.push(`F:{${fieldPairs.join(',')}}`);
+      .sort(([a], [b]) => a.localeCompare(b));
+    
+    for (const [k, v] of sortedEntries) {
+      // EXTRA_N 字段：只保留值，按索引顺序
+      if (/^EXTRA_\d+$/.test(k)) {
+        dynamicValues.push(normalizeFieldValue(v));
+      }
+      // 标准字段：保留字段名
+      else if (standardFieldNames.has(k)) {
+        normalFields.push(`${k}=${normalizeFieldValue(v)}`);
+      }
+      // 其他字段（可能是动态创建的如 PIN）：也只保留值
+      else {
+        dynamicValues.push(normalizeFieldValue(v));
+      }
+    }
+    
+    // 标准字段部分
+    if (normalFields.length > 0) {
+      parts.push(`F:{${normalFields.join(',')}}`);
+    }
+    // 动态字段值部分（只值不含名，排序后）
+    if (dynamicValues.length > 0) {
+      parts.push(`D:[${dynamicValues.sort().join(',')}]`);
     }
   }
   
@@ -934,6 +976,8 @@ function updateBlockFields(block: any, newFields: any, variableNameToId: Map<str
  * 4. 根据新配置重建所有子块
  * 
  * 优点：简单稳定，避免 connectionDB 问题
+ * 
+ * @returns 包含失败块信息的对象
  */
 async function rebuildBlockChildren(
   workspace: any,
@@ -941,7 +985,8 @@ async function rebuildBlockChildren(
   newConfig: any,
   variableNameToId: Map<string, string>,
   preprocessVariableReferences: (config: any, mapping: Map<string, string>) => void
-): Promise<void> {
+): Promise<{ failedBlocks: Array<{ blockType: string; error: string }> }> {
+  const failedBlocks: Array<{ blockType: string; error: string }> = [];
   console.log(`    🔧 开始重建子树: ${existingBlock.type}`);
   
   // 1. 更新根块的字段值
@@ -1019,13 +1064,22 @@ async function rebuildBlockChildren(
             input.connection.connect(targetConnection);
           }
         }
+        // 收集嵌套块创建失败信息
+        if (result.failedBlocks && result.failedBlocks.length > 0) {
+          failedBlocks.push(...result.failedBlocks);
+        }
       } catch (e) {
         console.warn(`    ⚠️ 重建子块失败: ${childConfig.type}`, e);
+        failedBlocks.push({
+          blockType: childConfig.type,
+          error: e instanceof Error ? e.message : String(e)
+        });
       }
     }
   }
   
   console.log(`    ✅ 子树重建完成: ${existingBlock.type}`);
+  return { failedBlocks };
 }
 
 /**
@@ -1109,6 +1163,15 @@ async function incrementalUpdate(
         console.log(`     差异位置: ${diffPos}`);
         console.log(`     当前 [${diffPos}-${diffPos+100}]: ...${currentSig.substring(diffPos, diffPos + 100)}...`);
         console.log(`     新块 [${diffPos}-${diffPos+100}]: ...${newSig.substring(diffPos, diffPos + 100)}...`);
+        
+        // 🆕 详细输出第一个子块的字段对比，帮助调试
+        const currentFirstChild = findFirstChildBlock(currentItem.serialized);
+        const newFirstChild = findFirstChildBlock(matchingByType.config);
+        if (currentFirstChild || newFirstChild) {
+          console.log(`     🔍 第一个子块字段对比:`);
+          console.log(`        工作区: type=${currentFirstChild?.type}, fields=${JSON.stringify(currentFirstChild?.fields)}`);
+          console.log(`        ABS文件: type=${newFirstChild?.type}, fields=${JSON.stringify(newFirstChild?.fields)}`);
+        }
       }
     }
   }
@@ -1148,13 +1211,17 @@ async function incrementalUpdate(
       
       try {
         // 简化方案：保留根块，清空并重建所有子树
-        await rebuildBlockChildren(
+        const rebuildResult = await rebuildBlockChildren(
           workspace,
           currentItem.block,
           matchingNewBlock.config,
           variableNameToId,
           preprocessVariableReferences
         );
+        // 收集子树重建过程中的失败信息
+        if (rebuildResult.failedBlocks && rebuildResult.failedBlocks.length > 0) {
+          failedBlocks.push(...rebuildResult.failedBlocks);
+        }
         console.log(`    ✅ 子树重建成功: ${currentType}`);
       } catch (error) {
         console.warn(`子树重建失败: ${currentType}`, error);
