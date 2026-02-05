@@ -1255,7 +1255,7 @@ function configureBlockFields(block: any, fields: FieldConfig): {
           // � 检测 EXTRA_N 模式的字段：这些需要延迟到 updateShape_() 后再映射
           const isExtraField = /^EXTRA_\d+$/.test(fieldName);
           if (isExtraField) {
-            console.log(`⏳ EXTRA 字段 "${fieldName}" 延迟处理，等待动态字段创建`);
+            // console.log(`⏳ EXTRA 字段 "${fieldName}" 延迟处理，等待动态字段创建`);
             pendingRetryFields.push({ fieldName, value });
             continue; // 跳过此字段，等待二次尝试时映射
           }
@@ -1264,7 +1264,7 @@ function configureBlockFields(block: any, fields: FieldConfig): {
           const existingField = block.getField(fieldName);
           if (!existingField) {
             // 🆕 字段不存在时，先加入待重试列表（等待 updateShape_ 可能创建该字段）
-            console.log(`⏳ 字段 "${fieldName}" 暂时不存在，加入待重试列表`);
+            // console.log(`⏳ 字段 "${fieldName}" 暂时不存在，加入待重试列表`);
             pendingRetryFields.push({ fieldName, value });
             continue; // 跳过此字段，继续处理其他字段
           }
@@ -1329,7 +1329,7 @@ function configureBlockFields(block: any, fields: FieldConfig): {
                   const matchedVar = varsOfType.find((v: any) => v.name === variableNameFromConfig);
                   if (matchedVar) {
                     finalVariableId = matchedVar.getId();
-                    console.log(`✅ 通过变量名和类型找到变量: "${variableNameFromConfig}" (类型: ${expectedType}) → ID: ${finalVariableId}`);
+                    // console.log(`✅ 通过变量名和类型找到变量: "${variableNameFromConfig}" (类型: ${expectedType}) → ID: ${finalVariableId}`);
                     break;
                   }
                 }
@@ -1340,7 +1340,7 @@ function configureBlockFields(block: any, fields: FieldConfig): {
                 const varByName = variableMap.getVariable?.(variableNameFromConfig);
                 if (varByName) {
                   finalVariableId = varByName.getId();
-                  console.log(`✅ 通过变量名找到变量: "${variableNameFromConfig}" → ID: ${finalVariableId}`);
+                  // console.log(`✅ 通过变量名找到变量: "${variableNameFromConfig}" → ID: ${finalVariableId}`);
                 }
               }
             }
@@ -1379,12 +1379,12 @@ function configureBlockFields(block: any, fields: FieldConfig): {
                 }
               }
               
-              console.log(`🔍 使用变量名查找/创建变量: "${nameToUse}"`);
+              // console.log(`🔍 使用变量名查找/创建变量: "${nameToUse}"`);
               
               let variableType: string | undefined = undefined;
               if (typeof value === 'object' && value !== null && (value as any).type) {
                 variableType = (value as any).type;
-                console.log(`🔍 从字段配置提取变量类型: ${variableType}`);
+                // console.log(`🔍 从字段配置提取变量类型: ${variableType}`);
               }
               
               // 🔧 使用变量名查找或创建变量
@@ -1393,7 +1393,7 @@ function configureBlockFields(block: any, fields: FieldConfig): {
             
             if (finalVariableId) {
               block.setFieldValue(finalVariableId, fieldName);
-              console.log(`✅ 变量字段设置成功: ${fieldName} = ${finalVariableId} (变量名: ${variableNameFromConfig || actualValue})`);
+              // console.log(`✅ 变量字段设置成功: ${fieldName} = ${finalVariableId} (变量名: ${variableNameFromConfig || actualValue})`);
               configSuccess = true;
             } else {
               console.warn(`⚠️ 变量字段处理失败，使用原值: ${fieldName} = ${actualValue}`);
@@ -1402,7 +1402,7 @@ function configureBlockFields(block: any, fields: FieldConfig): {
             
           } else if (fieldTypeInfo.fieldType && fieldTypeInfo.fieldType.includes('Dropdown')) {
             // 📋 下拉菜单字段：智能设置选项值（支持大小写不敏感匹配）
-            console.log(`📋 检测到下拉菜单字段 (${fieldTypeInfo.fieldType})，设置选项: ${fieldName} = ${actualValue}`);
+            // console.log(`📋 检测到下拉菜单字段 (${fieldTypeInfo.fieldType})，设置选项: ${fieldName} = ${actualValue}`);
             
             // 先获取字段和可用选项
             const field = block.getField(fieldName);
@@ -1426,7 +1426,7 @@ function configureBlockFields(block: any, fields: FieldConfig): {
                 const options = field.getOptions();
                 // 注意：使用 ?? 而非 || ，因为空字符串 "" 是有效的选项值
                 availableOptions = options.map((opt: any) => opt[1] ?? opt[0]);
-                console.log(`🔍 下拉菜单可用选项:`, availableOptions);
+                // console.log(`🔍 下拉菜单可用选项:`, availableOptions);
                 
                 // 1. 首先尝试精确匹配（注意：空字符串是有效值）
                 for (const option of options) {
@@ -1445,7 +1445,7 @@ function configureBlockFields(block: any, fields: FieldConfig): {
                     const optionValue = option[1] ?? option[0];
                     if (typeof optionValue === 'string' && optionValue.toLowerCase() === actualValueLower) {
                       matchedOption = optionValue;
-                      console.log(`🔄 大小写不敏感匹配: "${actualValue}" -> "${matchedOption}"`);
+                      // console.log(`🔄 大小写不敏感匹配: "${actualValue}" -> "${matchedOption}"`);
                       break;
                     }
                   }
@@ -1459,7 +1459,7 @@ function configureBlockFields(block: any, fields: FieldConfig): {
                     const optionValue = option[1] ?? option[0];
                     if (typeof displayText === 'string' && displayText.toLowerCase() === actualValueLower) {
                       matchedOption = optionValue;
-                      console.log(`🔄 显示文本匹配: "${actualValue}" (显示) -> "${matchedOption}" (值)`);
+                      // console.log(`🔄 显示文本匹配: "${actualValue}" (显示) -> "${matchedOption}" (值)`);
                       break;
                     }
                   }
@@ -1477,7 +1477,7 @@ function configureBlockFields(block: any, fields: FieldConfig): {
                 // 🔑 关键：验证设置是否成功
                 const actualFieldValue = block.getFieldValue(fieldName);
                 if (actualFieldValue === matchedOption) {
-                  console.log(`✅ 下拉菜单设置成功: ${fieldName} = ${matchedOption}`);
+                  // console.log(`✅ 下拉菜单设置成功: ${fieldName} = ${matchedOption}`);
                   configSuccess = true;
                   
                   // 🆕 检测 updateShape_() 是否会创建新的动态字段
@@ -1510,14 +1510,14 @@ function configureBlockFields(block: any, fields: FieldConfig): {
                       const newFields = [...fieldsAfter].filter(f => !fieldsBefore.has(f));
                       
                       if (newFields.length > 0) {
-                        console.log(`🔄 updateShape_() 创建了新字段: [${newFields.join(', ')}]`);
+                        // console.log(`🔄 updateShape_() 创建了新字段: [${newFields.join(', ')}]`);
                       } else {
                         // 🆕 形状已稳定，标记并立即处理所有待重试字段
-                        console.log(`🔄 updateShape_() 未创建新字段，形状已稳定`);
+                        // console.log(`🔄 updateShape_() 未创建新字段，形状已稳定`);
                         shapeStable = true; // 后续下拉菜单不再调用 updateShape_()
                         
                         if (pendingRetryFields.length > 0) {
-                          console.log(`🔄 立即处理 ${pendingRetryFields.length} 个待重试字段...`);
+                          // console.log(`🔄 立即处理 ${pendingRetryFields.length} 个待重试字段...`);
                           
                           // 获取已配置的字段名
                           const configuredFieldsNow = new Set(Object.keys(fields || {}));
@@ -1551,7 +1551,7 @@ function configureBlockFields(block: any, fields: FieldConfig): {
                             if (idx < availableFieldsNow.length) {
                               const actualFn = availableFieldsNow[idx];
                               normalFieldsImmediate.push({ fieldName: actualFn, value: extraFieldsImmediate[idx].value });
-                              console.log(`🔄 即时映射: EXTRA_${extraFieldsImmediate[idx].index} → ${actualFn}`);
+                              // console.log(`🔄 即时映射: EXTRA_${extraFieldsImmediate[idx].index} → ${actualFn}`);
                             }
                           }
                           
@@ -1570,7 +1570,7 @@ function configureBlockFields(block: any, fields: FieldConfig): {
                               
                               try {
                                 block.setFieldValue(val, fn);
-                                console.log(`✅ 即时设置成功: ${fn} = ${val}`);
+                                // console.log(`✅ 即时设置成功: ${fn} = ${val}`);
                                 configSuccess = true;
                               } catch (e: any) {
                                 console.warn(`⚠️ 即时设置失败: ${fn}`, e);
@@ -1618,10 +1618,10 @@ function configureBlockFields(block: any, fields: FieldConfig): {
             }
           } else {
             // 📋 常规字段：直接设置值
-            console.log(`📋 常规字段处理: ${fieldName} = ${actualValue} (类型: ${fieldTypeInfo.fieldType || '未知'})`);
+            // console.log(`📋 常规字段处理: ${fieldName} = ${actualValue} (类型: ${fieldTypeInfo.fieldType || '未知'})`);
             try {
               block.setFieldValue(actualValue, fieldName);
-              console.log(`✅ 字段设置成功: ${fieldName} = ${actualValue}`);
+              // console.log(`✅ 字段设置成功: ${fieldName} = ${actualValue}`);
               configSuccess = true;
             } catch (setFieldError: any) {
               const errorMsg = setFieldError?.message || String(setFieldError);
@@ -1649,7 +1649,7 @@ function configureBlockFields(block: any, fields: FieldConfig): {
     
     // 🆕 二次尝试：如果有 updateShape_ 被调用且有待重试的字段，再次尝试设置
     if (hadUpdateShape && pendingRetryFields.length > 0) {
-      console.log(`🔄 开始二次尝试设置 ${pendingRetryFields.length} 个待重试字段...`);
+      // console.log(`🔄 开始二次尝试设置 ${pendingRetryFields.length} 个待重试字段...`);
       
       // 🆕 对 EXTRA_N 字段进行动态映射
       const mappedRetryFields: Array<{ fieldName: string; value: any }> = [];
@@ -1688,14 +1688,14 @@ function configureBlockFields(block: any, fields: FieldConfig): {
           console.warn('获取块字段列表失败:', e);
         }
         
-        console.log(`🔄 EXTRA 字段映射: ${extraFields.length} 个待映射，可用字段: [${availableFields.join(', ')}]`);
+        // console.log(`🔄 EXTRA 字段映射: ${extraFields.length} 个待映射，可用字段: [${availableFields.join(', ')}]`);
         
         // 映射 EXTRA_N 到实际字段名
         for (let i = 0; i < extraFields.length; i++) {
           if (i < availableFields.length) {
             const actualFieldName = availableFields[i];
             mappedRetryFields.push({ fieldName: actualFieldName, value: extraFields[i].value });
-            console.log(`🔄 动态字段映射: EXTRA_${extraFields[i].index} → ${actualFieldName}`);
+            // console.log(`🔄 动态字段映射: EXTRA_${extraFields[i].index} → ${actualFieldName}`);
           } else {
             // 无法映射，保留原名（会在下面失败）
             mappedRetryFields.push({ fieldName: `EXTRA_${extraFields[i].index}`, value: extraFields[i].value });
@@ -1756,7 +1756,7 @@ function configureBlockFields(block: any, fields: FieldConfig): {
           }
           
           block.setFieldValue(actualValue, fieldName);
-          console.log(`✅ 二次尝试设置成功: ${fieldName} = ${actualValue}`);
+          // console.log(`✅ 二次尝试设置成功: ${fieldName} = ${actualValue}`);
           configSuccess = true;
           
         } catch (retryError: any) {
@@ -1773,7 +1773,7 @@ function configureBlockFields(block: any, fields: FieldConfig): {
     } else if (pendingRetryFields.length > 0) {
       // 没有 updateShape_ 触发，但有待重试字段
       // 仍然尝试 EXTRA_N 映射和设置（某些块可能不需要 updateShape_ 就有额外字段）
-      console.log(`ℹ️ 没有 updateShape_ 触发，尝试处理 ${pendingRetryFields.length} 个待重试字段...`);
+      // console.log(`ℹ️ 没有 updateShape_ 触发，尝试处理 ${pendingRetryFields.length} 个待重试字段...`);
       
       // 🆕 对 EXTRA_N 字段进行动态映射（与上面相同逻辑）
       const mappedRetryFields: Array<{ fieldName: string; value: any }> = [];
@@ -1814,7 +1814,7 @@ function configureBlockFields(block: any, fields: FieldConfig): {
           if (i < availableFields.length) {
             const actualFieldName = availableFields[i];
             mappedRetryFields.push({ fieldName: actualFieldName, value: extraFields[i].value });
-            console.log(`🔄 动态字段映射: EXTRA_${extraFields[i].index} → ${actualFieldName}`);
+            // console.log(`🔄 动态字段映射: EXTRA_${extraFields[i].index} → ${actualFieldName}`);
           } else {
             mappedRetryFields.push({ fieldName: `EXTRA_${extraFields[i].index}`, value: extraFields[i].value });
           }
@@ -1835,7 +1835,7 @@ function configureBlockFields(block: any, fields: FieldConfig): {
               actualValue = String(value);
             }
             block.setFieldValue(actualValue, fieldName);
-            console.log(`✅ 字段设置成功: ${fieldName} = ${actualValue}`);
+            // console.log(`✅ 字段设置成功: ${fieldName} = ${actualValue}`);
             configSuccess = true;
           } catch (e: any) {
             failedFields.push({
@@ -4424,7 +4424,7 @@ function remapExtraFieldsToActualFields(block: any, fields: Record<string, any>)
     const actualFieldName = availableFields[i];
     const extraValue = extraFields[i].value;
     result[actualFieldName] = extraValue;
-    console.log(`🔄 动态字段映射: EXTRA_${extraFields[i].index} → ${actualFieldName} = ${extraValue}`);
+    // console.log(`🔄 动态字段映射: EXTRA_${extraFields[i].index} → ${actualFieldName} = ${extraValue}`);
   }
   
   // 如果还有剩余的 EXTRA_N 字段无法映射，保留原名（会在 configureBlockFields 中报错）
@@ -4495,12 +4495,12 @@ function remapExtraInputsToActualInputs(block: any, inputs: Record<string, any>)
   // 如果 EXTRA_N 数量超过可用输入，尝试扩展动态输入
   if (neededInputCount > currentAvailableCount && block.plus && typeof block.plus === 'function') {
     const inputsToAdd = neededInputCount - currentAvailableCount;
-    console.log(`🔧 动态输入扩展: 需要 ${neededInputCount} 个输入，当前有 ${currentAvailableCount} 个，需要添加 ${inputsToAdd} 个`);
+    // console.log(`🔧 动态输入扩展: 需要 ${neededInputCount} 个输入，当前有 ${currentAvailableCount} 个，需要添加 ${inputsToAdd} 个`);
     
     for (let i = 0; i < inputsToAdd; i++) {
       try {
         block.plus();
-        console.log(`  ✅ 调用 block.plus() 添加第 ${i + 1} 个输入`);
+        // console.log(`  ✅ 调用 block.plus() 添加第 ${i + 1} 个输入`);
       } catch (e) {
         console.warn(`  ⚠️ 调用 block.plus() 失败:`, e);
         break;
@@ -4516,14 +4516,14 @@ function remapExtraInputsToActualInputs(block: any, inputs: Record<string, any>)
       }
     }
     currentAvailableCount = availableInputs.length;
-    console.log(`  📋 扩展后可用输入: [${availableInputs.join(', ')}]`);
+    // console.log(`  📋 扩展后可用输入: [${availableInputs.join(', ')}]`);
   }
   
   for (let i = 0; i < extraInputs.length && i < availableInputs.length; i++) {
     const actualInputName = availableInputs[i];
     const extraValue = extraInputs[i].value;
     result[actualInputName] = extraValue;
-    console.log(`🔄 动态输入映射: EXTRA_${extraInputs[i].index} → ${actualInputName}`);
+    // console.log(`🔄 动态输入映射: EXTRA_${extraInputs[i].index} → ${actualInputName}`);
   }
   
   // 如果还有剩余的 EXTRA_N 输入无法映射，保留原名（会在 configureBlockInputs 中报错）

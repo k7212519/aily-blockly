@@ -105,7 +105,7 @@ export function loadProjectBlockDefinitions(projectPath: string): void {
     
     const metas = loadBlockDefinitionsFromPath(projectPath, electronAPI);
     setGlobalBlockMetas(metas);
-    console.log(`[absParser] 已从项目加载 ${metas.size} 个块定义`);
+    // console.log(`[absParser] 已从项目加载 ${metas.size} 个块定义`);
   } catch (e) {
     console.warn('[absParser] 加载项目块定义失败:', e);
   }
