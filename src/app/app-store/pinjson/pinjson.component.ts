@@ -1,6 +1,9 @@
-import { Component, Inject, OnDestroy } from '@angular/core';
+import { Component, Inject, OnDestroy, Optional, OnInit } from '@angular/core';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { NZ_MODAL_DATA } from 'ng-zorro-antd/modal';
+import { ActivatedRoute } from '@angular/router';
+import { ElectronService } from '../../services/electron.service';
+import { SubWindowComponent } from '../../components/sub-window/sub-window.component';
 
 export interface PinjsonModalData {
   /** pinjson.json 解析后的数据 */
@@ -13,11 +16,11 @@ export interface PinjsonModalData {
 
 @Component({
   selector: 'app-pinjson',
-  imports: [],
+  imports: [SubWindowComponent],
   templateUrl: './pinjson.component.html',
   styleUrl: './pinjson.component.scss'
 })
-export class PinjsonComponent implements OnDestroy {
+export class PinjsonComponent implements OnInit, OnDestroy {
   iframeSrc: SafeResourceUrl;
   private jsonData: unknown;
   private allowedOrigins: string[];
@@ -29,12 +32,19 @@ export class PinjsonComponent implements OnDestroy {
   private dataConfirmed = false;
 
   constructor(
-    @Inject(NZ_MODAL_DATA) public data: PinjsonModalData,
-    private sanitizer: DomSanitizer
+    @Optional() @Inject(NZ_MODAL_DATA) public data: PinjsonModalData | null,
+    private sanitizer: DomSanitizer,
+    private route: ActivatedRoute,
+    private electronService: ElectronService
   ) {
-    this.jsonData = data.jsonData;
-    const baseUrl = data.iframeBaseUrl || 'http://localhost:4202/component-viewer';
-    const id = data.componentId || `component_${Date.now()}`;
+    // 如果是从 modal 打开，使用 modal data
+    if (this.data) {
+      this.jsonData = this.data.jsonData;
+    }
+    // 否则等待 ngOnInit 中从 URL 参数读取文件路径并加载数据
+
+    const baseUrl = this.data?.iframeBaseUrl || 'http://localhost:4202/component-viewer';
+    const id = this.data?.componentId || `component_${Date.now()}`;
     const url = `${baseUrl}?id=${encodeURIComponent(id)}&type=json`;
     this.iframeSrc = this.sanitizer.bypassSecurityTrustResourceUrl(url);
     try {
@@ -45,6 +55,31 @@ export class PinjsonComponent implements OnDestroy {
 
     // 设置 PostMessage 监听
     this.setupPostMessageListener();
+  }
+
+  ngOnInit() {
+    // 如果不是 modal 模式，从 URL 查询参数读取文件路径
+    if (!this.data) {
+      this.route.queryParams.subscribe(params => {
+        const filePath = params['filePath'];
+        if (filePath && this.electronService.isElectron) {
+          try {
+            if (this.electronService.exists(filePath)) {
+              const content = this.electronService.readFile(filePath);
+              this.jsonData = JSON.parse(content);
+              // 如果 iframe 已经就绪，立即发送数据
+              if (this.childReadyReceived && this.iframeElement?.contentWindow) {
+                this.sendDataToChild();
+              }
+            } else {
+              console.error('pinjson 文件不存在:', filePath);
+            }
+          } catch (error) {
+            console.error('读取 pinjson 文件失败:', error);
+          }
+        }
+      });
+    }
   }
 
   onIframeLoad(event: Event): void {
@@ -112,7 +147,7 @@ export class PinjsonComponent implements OnDestroy {
    * 发送数据到子窗口
    */
   private sendDataToChild(): void {
-    if (!this.iframeElement?.contentWindow) return;
+    if (!this.iframeElement?.contentWindow || !this.jsonData) return;
 
     const targetOrigin = this.allowedOrigins[0] || '*';
     
@@ -129,7 +164,7 @@ export class PinjsonComponent implements OnDestroy {
 
     // 方式2：同时发送 COMPONENT_DATA 消息（双保险）
     setTimeout(() => {
-      if (!this.dataConfirmed && this.iframeElement?.contentWindow) {
+      if (!this.dataConfirmed && this.iframeElement?.contentWindow && this.jsonData) {
         this.iframeElement.contentWindow.postMessage(
           {
             type: 'COMPONENT_DATA',

@@ -1,8 +1,10 @@
-<div class="pinjson-container">
-  <iframe
-    class="pinjson-iframe"
-    [src]="iframeSrc"
-    (load)="onIframeLoad($event)"
-    title="Pin JSON Viewer"
-  ></iframe>
-</div>
+<app-sub-window [title]="'PIN MAP'" [winBtns]="['minimize', 'maximize', 'close']">
+  <div class="pinjson-container">
+    <iframe
+      class="pinjson-iframe"
+      [src]="iframeSrc"
+      (load)="onIframeLoad($event)"
+      title="Pin JSON Viewer"
+    ></iframe>
+  </div>
+</app-sub-window>

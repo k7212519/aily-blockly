@@ -99,28 +99,15 @@ export class FloatSiderComponent implements OnInit, OnDestroy {
       this.message.error(this.translate.instant('FLOAT_SIDER.NO_PINMAP'));
       return;
     }
-    let jsonData: unknown;
-    try {
-      const content = this.electronService.readFile(pinjsonPath);
-      jsonData = JSON.parse(content);
-    } catch {
-      this.message.error(this.translate.instant('FLOAT_SIDER.PINMAP_PARSE_ERROR'));
-      return;
+    
+    // 使用子窗口打开，通过 URL 查询参数传递文件路径
+    if (this.electronService.isElectron && window['subWindow']) {
+      window['subWindow'].open({
+        path: `pinjson?filePath=${encodeURIComponent(pinjsonPath)}`,
+        width: 800,
+        height: 600
+      });
     }
-    this.modal.create({
-      nzTitle: null,
-      nzFooter: null,
-      nzClosable: false,
-      nzBodyStyle: {
-        padding: '0',
-      },
-      nzContent: PinjsonComponent,
-      nzData: {
-        jsonData,
-        componentId: `component_${Date.now()}`,
-      },
-      nzWidth: '800px',
-    });
   }
 
 
