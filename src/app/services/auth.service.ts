@@ -207,6 +207,11 @@ export class AuthService {
   }
 
   async refreshMe() {
+    // 先检查是否有 token，没有 token 就不发起请求
+    const token = await this.getToken2();
+    if (!token) {
+      return;
+    }
     return this.http.get<CommonResponse>(API.me).subscribe( (res) => {
       if (res.status === 200 && res.data) {
         this.userInfoSubject.next(res.data);
