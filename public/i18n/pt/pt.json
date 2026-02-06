@@ -362,6 +362,7 @@
         "DOCUMENTATION": "Documentação",
         "FEEDBACK": "Feedback",
         "NO_PINMAP": "Mapa de pinos não disponível para esta placa",
+        "PINMAP_PARSE_ERROR": "Falha ao analisar mapa de pinos",
         "NO_DOCUMENTATION": "Documentação não disponível para esta placa"
     },
     "SERIAL": {

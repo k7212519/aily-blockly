@@ -362,6 +362,7 @@
         "DOCUMENTATION": "ドキュメント",
         "FEEDBACK": "フィードバック",
         "NO_PINMAP": "このボードのピン配置図は利用できません",
+        "PINMAP_PARSE_ERROR": "ピン配置図の解析に失敗しました",
         "NO_DOCUMENTATION": "このボードのドキュメントは利用できません"
     },
     "SERIAL": {
