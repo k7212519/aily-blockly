@@ -541,6 +541,7 @@
         "CANNOT_OPEN_PROJECT": "프로젝트를 열 수 없습니다: ",
         "CREATING_PROJECT": "프로젝트 생성 중...",
         "PROJECT_CREATED": "프로젝트가 생성되었습니다",
+        "CREATE_FAILED": "프로젝트 생성에 실패했습니다",
         "PATH_NOT_EXIST": "프로젝트 경로가 존재하지 않습니다. 다른 프로젝트를 선택하세요",
         "SWITCHING_BOARD_CONFIG": "보드 구성 전환 중...",
         "BOARD_SWITCH_COMPLETE": "보드 전환 완료",

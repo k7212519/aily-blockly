@@ -545,6 +545,7 @@
         "CANNOT_OPEN_PROJECT": "無法開啟專案: ",
         "CREATING_PROJECT": "正在建立專案...",
         "PROJECT_CREATED": "專案建立成功",
+        "CREATE_FAILED": "專案建立失敗",
         "PATH_NOT_EXIST": "專案路徑不存在，請重新選擇專案",
         "SWITCHING_BOARD_CONFIG": "正在切換開發板配置...",
         "BOARD_SWITCH_COMPLETE": "開發板切換完成",

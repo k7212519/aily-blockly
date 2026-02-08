@@ -600,6 +600,7 @@
         "CANNOT_OPEN_PROJECT": "Cannot open project: ",
         "CREATING_PROJECT": "Creating project...",
         "PROJECT_CREATED": "Project created successfully",
+        "CREATE_FAILED": "Project creation failed",
         "PATH_NOT_EXIST": "Project path does not exist, please select another project",
         "SWITCHING_BOARD_CONFIG": "Switching board configuration...",
         "BOARD_SWITCH_COMPLETE": "Board switch complete",

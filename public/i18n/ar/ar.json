@@ -545,6 +545,7 @@
         "CANNOT_OPEN_PROJECT": "تعذر فتح المشروع: ",
         "CREATING_PROJECT": "جاري إنشاء المشروع...",
         "PROJECT_CREATED": "تم إنشاء المشروع بنجاح",
+        "CREATE_FAILED": "فشل إنشاء المشروع",
         "PATH_NOT_EXIST": "مسار المشروع غير موجود، يرجى اختيار مشروع آخر",
         "SWITCHING_BOARD_CONFIG": "جاري تغيير إعدادات اللوحة...",
         "BOARD_SWITCH_COMPLETE": "اكتمل تغيير اللوحة",

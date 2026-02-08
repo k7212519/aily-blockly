@@ -600,6 +600,7 @@
         "CANNOT_OPEN_PROJECT": "无法打开项目: ",
         "CREATING_PROJECT": "正在创建项目...",
         "PROJECT_CREATED": "项目创建成功",
+        "CREATE_FAILED": "项目创建失败",
         "PATH_NOT_EXIST": "项目路径不存在，请重新选择项目",
         "SWITCHING_BOARD_CONFIG": "正在切换开发板配置...",
         "BOARD_SWITCH_COMPLETE": "开发板切换完成",
