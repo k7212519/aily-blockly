@@ -144,8 +144,6 @@ export class ProjectService {
       // 复制模板文件到项目目录
       await this.crossPlatformCmdService.copyItem(`${templatePath}${pt}*`, projectPath, true, true);
 
-      throw new Error('测试错误提示');
-
       // 3. 修改package.json文件
       const packageJson = JSON.parse(window['fs'].readFileSync(`${projectPath}/package.json`));
       if (this.containsChineseCharacters(newProjectData.name)) {
