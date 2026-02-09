@@ -22,8 +22,8 @@ jobs:
       - name: Install Dependencies
         run: |
           npm install -g @angular/cli
-          npm ci
-          cd electron && npm ci
+          npm ci --force
+          cd electron && npm ci --force
 
       - name: Build Angular App
         run: |
@@ -132,8 +132,8 @@ jobs:
       - name: Install Dependencies
         run: |
           npm install -g @angular/cli
-          npm ci
-          cd electron && npm ci
+          npm ci --force
+          cd electron && npm ci --force
 
       # --- 导入代码签名证书到 Keychain ---
       - name: Import Codesign Certificates
