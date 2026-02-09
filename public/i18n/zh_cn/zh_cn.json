@@ -82,6 +82,15 @@
         "BOARD": "开发板型号选择",
         "USB": "USB配置"
     },
+    "NRF5": {
+        "SOFTDEVICE": "SoftDevice",
+        "FLASH_SOFTDEVICE_TITLE": "烧录 SoftDevice",
+        "FLASH_SOFTDEVICE_CONFIRM": "是否要烧录 {{softdevice}} SoftDevice 到设备？",
+        "SELECT_PORT_FIRST": "请先选择串口",
+        "FLASHING_SOFTDEVICE": "正在烧录 SoftDevice...",
+        "FLASH_SUCCESS": "SoftDevice 烧录成功",
+        "FLASH_FAILED": "SoftDevice 烧录失败"
+    },
     "GUIDE": {
         "START": "开始",
         "RECENTLY": "最近",
@@ -122,6 +131,10 @@
         }
     },
     "BLOCKLY": {
+        "CROSS_TAB_COPY": "复制到指定位置",
+        "CONTROLS_SWITCH_CASE": "情况",
+        "CONTROLS_SWITCH_DO": "执行",
+        "CONTROLS_SWITCH_DEFAULT": "默认执行",
         "ONBOARDING": {
             "TOOLBOX_TITLE": "积木工具箱",
             "TOOLBOX_DESC": "这里是积木分类区域，点击不同的分类可以找到各种功能积木块，拖拽到右边工作区使用。",
@@ -173,6 +186,10 @@
             "FLYOUT_AUTO_CLOSE": "自动关闭工具箱",
             "COMPILATION_OPTIONS": "编译选项",
             "REGION": "服务区域",
+            "REGION_TITLE": "切换服务区域",
+            "REGION_DESC": "切换服务区域后需要重新登录，是否继续？",
+            "REGION_CONFIRM": "确认",
+            "REGION_CANCEL": "取消",
             "REPOSITORY_URLS": "仓库地址",
             "API_SERVER": "API服务器",
             "BOARD_LIST": "开发板列表",
@@ -394,6 +411,7 @@
         "DOCUMENTATION": "文档",
         "FEEDBACK": "反馈",
         "NO_PINMAP": "该开发板没有提供引脚图",
+        "PINMAP_PARSE_ERROR": "引脚图解析失败",
         "NO_DOCUMENTATION": "该开发板没有提供文档链接"
     },
     "SERIAL": {
@@ -550,6 +568,7 @@
         "BOARD_UNINSTALL_COMPLETE": "开发板卸载完成",
         "BOARD_DEPS_INSTALL_COMPLETE": "开发板依赖安装完成",
         "BOARD_DEPS_INSTALL_FAILED": "开发板依赖安装失败",
+        "DEPS_INSTALL_COMPLETE": "依赖安装完成",
         "DEPS_UNINSTALL_COMPLETE": "依赖卸载完成",
         "DEPS_UNINSTALL_FAILED": "依赖卸载失败",
         "NAME_REQUIRED": "{{type}}名称不能为空",
@@ -581,6 +600,7 @@
         "CANNOT_OPEN_PROJECT": "无法打开项目: ",
         "CREATING_PROJECT": "正在创建项目...",
         "PROJECT_CREATED": "项目创建成功",
+        "CREATE_FAILED": "项目创建失败",
         "PATH_NOT_EXIST": "项目路径不存在，请重新选择项目",
         "SWITCHING_BOARD_CONFIG": "正在切换开发板配置...",
         "BOARD_SWITCH_COMPLETE": "开发板切换完成",

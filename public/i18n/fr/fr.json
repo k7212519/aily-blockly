@@ -47,6 +47,15 @@
         "USB": "Paramètres USB",
         "UPLOAD_METHOD": "Méthode de Téléversement"
     },
+    "NRF5": {
+        "SOFTDEVICE": "SoftDevice",
+        "FLASH_SOFTDEVICE_TITLE": "Flasher SoftDevice",
+        "FLASH_SOFTDEVICE_CONFIRM": "Voulez-vous flasher {{softdevice}} SoftDevice sur l'appareil ?",
+        "SELECT_PORT_FIRST": "Veuillez d'abord sélectionner un port",
+        "FLASHING_SOFTDEVICE": "Flashage du SoftDevice en cours...",
+        "FLASH_SUCCESS": "SoftDevice flashé avec succès",
+        "FLASH_FAILED": "Échec du flashage du SoftDevice"
+    },
     "GUIDE": {
         "START": "Démarrer",
         "RECENTLY": "Récent",
@@ -86,6 +95,12 @@
             "STEP7_DESC": "Des questions ? Envie de partager votre travail ? Rejoignez notre communauté d'utilisateurs pour échanger et apprendre avec d'autres makers !"
         }
     },
+    "BLOCKLY": {
+        "CROSS_TAB_COPY": "Copier à l'emplacement spécifié",
+        "CONTROLS_SWITCH_CASE": "cas",
+        "CONTROLS_SWITCH_DO": "faire",
+        "CONTROLS_SWITCH_DEFAULT": "par défaut"
+    },
     "APP_STORE": {
         "HEADER_INFO": "Les {{count}} premières applications seront affichées dans la barre d'outils",
         "RESET": "Réinitialiser",
@@ -122,6 +137,11 @@
             "BLOCKLY_THEME": "Thème Blockly",
             "BLOCKLY_MINIMAP": "Miniature Blockly",
             "COMPILATION_OPTIONS": "Options de Compilation",
+            "REGION": "Région de service",
+            "REGION_TITLE": "Changer la région de service",
+            "REGION_DESC": "Vous devrez vous reconnecter après avoir changé la région de service. Continuer ?",
+            "REGION_CONFIRM": "Confirmer",
+            "REGION_CANCEL": "Annuler",
             "REPOSITORY_URLS": "URLs des Dépôts",
             "BOARD_LIST": "Liste des Cartes",
             "LIBRARY_LIST": "Liste des Bibliothèques",
@@ -342,6 +362,7 @@
         "DOCUMENTATION": "Documentation",
         "FEEDBACK": "Retour d'information",
         "NO_PINMAP": "Schéma des broches non disponible pour cette carte",
+        "PINMAP_PARSE_ERROR": "Échec de l'analyse du schéma des broches",
         "NO_DOCUMENTATION": "Documentation non disponible pour cette carte"
     },
     "SERIAL": {
@@ -492,6 +513,7 @@
         "BOARD_UNINSTALL_COMPLETE": "Carte désinstallée avec succès",
         "BOARD_DEPS_INSTALL_COMPLETE": "Dépendances de la carte installées avec succès",
         "BOARD_DEPS_INSTALL_FAILED": "Échec de l'installation des dépendances de la carte",
+        "DEPS_INSTALL_COMPLETE": "Dépendances installées avec succès",
         "DEPS_UNINSTALL_COMPLETE": "Dépendances désinstallées avec succès",
         "DEPS_UNINSTALL_FAILED": "Échec de la désinstallation des dépendances",
         "NAME_REQUIRED": "Le nom de {{type}} ne peut pas être vide",
@@ -523,6 +545,7 @@
         "CANNOT_OPEN_PROJECT": "Impossible d'ouvrir le projet: ",
         "CREATING_PROJECT": "Création du projet...",
         "PROJECT_CREATED": "Projet créé avec succès",
+        "CREATE_FAILED": "Échec de la création du projet",
         "PATH_NOT_EXIST": "Le chemin du projet n'existe pas, veuillez sélectionner un autre projet",
         "SWITCHING_BOARD_CONFIG": "Changement de la configuration de la carte...",
         "BOARD_SWITCH_COMPLETE": "Changement de carte terminé",

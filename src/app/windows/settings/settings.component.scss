@@ -215,6 +215,16 @@ ngx-simplebar {
   font-size: 16px;
 }
 
+.region-buttons {
+  display: flex;
+  flex-wrap: wrap;
+
+  button {
+    min-width: 80px;
+    margin-right: -1px;
+  }
+}
+
 [disabled] {
   opacity: 0.6;
 }

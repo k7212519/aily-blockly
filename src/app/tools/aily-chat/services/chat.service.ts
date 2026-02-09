@@ -5,6 +5,7 @@ import { MCPTool } from './mcp.service';
 import { API } from "../../../configs/api.config";
 import { ConfigService } from '../../../services/config.service';
 import { AilyChatConfigService, ModelConfigOption } from './aily-chat-config.service';
+import { AuthService } from '../../../services/auth.service';
 
 // 使用 ModelConfigOption 作为统一的模型配置类型，保留 ModelConfig 别名以兼容旧代码
 export type ModelConfig = ModelConfigOption;
@@ -52,7 +53,8 @@ export class ChatService {
   constructor(
     private http: HttpClient,
     private configService: ConfigService,
-    private ailyChatConfigService: AilyChatConfigService
+    private ailyChatConfigService: AilyChatConfigService,
+    private authService: AuthService
   ) {
     ChatService.instance = this;
     // 从配置加载AI聊天模式
@@ -259,7 +261,7 @@ export class ChatService {
     }
   }
 
-  startSession(mode: string, tools: MCPTool[] | null = null, maxCount?: number, customllmConfig?: any, customModel?: any): Observable<any> {
+  startSession(mode: string, tools: MCPTool[] | null = null, maxCount?: number, customllmConfig?: any, selectModel?: string): Observable<any> {
     const payload: any = { 
       session_id: this.currentSessionId, 
       tools: tools || [], 
@@ -276,9 +278,9 @@ export class ChatService {
       payload.llm_config = customllmConfig;
     }
 
-    // 如果提供了自定义模型，添加到请求中
-    if (customModel) {
-      payload.custom_model = customModel;
+    // 如果提供了选择的模型名称，添加到请求中
+    if (selectModel) {
+      payload.select_model = selectModel;
     }
     
     return this.http.post(API.startSession, payload);
@@ -291,8 +293,15 @@ export class ChatService {
   streamConnect(sessionId: string, options?: any): Observable<any> {
     const messageSubject = new Subject<any>();
 
-    fetch(`${API.streamConnect}/${sessionId}`)
-      .then(async response => {
+    // 获取 token 并添加 Authorization 头部
+    this.authService.getToken2().then(token => {
+      const headers: HeadersInit = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      fetch(`${API.streamConnect}/${sessionId}`, { headers })
+        .then(async response => {
         if (!response.ok) {
           messageSubject.error(new Error(`HTTP error! Status: ${response.status}`));
           return;
@@ -347,6 +356,9 @@ export class ChatService {
       .catch(error => {
         messageSubject.error(error);
       });
+    }).catch(error => {
+      messageSubject.error(error);
+    });
 
     return messageSubject.asObservable();
   }

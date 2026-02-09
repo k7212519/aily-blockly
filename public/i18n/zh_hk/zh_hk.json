@@ -47,6 +47,15 @@
         "USB": "USB配置",
         "UPLOAD_METHOD": "燒錄方式"
     },
+    "NRF5": {
+        "SOFTDEVICE": "SoftDevice",
+        "FLASH_SOFTDEVICE_TITLE": "燒錄 SoftDevice",
+        "FLASH_SOFTDEVICE_CONFIRM": "是否要燒錄 {{softdevice}} SoftDevice 到設備？",
+        "SELECT_PORT_FIRST": "請先選擇串口",
+        "FLASHING_SOFTDEVICE": "正在燒錄 SoftDevice...",
+        "FLASH_SUCCESS": "SoftDevice 燒錄成功",
+        "FLASH_FAILED": "SoftDevice 燒錄失敗"
+    },
     "GUIDE": {
         "START": "開始",
         "RECENTLY": "最近",
@@ -86,6 +95,12 @@
             "STEP7_DESC": "遇到問題？想分享作品？加入我們的用戶社群，與其他開發者一起交流學習！"
         }
     },
+    "BLOCKLY": {
+        "CROSS_TAB_COPY": "複製到指定位置",
+        "CONTROLS_SWITCH_CASE": "情況",
+        "CONTROLS_SWITCH_DO": "執行",
+        "CONTROLS_SWITCH_DEFAULT": "預設執行"
+    },
     "APP_STORE": {
         "HEADER_INFO": "前 {{count}} 個應用會顯示在頂部工具欄",
         "RESET": "重設",
@@ -122,6 +137,11 @@
             "BLOCKLY_THEME": "Blockly主題",
             "BLOCKLY_MINIMAP": "Blockly縮略圖",
             "COMPILATION_OPTIONS": "編譯選項",
+            "REGION": "服務區域",
+            "REGION_TITLE": "切換服務區域",
+            "REGION_DESC": "切換服務區域後需要重新登入，是否繼續？",
+            "REGION_CONFIRM": "確認",
+            "REGION_CANCEL": "取消",
             "REPOSITORY_URLS": "倉庫地址",
             "BOARD_LIST": "開發板清單",
             "LIBRARY_LIST": "函式庫清單",
@@ -342,6 +362,7 @@
         "DOCUMENTATION": "文檔",
         "FEEDBACK": "反饋",
         "NO_PINMAP": "該開發板沒有提供引腳圖",
+        "PINMAP_PARSE_ERROR": "引腳圖解析失敗",
         "NO_DOCUMENTATION": "該開發板沒有提供文檔鏈接"
     },
     "SERIAL": {
@@ -492,6 +513,7 @@
         "BOARD_UNINSTALL_COMPLETE": "開發板卸載完成",
         "BOARD_DEPS_INSTALL_COMPLETE": "開發板依賴安裝完成",
         "BOARD_DEPS_INSTALL_FAILED": "開發板依賴安裝失敗",
+        "DEPS_INSTALL_COMPLETE": "依賴安裝完成",
         "DEPS_UNINSTALL_COMPLETE": "依賴卸載完成",
         "DEPS_UNINSTALL_FAILED": "依賴卸載失敗",
         "NAME_REQUIRED": "{{type}}名稱不能為空",
@@ -523,6 +545,7 @@
         "CANNOT_OPEN_PROJECT": "無法開啟專案: ",
         "CREATING_PROJECT": "正在建立專案...",
         "PROJECT_CREATED": "專案建立成功",
+        "CREATE_FAILED": "專案建立失敗",
         "PATH_NOT_EXIST": "專案路徑不存在，請重新選擇專案",
         "SWITCHING_BOARD_CONFIG": "正在切換開發板配置...",
         "BOARD_SWITCH_COMPLETE": "開發板切換完成",

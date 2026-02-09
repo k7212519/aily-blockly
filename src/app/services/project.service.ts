@@ -11,11 +11,13 @@ import { generateDateString } from '../func/func';
 import { ConfigService } from './config.service';
 import { ESP32_CONFIG_MENU } from '../configs/esp32.config';
 import { STM32_CONFIG_MENU } from '../configs/stm32.config';
+import { NRF5_CONFIG_MENU } from '../configs/nrf5.config';
 import { ActionService } from './action.service';
 import { PlatformService } from './platform.service';
 import { NewProjectData } from '../pages/project-new/project-new.component';
 import { WorkflowService } from './workflow.service';
 import { TranslateService } from '@ngx-translate/core';
+import { NoticeService } from './notice.service';
 
 const { pt } = (window as any)['electronAPI'].platform;
 
@@ -75,7 +77,8 @@ export class ProjectService {
     private actionService: ActionService,
     private platformService: PlatformService,
     private workflowService: WorkflowService,
-    private translate: TranslateService
+    private translate: TranslateService,
+    private noticeService: NoticeService
   ) {
   }
 
@@ -125,42 +128,48 @@ export class ProjectService {
 
   // 新建项目
   async projectNew(newProjectData: NewProjectData) {
-    // console.log('newProjectData: ', newProjectData);
-    const appDataPath = window['path'].getAppDataPath();
-    // const projectPath = (newProjectData.path + newProjectData.name).replace(/\s/g, '_');
-    const projectPath = window['path'].join(newProjectData.path, newProjectData.name.replace(/\s/g, '_'));
-    const boardPackage = newProjectData.board.name + '@' + newProjectData.board.version;
+    try {
+      // console.log('newProjectData: ', newProjectData);
+      const appDataPath = window['path'].getAppDataPath();
+      // const projectPath = (newProjectData.path + newProjectData.name).replace(/\s/g, '_');
+      const projectPath = window['path'].join(newProjectData.path, newProjectData.name.replace(/\s/g, '_'));
+      const boardPackage = newProjectData.board.name + '@' + newProjectData.board.version;
 
-    this.uiService.updateFooterState({ state: 'doing', text: this.translate.instant('PROJECT.CREATING_PROJECT') });
-    await this.cmdService.runAsync(`npm install ${boardPackage} --prefix "${appDataPath}"`);
-    const templatePath = `${appDataPath}${pt}node_modules${pt}${newProjectData.board.name}${pt}template`;
-    // 创建项目目录
-    await this.crossPlatformCmdService.createDirectory(projectPath, true);
-    // 复制模板文件到项目目录
-    await this.crossPlatformCmdService.copyItem(`${templatePath}${pt}*`, projectPath, true, true);
+      this.uiService.updateFooterState({ state: 'doing', text: this.translate.instant('PROJECT.CREATING_PROJECT') });
+      await this.cmdService.runAsync(`npm install ${boardPackage} --prefix "${appDataPath}"`);
+      // const templatePath = `${appDataPath}${pt}node_modules${pt}${newProjectData.board.name}${pt}template`;
+      const templatePath = window['path'].join(appDataPath, 'node_modules', newProjectData.board.name, 'template');
+      // 创建项目目录
+      await this.crossPlatformCmdService.createDirectory(projectPath, true);
+      // 复制模板文件到项目目录
+      await this.crossPlatformCmdService.copyItem(`${templatePath}${pt}*`, projectPath, true, true);
 
-    // 3. 修改package.json文件
-    const packageJson = JSON.parse(window['fs'].readFileSync(`${projectPath}/package.json`));
-    if (this.containsChineseCharacters(newProjectData.name)) {
-      packageJson.name = pinyin(newProjectData.name, {
-        toneType: "none",
-        separator: ""
-      }).replace(/\s/g, '_');
-    } else {
-      packageJson.name = newProjectData.name;
+      // 3. 修改package.json文件
+      const packageJson = JSON.parse(window['fs'].readFileSync(`${projectPath}/package.json`));
+      if (this.containsChineseCharacters(newProjectData.name)) {
+        packageJson.name = pinyin(newProjectData.name, {
+          toneType: "none",
+          separator: ""
+        }).replace(/\s/g, '_');
+      } else {
+        packageJson.name = newProjectData.name;
+      }
+      // 设置开发框架
+      packageJson.devmode = newProjectData.devmode;
+
+      window['fs'].writeFileSync(`${projectPath}/package.json`, JSON.stringify(packageJson, null, 2));
+
+      this.uiService.updateFooterState({ state: 'done', text: this.translate.instant('PROJECT.PROJECT_CREATED') });
+      // 此后就是打开项目(projectOpen)的逻辑，理论可复用，由于此时在新建项目窗口，因此要告知主窗口，进行打开项目操作
+      await window['iWindow'].send({ to: 'main', data: { action: 'open-project', path: projectPath } });
+
+      // if (closeWindow) {
+      //   this.uiService.closeWindow();
+      // }
+    } catch (error) {
+      this.message.error(this.translate.instant('PROJECT.CREATE_FAILED') + ": " + error.message);
+      this.uiService.updateFooterState({ state: 'error', text: this.translate.instant('PROJECT.CREATE_FAILED') });
     }
-    // 设置开发框架
-    packageJson.devmode = newProjectData.devmode;
-
-    window['fs'].writeFileSync(`${projectPath}/package.json`, JSON.stringify(packageJson, null, 2));
-
-    this.uiService.updateFooterState({ state: 'done', text: this.translate.instant('PROJECT.PROJECT_CREATED') });
-    // 此后就是打开项目(projectOpen)的逻辑，理论可复用，由于此时在新建项目窗口，因此要告知主窗口，进行打开项目操作
-    await window['iWindow'].send({ to: 'main', data: { action: 'open-project', path: projectPath } });
-
-    // if (closeWindow) {
-    //   this.uiService.closeWindow();
-    // }
   }
 
   // 打开项目
@@ -1070,6 +1079,138 @@ export class ProjectService {
       return STM32_CONFIG_MENU_TEMP;
     } catch (error) {
       console.error('更新STM32配置菜单失败:', error);
+      return null;
+    }
+  }
+
+  // 解析boards.txt并获取nRF5配置信息
+  async getNrf5BoardConfig(boardName: string) {
+    try {
+      const sdkPath = await this.getSdkPath();
+      if (!sdkPath) {
+        throw new Error('未找到 SDK 路径');
+      }
+
+      const boardsFilePath = `${sdkPath}/boards.txt`;
+      if (!window['fs'].existsSync(boardsFilePath)) {
+        throw new Error('boards.txt 文件不存在: ' + boardsFilePath);
+      }
+
+      const boardsContent = window['fs'].readFileSync(boardsFilePath, 'utf8');
+      const lines = boardsContent.split('\n');
+
+      // 查找指定开发板的配置
+      const boardConfig = this.parseBoardsConfig(lines, boardName);
+
+      if (!boardConfig) {
+        throw new Error(`未找到开发板 "${boardName}" 的配置`);
+      }
+
+      // 提取nRF5需要的配置项
+      const nrf5Config = {
+        softdevice: this.extractMenuOptions(boardConfig, 'softdevice'),
+      };
+
+      return nrf5Config;
+    } catch (error) {
+      console.error('获取nRF5开发板配置失败:', error);
+      return null;
+    }
+  }
+
+  // 更新nRF5配置菜单项
+  async updateNrf5ConfigMenu(boardName: string) {
+    try {
+      const boardConfig = await this.getNrf5BoardConfig(boardName);
+
+      if (!boardConfig) {
+        console.warn(`无法获取开发板 "${boardName}" 的配置`);
+        return null;
+      }
+
+      // 读取当前项目的package.json配置
+      let currentProjectConfig: any = {};
+      try {
+        const packageJson = await this.getPackageJson();
+        currentProjectConfig = packageJson.projectConfig || {};
+      } catch (error) {
+        console.warn('无法读取项目配置:', error);
+      }
+
+      let NRF5_CONFIG_MENU_TEMP = JSON.parse(JSON.stringify(NRF5_CONFIG_MENU));
+
+      // 更新菜单项
+      NRF5_CONFIG_MENU_TEMP.forEach(menuItem => {
+        if (menuItem.name === 'NRF5.SOFTDEVICE' && boardConfig.softdevice) {
+          menuItem.children = boardConfig.softdevice;
+          // 根据当前项目配置设置check状态
+          if (currentProjectConfig.softdevice) {
+            menuItem.children.forEach((child: any) => {
+              child.check = false;
+              if (this.compareConfigs(child.data, currentProjectConfig.softdevice)) {
+                child.check = true;
+              }
+            });
+          }
+        }
+      });
+
+      return NRF5_CONFIG_MENU_TEMP;
+    } catch (error) {
+      console.error('更新nRF5配置菜单失败:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 获取 softdevice hex 文件路径
+   * 路径格式: {appDataPath}/sdk/nrf5_{version}/cores/nRF5/SDK/components/softdevice/{softdevice}/hex/{softdevice}_nrf51_2.0.0_softdevice.hex
+   * @param softdeviceName softdevice 名称，如 "s110" 或 "none"
+   * @returns softdevice hex 文件路径，如果不存在则返回 null
+   */
+  async getSoftdeviceHexPath(softdeviceName: string): Promise<string | null> {
+    try {
+      // 获取 SDK 路径
+      const sdkPath = await this.getSdkPath();
+      if (!sdkPath) {
+        console.error('未找到 SDK 路径');
+        return null;
+      }
+
+      // 构建 softdevice 目录路径
+      // 路径: sdk/nrf5_x.x.x/cores/nRF5/SDK/components/softdevice/{softdevice}/hex/
+      const softdeviceDir = window['path'].join(
+        sdkPath,
+        'cores',
+        'nRF5',
+        'SDK',
+        'components',
+        'softdevice',
+        softdeviceName,
+        'hex'
+      );
+
+      console.log('Softdevice 目录路径:', softdeviceDir);
+
+      if (!window['fs'].existsSync(softdeviceDir)) {
+        console.error('Softdevice 目录不存在:', softdeviceDir);
+        return null;
+      }
+
+      // 查找 hex 文件
+      const files = window['fs'].readdirSync(softdeviceDir);
+      const hexFile = files.find((file: string) => file.endsWith('.hex'));
+
+      if (!hexFile) {
+        console.error('未找到 hex 文件:', softdeviceDir);
+        return null;
+      }
+
+      const hexPath = window['path'].join(softdeviceDir, hexFile);
+      console.log('Softdevice hex 文件路径:', hexPath);
+      return hexPath;
+    } catch (error) {
+      console.error('获取 softdevice hex 路径失败:', error);
       return null;
     }
   }

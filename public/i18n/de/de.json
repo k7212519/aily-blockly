@@ -47,6 +47,15 @@
         "USB": "USB-Konfiguration",
         "UPLOAD_METHOD": "Upload-Methode"
     },
+    "NRF5": {
+        "SOFTDEVICE": "SoftDevice",
+        "FLASH_SOFTDEVICE_TITLE": "SoftDevice flashen",
+        "FLASH_SOFTDEVICE_CONFIRM": "Möchten Sie {{softdevice}} SoftDevice auf das Gerät flashen?",
+        "SELECT_PORT_FIRST": "Bitte wählen Sie zuerst einen Port aus",
+        "FLASHING_SOFTDEVICE": "SoftDevice wird geflasht...",
+        "FLASH_SUCCESS": "SoftDevice erfolgreich geflasht",
+        "FLASH_FAILED": "SoftDevice konnte nicht geflasht werden"
+    },
     "GUIDE": {
         "START": "Start",
         "RECENTLY": "Zuletzt",
@@ -86,6 +95,12 @@
             "STEP7_DESC": "Haben Sie Fragen? Möchten Sie Ihre Arbeit teilen? Treten Sie unserer Benutzer-Community bei, um sich mit anderen Makern auszutauschen und zu lernen!"
         }
     },
+    "BLOCKLY": {
+        "CROSS_TAB_COPY": "An angegebenen Ort kopieren",
+        "CONTROLS_SWITCH_CASE": "Fall",
+        "CONTROLS_SWITCH_DO": "ausführen",
+        "CONTROLS_SWITCH_DEFAULT": "Standard"
+    },
     "APP_STORE": {
         "HEADER_INFO": "Die ersten {{count}} Apps werden in der Symbolleiste angezeigt",
         "RESET": "Zurücksetzen",
@@ -122,6 +137,11 @@
             "BLOCKLY_THEME": "Blockly-Theme",
             "BLOCKLY_MINIMAP": "Blockly-Miniaturansicht",
             "COMPILATION_OPTIONS": "Kompilierungsoptionen",
+            "REGION": "Service-Region",
+            "REGION_TITLE": "Service-Region wechseln",
+            "REGION_DESC": "Nach dem Wechsel der Service-Region müssen Sie sich erneut anmelden. Fortfahren?",
+            "REGION_CONFIRM": "Bestätigen",
+            "REGION_CANCEL": "Abbrechen",
             "REPOSITORY_URLS": "Repository-URLs",
             "BOARD_LIST": "Board-Liste",
             "LIBRARY_LIST": "Bibliotheksliste",
@@ -342,6 +362,7 @@
         "DOCUMENTATION": "Dokumentation",
         "FEEDBACK": "Feedback",
         "NO_PINMAP": "Pin-Belegung für dieses Board nicht verfügbar",
+        "PINMAP_PARSE_ERROR": "Fehler beim Parsen der Pin-Belegung",
         "NO_DOCUMENTATION": "Dokumentation für dieses Board nicht verfügbar"
     },
     "SERIAL": {
@@ -492,6 +513,7 @@
         "BOARD_UNINSTALL_COMPLETE": "Board erfolgreich deinstalliert",
         "BOARD_DEPS_INSTALL_COMPLETE": "Board-Abhängigkeiten erfolgreich installiert",
         "BOARD_DEPS_INSTALL_FAILED": "Board-Abhängigkeiten Installation fehlgeschlagen",
+        "DEPS_INSTALL_COMPLETE": "Abhängigkeiten erfolgreich installiert",
         "DEPS_UNINSTALL_COMPLETE": "Abhängigkeiten erfolgreich deinstalliert",
         "DEPS_UNINSTALL_FAILED": "Abhängigkeiten Deinstallation fehlgeschlagen",
         "NAME_REQUIRED": "{{type}}-Name darf nicht leer sein",
@@ -523,6 +545,7 @@
         "CANNOT_OPEN_PROJECT": "Projekt kann nicht geöffnet werden: ",
         "CREATING_PROJECT": "Projekt wird erstellt...",
         "PROJECT_CREATED": "Projekt erfolgreich erstellt",
+        "CREATE_FAILED": "Projekt konnte nicht erstellt werden",
         "PATH_NOT_EXIST": "Projektpfad existiert nicht, bitte wählen Sie ein anderes Projekt",
         "SWITCHING_BOARD_CONFIG": "Board-Konfiguration wird gewechselt...",
         "BOARD_SWITCH_COMPLETE": "Board-Wechsel abgeschlossen",

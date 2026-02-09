@@ -83,6 +83,15 @@
         "USB": "USB Configuration",
         "UPLOAD_METHOD": "Upload Method"
     },
+    "NRF5": {
+        "SOFTDEVICE": "SoftDevice",
+        "FLASH_SOFTDEVICE_TITLE": "Flash SoftDevice",
+        "FLASH_SOFTDEVICE_CONFIRM": "Do you want to flash {{softdevice}} SoftDevice to the device?",
+        "SELECT_PORT_FIRST": "Please select a port first",
+        "FLASHING_SOFTDEVICE": "Flashing SoftDevice...",
+        "FLASH_SUCCESS": "SoftDevice flashed successfully",
+        "FLASH_FAILED": "Failed to flash SoftDevice"
+    },
     "GUIDE": {
         "START": "Start",
         "RECENTLY": "Recent",
@@ -123,6 +132,10 @@
         }
     },
     "BLOCKLY": {
+        "CROSS_TAB_COPY": "Copy to specified location",
+        "CONTROLS_SWITCH_CASE": "case",
+        "CONTROLS_SWITCH_DO": "do",
+        "CONTROLS_SWITCH_DEFAULT": "default",
         "ONBOARDING": {
             "TOOLBOX_TITLE": "Block Toolbox",
             "TOOLBOX_DESC": "Find all available blocks here. Drag and drop blocks to the workspace to build your program.",
@@ -174,6 +187,10 @@
             "FLYOUT_AUTO_CLOSE": "Auto Close Toolbox",
             "COMPILATION_OPTIONS": "Compilation Options",
             "REGION": "Service Region",
+            "REGION_TITLE": "Switch Service Region",
+            "REGION_DESC": "You need to log in again after switching the service region. Continue?",
+            "REGION_CONFIRM": "Confirm",
+            "REGION_CANCEL": "Cancel",
             "REPOSITORY_URLS": "Repository URLs",
             "BOARD_LIST": "Board List",
             "LIBRARY_LIST": "Library List",
@@ -394,6 +411,7 @@
         "DOCUMENTATION": "Documentation",
         "FEEDBACK": "Feedback",
         "NO_PINMAP": "Pin map not available for this board",
+        "PINMAP_PARSE_ERROR": "Pin map parsing failed",
         "NO_DOCUMENTATION": "Documentation not available for this board"
     },
     "SERIAL": {
@@ -550,6 +568,7 @@
         "BOARD_UNINSTALL_COMPLETE": "Board uninstalled successfully",
         "BOARD_DEPS_INSTALL_COMPLETE": "Board dependencies installed successfully",
         "BOARD_DEPS_INSTALL_FAILED": "Board dependencies installation failed",
+        "DEPS_INSTALL_COMPLETE": "Dependencies installed successfully",
         "DEPS_UNINSTALL_COMPLETE": "Dependencies uninstalled successfully",
         "DEPS_UNINSTALL_FAILED": "Dependencies uninstallation failed",
         "NAME_REQUIRED": "{{type}} name cannot be empty",
@@ -581,6 +600,7 @@
         "CANNOT_OPEN_PROJECT": "Cannot open project: ",
         "CREATING_PROJECT": "Creating project...",
         "PROJECT_CREATED": "Project created successfully",
+        "CREATE_FAILED": "Project creation failed",
         "PATH_NOT_EXIST": "Project path does not exist, please select another project",
         "SWITCHING_BOARD_CONFIG": "Switching board configuration...",
         "BOARD_SWITCH_COMPLETE": "Board switch complete",
