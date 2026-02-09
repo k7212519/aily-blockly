@@ -529,7 +529,13 @@ export class NpmService {
   // 检查npm依赖是否安装正常
   async installedOk(path) {
     try {
-      await window['npm'].run({ cmd: `npm list --depth=0 --json --prefix "${path}"` })
+      const result = await window['npm'].run({
+        cmd: `npm list --depth=0 --json --prefix "${path}"`,
+        option: { ignoreErr: true },
+      });
+      if (result === false) {
+        return false;
+      }
       return true;
     } catch (err) {
       return false;
