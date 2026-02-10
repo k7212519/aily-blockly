@@ -4673,31 +4673,83 @@ function remapExtraInputsToActualInputs(block: any, inputs: Record<string, any>)
   const neededInputCount = extraInputs.length;
   let currentAvailableCount = availableInputs.length;
   
-  // 如果 EXTRA_N 数量超过可用输入，尝试扩展动态输入
-  if (neededInputCount > currentAvailableCount && block.plus && typeof block.plus === 'function') {
-    const inputsToAdd = neededInputCount - currentAvailableCount;
-    console.log(`🔧 动态输入扩展: 需要 ${neededInputCount} 个输入，当前有 ${currentAvailableCount} 个，需要添加 ${inputsToAdd} 个`);
+  // 🆕 计算需要的总输入数量（已配置的 + 待映射的）
+  // 对于 INPUT{N} 模式，需要基于最大索引来计算
+  let maxInputIndex = -1;
+  for (const item of extraInputs) {
+    if (item.key.match(/^INPUT(\d+)$/)) {
+      const idx = parseInt(item.key.replace('INPUT', ''), 10);
+      if (idx > maxInputIndex) maxInputIndex = idx;
+    }
+  }
+  // 如果有 INPUT{N} 模式，需要的总数是 maxIndex + 1
+  const totalNeededInputs = maxInputIndex >= 0 ? maxInputIndex + 1 : neededInputCount;
+  
+  // 如果待映射输入数量超过可用输入，尝试扩展动态输入
+  if (neededInputCount > currentAvailableCount) {
+    let expanded = false;
     
-    for (let i = 0; i < inputsToAdd; i++) {
+    // 方式 1: 使用 block.plus() 方法 (dynamic-inputs 插件)
+    if (block.plus && typeof block.plus === 'function') {
+      const inputsToAdd = neededInputCount - currentAvailableCount;
+      console.log(`🔧 动态输入扩展 (plus): 需要 ${neededInputCount} 个输入，当前有 ${currentAvailableCount} 个，需要添加 ${inputsToAdd} 个`);
+      
+      for (let i = 0; i < inputsToAdd; i++) {
+        try {
+          block.plus();
+          console.log(`  ✅ 调用 block.plus() 添加第 ${i + 1} 个输入`);
+        } catch (e) {
+          console.warn(`  ⚠️ 调用 block.plus() 失败:`, e);
+          break;
+        }
+      }
+      expanded = true;
+    }
+    // 🆕 方式 2: 使用 updateShape_(count) 方法 (functionCallSyncMutator 模式)
+    else if (block.updateShape_ && typeof block.updateShape_ === 'function' && block.extraCount_ !== undefined) {
+      const currentCount = block.extraCount_ || 0;
+      const targetCount = totalNeededInputs;
+      
+      if (targetCount > currentCount) {
+        console.log(`🔧 动态输入扩展 (updateShape_): 当前 extraCount_=${currentCount}，目标=${targetCount}`);
+        try {
+          block.extraCount_ = targetCount;
+          block.updateShape_(targetCount);
+          console.log(`  ✅ 调用 block.updateShape_(${targetCount}) 成功`);
+          expanded = true;
+        } catch (e) {
+          console.warn(`  ⚠️ 调用 block.updateShape_(${targetCount}) 失败:`, e);
+        }
+      }
+    }
+    // 🆕 方式 3: 使用 loadExtraState 方法
+    else if (block.loadExtraState && typeof block.loadExtraState === 'function') {
+      console.log(`🔧 动态输入扩展 (loadExtraState): 目标输入数=${totalNeededInputs}`);
       try {
-        block.plus();
-        console.log(`  ✅ 调用 block.plus() 添加第 ${i + 1} 个输入`);
+        // 尝试用 extraCount 或 itemCount
+        const stateToLoad = block.itemCount_ !== undefined 
+          ? { itemCount: totalNeededInputs }
+          : { extraCount: totalNeededInputs };
+        block.loadExtraState(stateToLoad);
+        console.log(`  ✅ 调用 block.loadExtraState(${JSON.stringify(stateToLoad)}) 成功`);
+        expanded = true;
       } catch (e) {
-        console.warn(`  ⚠️ 调用 block.plus() 失败:`, e);
-        break;
+        console.warn(`  ⚠️ 调用 block.loadExtraState 失败:`, e);
       }
     }
     
-    // 重新获取可用输入列表
-    availableInputs.length = 0;
-    const inputList = block.inputList || [];
-    for (const input of inputList) {
-      if (input.name && input.type === 1 && !configuredInputs.has(input.name)) {
-        availableInputs.push(input.name);
+    // 如果成功扩展，重新获取可用输入列表
+    if (expanded) {
+      availableInputs.length = 0;
+      const inputList = block.inputList || [];
+      for (const input of inputList) {
+        if (input.name && input.type === 1 && !configuredInputs.has(input.name)) {
+          availableInputs.push(input.name);
+        }
       }
+      currentAvailableCount = availableInputs.length;
+      console.log(`  📋 扩展后可用输入: [${availableInputs.join(', ')}]`);
     }
-    currentAvailableCount = availableInputs.length;
-    console.log(`  📋 扩展后可用输入: [${availableInputs.join(', ')}]`);
   }
   
   for (let i = 0; i < extraInputs.length && i < availableInputs.length; i++) {
@@ -5012,18 +5064,29 @@ async function configureBlockInputs(
               failedBlocks.push(...childResult.failedBlocks);
             }
             
-            if (childBlock && input.connection) {
+            if (childBlock) {
               console.log(`✅ 子块创建成功: ${childBlock.type} (ID: ${childBlock.id})`);
               
+              // 🆕 重新获取 input 引用：await 期间 BLOCK_CREATE 事件的 setTimeout(0) 
+              // 可能已触发 updateFromRegistry_(true)，销毁并重建了 INPUT，
+              // 此时之前缓存的 input 变量指向已销毁的旧 Input 对象。
+              const currentInput = block.getInput(inputName);
+              if (!currentInput || !currentInput.connection) {
+                console.warn(`⚠️ 输入 "${inputName}" 在子块创建后不存在或无连接点，跳过连接`);
+                failedBlocks.push({
+                  blockType: childBlock.type,
+                  error: `输入 "${inputName}" 在子块创建后不存在（可能被动态更新销毁）`
+                });
+              } else {
               // 🆕 检查并清理已连接的旧块（可能是动态扩展自动创建的默认块）
-              const existingConnection = input.connection.targetConnection;
+              const existingConnection = currentInput.connection.targetConnection;
               if (existingConnection) {
                 const existingBlock = existingConnection.getSourceBlock();
                 if (existingBlock && existingBlock !== childBlock) {
                   console.log(`🧹 清理输入 "${inputName}" 已连接的旧块: ${existingBlock.type} (ID: ${existingBlock.id})`);
                   try {
                     // 先断开连接
-                    input.connection.disconnect();
+                    currentInput.connection.disconnect();
                     // 删除旧块（可能是动态扩展自动创建的默认 text 块）
                     existingBlock.dispose(true);
                   } catch (e) {
@@ -5034,7 +5097,7 @@ async function configureBlockInputs(
               
               const connectionToUse = childBlock.outputConnection || childBlock.previousConnection;
               if (connectionToUse) {
-                input.connection.connect(connectionToUse);
+                currentInput.connection.connect(connectionToUse);
                 console.log(`🔗 成功连接子块到输入 "${inputName}"`);
                 updatedInputs.push(inputName);
               } else {
@@ -5044,15 +5107,10 @@ async function configureBlockInputs(
                   error: `子块没有可用的连接点（outputConnection 或 previousConnection）`
                 });
               }
+              } // 关闭 currentInput 存在性检查
             } else if (!childBlock) {
               // 子块创建失败的情况已经在 createBlockFromConfig 中收集
               console.warn(`❌ 子块创建失败: ${inputConfig.block?.type || 'unknown'}`);
-            } else {
-              console.warn(`❌ 输入 "${inputName}" 没有连接点`);
-              failedBlocks.push({
-                blockType: `${block.type}.${inputName}`,
-                error: `输入 "${inputName}" 没有连接点，无法连接子块`
-              });
             }
         } else if (inputConfig.shadow) {
           console.log('👤 创建影子块...');
@@ -5065,16 +5123,25 @@ async function configureBlockInputs(
             failedBlocks.push(...shadowResult.failedBlocks);
           }
           
-          if (shadowBlock && input.connection) {
+          if (shadowBlock) {
             console.log(`✅ 影子块创建成功: ${shadowBlock.type} (ID: ${shadowBlock.id})`);
             
+            // 🆕 重新获取 input 引用（同 block 子块的理由）
+            const currentInput = block.getInput(inputName);
+            if (!currentInput || !currentInput.connection) {
+              console.warn(`⚠️ 输入 "${inputName}" 在影子块创建后不存在或无连接点，跳过连接`);
+              failedBlocks.push({
+                blockType: shadowBlock.type,
+                error: `输入 "${inputName}" 在影子块创建后不存在（可能被动态更新销毁）`
+              });
+            } else {
             // 🆕 检查并清理已连接的旧块（可能是动态扩展自动创建的默认块）
-            const existingConnection = input.connection.targetConnection;
+            const existingConnection = currentInput.connection.targetConnection;
             if (existingConnection) {
               const existingBlock = existingConnection.getSourceBlock();
               if (existingBlock && existingBlock !== shadowBlock) {
                 try {
-                  input.connection.disconnect();
+                  currentInput.connection.disconnect();
                   existingBlock.dispose(true);
                 } catch (e) {
                   console.warn(`清理旧块失败:`, e);
@@ -5088,7 +5155,7 @@ async function configureBlockInputs(
               // 先设置为影子块
               shadowBlock.setShadow(true);
               // 然后连接到输入
-              input.connection.connect(connectionToUse);
+              currentInput.connection.connect(connectionToUse);
               console.log(`🔗 成功设置影子块到输入 "${inputName}"`);
               updatedInputs.push(inputName);
             } else {
@@ -5098,14 +5165,9 @@ async function configureBlockInputs(
                 error: `影子块没有可用的连接点`
               });
             }
+            } // 关闭 currentInput 存在性检查
           } else if (!shadowBlock) {
             console.warn(`❌ 影子块创建失败: ${inputConfig.shadow?.type || 'unknown'}`);
-          } else {
-            console.warn(`❌ 输入 "${inputName}" 没有连接点`);
-            failedBlocks.push({
-              blockType: `${block.type}.${inputName}`,
-              error: `输入 "${inputName}" 没有连接点，无法设置影子块`
-            });
           }
         } else {
           console.log(`ℹ️ 输入 "${inputName}" 没有块或影子配置`);
