@@ -206,7 +206,7 @@ export class AilyChatSettingsComponent implements OnInit {
    * 加载模型列表
    */
   private loadModelList() {
-    this.modelList = [...this.ailyChatConfigService.models];
+    this.modelList = [...this.ailyChatConfigService.models].reverse();
     this.updateModelsAllChecked();
   }
 
@@ -332,7 +332,7 @@ export class AilyChatSettingsComponent implements OnInit {
       apiKey: this.newModel.apiKey
     };
 
-    this.modelList.push(newModelConfig);
+    this.modelList.unshift(newModelConfig);
     this.updateModelsAllChecked();
     this.resetNewModelForm();
     this.showAddModelForm = false;
