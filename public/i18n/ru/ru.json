@@ -545,6 +545,7 @@
         "CANNOT_OPEN_PROJECT": "Невозможно открыть проект: ",
         "CREATING_PROJECT": "Создание проекта...",
         "PROJECT_CREATED": "Проект успешно создан",
+        "CREATE_FAILED": "Не удалось создать проект",
         "PATH_NOT_EXIST": "Путь проекта не существует, выберите другой проект",
         "SWITCHING_BOARD_CONFIG": "Изменение конфигурации платы...",
         "BOARD_SWITCH_COMPLETE": "Смена платы завершена",

@@ -193,6 +193,7 @@ export class AilyChatComponent implements OnDestroy {
   isCompleted = false;
   private isSessionStarting = false; // 防止重复启动会话的标志位
   private hasInitializedForThisLogin = false; // 标记是否已为当前登录状态初始化过
+  private isCancelled = false; // 标记任务是否被用户取消，防止取消后工具结果触发重连
 
   private textMessageSubscription: Subscription;
   private loginStatusSubscription: Subscription;
@@ -1545,6 +1546,8 @@ Do not create non-existent boards and libraries.
     }
 
     this.isSessionStarting = true;
+    // 重置取消标志，确保新会话正常工作
+    this.isCancelled = false;
 
     // 清空会话期间的额外允许路径
     this.sessionAllowedPaths = [];
@@ -1703,6 +1706,8 @@ ${JSON.stringify(errData)}
   }
 
   async sendButtonClick(): Promise<void> {
+    this.autoScrollEnabled = true;
+    this.scrollToBottom();
     if (this.isWaiting) {
       this.stop();
       return;
@@ -1720,8 +1725,16 @@ ${JSON.stringify(errData)}
   }
 
   async send(sender: string, content: string, clear: boolean = true): Promise<void> {
+    // 如果任务已取消且是工具消息，直接忽略，防止触发重连
+    if (this.isCancelled && sender === 'tool') {
+      console.log('任务已取消，忽略工具结果消息');
+      return;
+    }
+    
     if (this.isCompleted) {
       // console.log('上次会话已完成，需要重新启动会话');
+      // 重置取消标志，开始新会话
+      this.isCancelled = false;
       await this.resetChat();
     }
 
@@ -1826,6 +1839,9 @@ ${JSON.stringify(errData)}
 
   // 这里写停止发送信号
   stop() {
+    // 标记任务已取消，防止后续工具结果触发重连
+    this.isCancelled = true;
+    
     // 设置最后一条AI消息状态为done（如果存在）
     if (this.list.length > 0 && this.list[this.list.length - 1].role === 'aily') {
       this.list[this.list.length - 1].state = 'done';
@@ -1859,6 +1875,20 @@ ${JSON.stringify(errData)}
 
     this.messageSubscription = this.chatService.streamConnect(this.sessionId).subscribe({
       next: async (data: any) => {
+        // 记录流式数据到文件（Unicode 转中文）
+        // try {
+        //   const logPath = this.projectService.projectRootPath + '\\stream_log.txt';
+        //   const timestamp = new Date().toISOString();
+        //   const jsonStr = JSON.stringify(data, null, 2).replace(/\\u[\dA-Fa-f]{4}/gi, match =>
+        //     String.fromCharCode(parseInt(match.replace(/\\u/g, ''), 16))
+        //   );
+        //   const logEntry = `[${timestamp}]\n${jsonStr}\n\n`;
+        //   window['fs'].appendFileSync(logPath, logEntry, 'utf8');
+        // } catch (logErr) {
+        //   console.warn('写入日志文件失败:', logErr);
+        // }
+        
+        // console.log("当前是否处于等待状态： ", this.isWaiting)
         if (!this.isWaiting) {
           return; // 如果不在等待状态，直接返回
         }
@@ -3715,6 +3745,8 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
         }, 0);
         event.preventDefault();
       } else {
+        this.autoScrollEnabled = true;
+        this.scrollToBottom();
         // Enter 发送消息
         if (this.isWaiting) {
           return;
@@ -4001,6 +4033,7 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
     // 新会话时重新启用自动滚动
     this.autoScrollEnabled = true;
     this.isCompleted = false;
+    this.isCancelled = false; // 重置取消标志
 
     try {
       // 先停止并关闭当前会话（跳过保存，因为上面已保存）
@@ -4350,6 +4383,7 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
     event.preventDefault();
     event.stopPropagation();
 
+    this.showModelMenu = false;
     this.showMode = !this.showMode;
   }
 
@@ -4420,6 +4454,7 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
     event.preventDefault();
     event.stopPropagation();
 
+    this.showMode = false;
     this.showModelMenu = !this.showModelMenu;
   }
 

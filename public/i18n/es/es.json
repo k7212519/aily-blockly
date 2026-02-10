@@ -545,6 +545,7 @@
         "CANNOT_OPEN_PROJECT": "No se puede abrir el proyecto: ",
         "CREATING_PROJECT": "Creando proyecto...",
         "PROJECT_CREATED": "Proyecto creado correctamente",
+        "CREATE_FAILED": "Error al crear el proyecto",
         "PATH_NOT_EXIST": "La ruta del proyecto no existe, seleccione otro proyecto",
         "SWITCHING_BOARD_CONFIG": "Cambiando configuración de la placa...",
         "BOARD_SWITCH_COMPLETE": "Cambio de placa completado",

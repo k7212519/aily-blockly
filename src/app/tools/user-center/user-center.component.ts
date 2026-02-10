@@ -69,7 +69,9 @@ export class UserCenterComponent {
     this.authService.isLoggedIn$
       .pipe(takeUntil(this.destroy$))
       .subscribe(isLoggedIn => {
-        this.refreshMe();
+        if (isLoggedIn) {
+          this.refreshMe();
+        }
       });
 
     // 监听用户信息

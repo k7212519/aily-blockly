@@ -545,6 +545,7 @@
         "CANNOT_OPEN_PROJECT": "Projekt kann nicht geöffnet werden: ",
         "CREATING_PROJECT": "Projekt wird erstellt...",
         "PROJECT_CREATED": "Projekt erfolgreich erstellt",
+        "CREATE_FAILED": "Projekt konnte nicht erstellt werden",
         "PATH_NOT_EXIST": "Projektpfad existiert nicht, bitte wählen Sie ein anderes Projekt",
         "SWITCHING_BOARD_CONFIG": "Board-Konfiguration wird gewechselt...",
         "BOARD_SWITCH_COMPLETE": "Board-Wechsel abgeschlossen",
