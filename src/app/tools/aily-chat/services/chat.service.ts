@@ -6,6 +6,8 @@ import { API } from "../../../configs/api.config";
 import { ConfigService } from '../../../services/config.service';
 import { AilyChatConfigService, ModelConfigOption } from './aily-chat-config.service';
 import { AuthService } from '../../../services/auth.service';
+import { ProjectService } from '../../../services/project.service';
+import { PlatformService } from '../../../services/platform.service';
 
 // 使用 ModelConfigOption 作为统一的模型配置类型，保留 ModelConfig 别名以兼容旧代码
 export type ModelConfig = ModelConfigOption;
@@ -54,7 +56,9 @@ export class ChatService {
     private http: HttpClient,
     private configService: ConfigService,
     private ailyChatConfigService: AilyChatConfigService,
-    private authService: AuthService
+    private authService: AuthService,
+    private projectService: ProjectService,
+    private platformService: PlatformService
   ) {
     ChatService.instance = this;
     // 从配置加载AI聊天模式
@@ -445,11 +449,18 @@ export class ChatService {
         mermaid,
         terminate,
       ].join('\n');
-
+      
+      try {
+        const logPath = this.projectService.projectRootPath + this.platformService.getPlatformSeparator() + 'stream_mock.txt';
+        const mockfile = window['fs'].readFileSync(logPath, 'utf-8');
+        mockText = mockfile;
+      } catch (error) {
+        console.warn('读取流式数据失败:', error);
+      }
 
       let buffer = '';
       let offset = 0;
-      const chunkSize = 180; // 模拟分块到达
+      const chunkSize = 500; // 模拟分块到达
 
       const intervalId = setInterval(() => {
         if (aborted) return;
@@ -490,7 +501,7 @@ export class ChatService {
             console.warn('解析JSON失败:', error, line);
           }
         }
-      }, 10);
+      }, 0);
 
       // 取消订阅时停止定时器
       return () => {

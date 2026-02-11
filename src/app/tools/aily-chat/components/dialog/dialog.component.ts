@@ -51,6 +51,7 @@ export class DialogComponent implements OnInit, OnChanges, OnDestroy {
   private lastContentLength = 0; // 跟踪上次处理的内容长度
   private lastProcessedContent = ''; // 跟踪上次处理的完整内容
   private contentList: Array<{ content: string, html: string }> = []; // 切分后的markdown内容列表
+  private processContentChain = Promise.resolve(); // 串行化 processContent，避免流式更新时重叠执行
 
   @ViewChild('contentDiv', { static: true }) contentDiv!: ElementRef<HTMLDivElement>;
 
@@ -79,7 +80,13 @@ export class DialogComponent implements OnInit, OnChanges, OnDestroy {
     }
   }
 
-  private async processContent() {
+  private processContent() {
+    this.processContentChain = this.processContentChain.then(() => this.processContentImpl()).catch(() => {});
+  }
+
+  private async processContentImpl() {
+    if (!this.content) return;
+
     // 过滤 think 标签内容，支持实时过滤
     let currentContent = this.filterThinkContent(this.content);
 
@@ -96,13 +103,12 @@ export class DialogComponent implements OnInit, OnChanges, OnDestroy {
 
     // 如果是全新的内容或内容长度减少了（可能是重置），则清空并重新渲染
     if (processedContent.length < this.lastContentLength || this.lastProcessedContent === '') {
-      // console.log('全新内容渲染');
       await this.resetAndRenderAll(processedContent);
+      this.cd.detectChanges();
       return;
     }
 
     // 增量渲染
-    // console.log('增量渲染');
     await this.processIncrementalRender(processedContent);
 
     this.cd.detectChanges();
@@ -112,15 +118,14 @@ export class DialogComponent implements OnInit, OnChanges, OnDestroy {
    * 重置并重新渲染所有内容
    */
   private async resetAndRenderAll(currentContent: string): Promise<void> {
-    this.lastContentLength = 0;
-    this.lastProcessedContent = '';
+    this.lastContentLength = currentContent.length;
+    this.lastProcessedContent = currentContent;
     this.contentList = [];
 
     if (this.contentDiv?.nativeElement) {
       this.contentDiv.nativeElement.innerHTML = '';
     }
 
-    // 切分markdown内容并渲染
     await this.splitAndRenderContent(currentContent);
   }
 
@@ -270,13 +275,17 @@ export class DialogComponent implements OnInit, OnChanges, OnDestroy {
   private async splitAndRenderContent(content: string): Promise<void> {
     try {
       // 切分内容
-      const segments = this.splitMarkdownContent(content);
+      const segments:any = this.splitMarkdownContent(content);
 
       // 为每个段落生成HTML
-      for (const segment of segments) {
-        if (this.isMermaidCodeBlockWaiting(segment.content)) {
+      for (let idx = 0; idx < segments.length; idx++) {
+        const segment = segments[idx];
+        const skipMermaid = this.isMermaidCodeBlockWaiting(segment.content);
+        if (skipMermaid) {
           continue;
         }
+        // 延迟100ms
+        // await new Promise(resolve => setTimeout(resolve, 100));
         const htmlObservable = this.markdownPipe.transform(segment.content);
         const safeHtml = await firstValueFrom(htmlObservable);
         segment.html = this.getHtmlString(safeHtml);
@@ -290,6 +299,8 @@ export class DialogComponent implements OnInit, OnChanges, OnDestroy {
 
       // 更新状态
       this.updateRenderState(content);
+
+      this.cd.detectChanges();
 
     } catch (error) {
       console.warn('Error in splitAndRenderContent:', error);
@@ -416,7 +427,8 @@ export class DialogComponent implements OnInit, OnChanges, OnDestroy {
     const container = this.contentDiv?.nativeElement;
     if (!container) return;
 
-    for (const segment of newSegments) {
+    for (let i = 0; i < newSegments.length; i++) {
+      const segment = newSegments[i];
       // 如果HTML还没有生成，先生成HTML
       if (!segment.html) {
         if (this.isMermaidCodeBlockWaiting(segment.content)) {
