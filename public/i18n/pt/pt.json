@@ -485,6 +485,7 @@
         "PHONE_BETA_ONLY": "Login por telefone é apenas para testadores beta de AI",
         "PHONE_PLACEHOLDER": "Digite o número de telefone",
         "PASSWORD_PLACEHOLDER": "Digite a senha",
+        "CODE_SENDING": "Por favor, obtenha o código de verificação primeiro",
         "LOGGING_IN": "Entrando...",
         "LOGIN": "Entrar",
         "SELECT_METHOD": "Clique para selecionar o método de login",

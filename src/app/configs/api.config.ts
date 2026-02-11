@@ -73,6 +73,8 @@ export const API = {
   get login() { return `${getServerUrl()}/api/v1/auth/login`; },
   get register() { return `${getServerUrl()}/api/v1/auth/register`; },
   get logout() { return `${getServerUrl()}/api/v1/auth/logout`; },
+  get sendEmailCode() { return `${getServerUrl()}/api/v1/auth/send-email-code`; },
+  get loginByEmail() { return `${getServerUrl()}/api/v1/auth/email-code-login`; },
   get verifyToken() { return `${getServerUrl()}/api/v1/auth/verify`; },
   get refreshToken() { return `${getServerUrl()}/api/v1/auth/refresh`; },
   get me() { return `${getServerUrl()}/api/v1/auth/me`; },

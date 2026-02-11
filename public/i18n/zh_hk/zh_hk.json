@@ -485,6 +485,7 @@
         "PHONE_BETA_ONLY": "手機號登錄僅限AI功能內測用戶使用",
         "PHONE_PLACEHOLDER": "請輸入手機號",
         "PASSWORD_PLACEHOLDER": "請輸入密碼",
+        "CODE_SENDING": "請先獲取驗證碼",
         "LOGGING_IN": "登錄中...",
         "LOGIN": "登錄",
         "SELECT_METHOD": "點擊選擇登錄方式",

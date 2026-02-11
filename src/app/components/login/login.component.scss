@@ -158,10 +158,17 @@
         input {
             background: #363636;
             color: rgba(255, 255, 255, 0.7) !important;
+            flex: 1;
 
             &[type="password"] {
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             }
+        }
+
+        .send-code-btn {
+            margin-left: 10px;
+            min-width: 100px;
+            white-space: nowrap;
         }
     }
 

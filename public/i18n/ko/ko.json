@@ -481,6 +481,7 @@
         "PHONE_BETA_ONLY": "전화번호 로그인은 AI 베타 테스터 전용입니다",
         "PHONE_PLACEHOLDER": "전화번호 입력",
         "PASSWORD_PLACEHOLDER": "비밀번호 입력",
+        "CODE_SENDING": "먼저 인증 코드를 받으세요",
         "LOGGING_IN": "로그인 중...",
         "LOGIN": "로그인",
         "SELECT_METHOD": "로그인 방법을 선택하세요",

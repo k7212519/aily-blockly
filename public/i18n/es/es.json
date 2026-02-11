@@ -485,6 +485,7 @@
         "PHONE_BETA_ONLY": "El inicio de sesión por teléfono es solo para probadores beta de AI",
         "PHONE_PLACEHOLDER": "Ingrese número de teléfono",
         "PASSWORD_PLACEHOLDER": "Ingrese contraseña",
+        "CODE_SENDING": "Por favor, obtenga el código de verificación primero",
         "LOGGING_IN": "Iniciando sesión...",
         "LOGIN": "Iniciar sesión",
         "SELECT_METHOD": "Haga clic para seleccionar el método de inicio de sesión",

@@ -485,6 +485,7 @@
         "PHONE_BETA_ONLY": "Telefonanmeldung ist nur für AI-Beta-Tester",
         "PHONE_PLACEHOLDER": "Telefonnummer eingeben",
         "PASSWORD_PLACEHOLDER": "Passwort eingeben",
+        "CODE_SENDING": "Bitte zuerst den Bestätigungscode abrufen",
         "LOGGING_IN": "Anmeldung...",
         "LOGIN": "Anmelden",
         "SELECT_METHOD": "Klicken Sie, um eine Anmeldemethode auszuwählen",

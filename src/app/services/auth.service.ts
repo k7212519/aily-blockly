@@ -149,6 +149,34 @@ export class AuthService {
   }
 
   /**
+   * 发送邮箱验证码
+   */
+  sendEmailCode(email: string, altcha: string): Observable<CommonResponse> {
+    return this.http.post<CommonResponse>(API.sendEmailCode, { email, altcha, device_id: 'pc' }).pipe(
+      catchError(this.handleError)
+    );
+  }
+
+  /**
+   * 邮箱验证码登录
+   */
+  loginByEmail(email: string, code: string): Observable<LoginResponse> {
+    return this.http.post<LoginResponse>(API.loginByEmail, { email, code, device_id: 'pc' }).pipe(
+      map((response) => {
+        if (response.status === 200 && response.data) {
+          this.saveToken2(response.data.access_token);
+          this.getMe(response.data.access_token);
+          this.isLoggedInSubject.next(true);
+        } else {
+          this.isLoggedInSubject.next(false);
+        }
+        return response;
+      }),
+      catchError(this.handleError)
+    );
+  }
+
+  /**
    * 用户登出
    */
   async logout(): Promise<void> {

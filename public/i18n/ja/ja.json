@@ -485,6 +485,7 @@
         "PHONE_BETA_ONLY": "電話番号ログインはAIベータテスター専用です",
         "PHONE_PLACEHOLDER": "電話番号を入力",
         "PASSWORD_PLACEHOLDER": "パスワードを入力",
+        "CODE_SENDING": "まず確認コードを取得してください",
         "LOGGING_IN": "ログイン中...",
         "LOGIN": "ログイン",
         "SELECT_METHOD": "ログイン方法を選択してください",

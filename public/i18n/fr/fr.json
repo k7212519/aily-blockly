@@ -485,6 +485,7 @@
         "PHONE_BETA_ONLY": "La connexion par téléphone est réservée aux testeurs bêta AI",
         "PHONE_PLACEHOLDER": "Entrez le numéro de téléphone",
         "PASSWORD_PLACEHOLDER": "Entrez le mot de passe",
+        "CODE_SENDING": "Veuillez d'abord obtenir le code de vérification",
         "LOGGING_IN": "Connexion en cours...",
         "LOGIN": "Connexion",
         "SELECT_METHOD": "Cliquez pour sélectionner la méthode de connexion",
