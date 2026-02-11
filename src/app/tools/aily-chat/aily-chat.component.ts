@@ -3472,7 +3472,7 @@ Blockly块操作规范流程（ABS模式），**严格遵守**：
 1. 使用todo_write_tool规划当前项目流程
 2. 使用get_workspace_overview_tool分析当前工作区，获取ABS代码和变量列表
 3. 列出所有需要使用的库（必须包含\`lib-core-*\`系列核心库：logic、variables、time、math等）
-4. 逐一阅读各库readme_ai.md或readme.md了解块定义和ABS语法
+4. 逐一阅读各库readme_ai.md了解块定义和ABS语法，readme不存在则可直接读取库文件分析块定义
 5. 如果当前已安装的库不满足需求，则使用search_boards_libraries工具查询库并进行安装，安装完成后重新执行步骤1-4
 
 【创建/修改阶段】
@@ -3494,7 +3494,6 @@ Blockly块操作规范流程（ABS模式），**严格遵守**：
 - ABS代码保持清晰的缩进和换行，便于阅读和调试
 - 复杂结构分步创建，先创建外层再填充内层
 - 使用get_abs_syntax工具了解ABS语法规范，确保代码符合要求
-- readme_ai.md或readme.md不存在时，使用analyze_library_blocks工具分析库块定义或者直接读取库文件进行理解
 </rules>
 <toolResult>${toolResult?.content}</toolResult>\n<info>如果想结束对话，转交给用户，可以使用[to_xxx]，这里的xxx为user</info>`;
               } else if (shouldIncludeKeyInfo) {

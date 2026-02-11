@@ -422,7 +422,7 @@ async function importFromAbs(
       
       failedInfo += '\n**🔧 修复建议:**\n';
       failedInfo += '1. 检查块类型是否拼写正确\n';
-      failedInfo += '2. 使用 `get_block_info_tool` 查询正确的块名和参数格式\n';
+      failedInfo += '2. 直接读取库的 generator/block 等文件了解块的使用方法\n';
       failedInfo += '3. 阅读对应库的 README 了解块的使用方法\n';
       failedInfo += '4. 如果多次尝试仍失败，考虑使用 `lib-core-custom` 的自定义代码块\n';
     }
