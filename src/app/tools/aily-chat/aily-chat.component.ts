@@ -1511,6 +1511,8 @@ Do not create non-existent boards and libraries.
       // 保持原样
     }
 
+    text = text.replace(/```/g, '\n```');
+
     // 如果text是TER MIN ATE
     const terminateText = 'TERMINATE';
     if (this.terminateTemp) {
@@ -1573,7 +1575,7 @@ Do not create non-existent boards and libraries.
     }
   }
 
-  debug = false; // TODO 用于测试本地流式数据，生产不要提交true！！！
+  debug = true; // TODO 用于测试本地流式数据，生产不要提交true！！！
 
   async startSession(): Promise<void> {
     if (this.debug) {
