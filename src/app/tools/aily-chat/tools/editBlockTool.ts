@@ -4,6 +4,7 @@ import { jsonrepair } from 'jsonrepair';
 import { injectTodoReminder } from './todoWriteTool';
 import { ArduinoSyntaxTool } from "./arduinoSyntaxTool";
 import { fixBlockConfig } from './blockConfigFixer';
+import { normalizeInputNameForAbs } from './abiAbsConverter';
 declare const Blockly: any;
 
 /**
@@ -1616,7 +1617,7 @@ function configureBlockFields(block: any, fields: FieldConfig): {
               failedFields.push({
                 fieldName,
                 value: actualValue,
-                error: `无效的下拉选项值: ${actualValue}`,
+                error: `无效的下拉选项值: ${actualValue}, 可用选项: [${availableOptions.join(', ')}]`,
                 suggestion
               });
             }
@@ -11159,46 +11160,75 @@ function generateAbsFormat(block: any): string {
   const params: string[] = [];
   const namedInputs: string[] = [];
   
+  // 收集输入
+  const valueInputs = block.inputs?.filter((i: any) => i.type === 'value') || [];
+  const statementInputs = block.inputs?.filter((i: any) => i.type === 'statement') || [];
+  
+  // 判断块类型和是否使用命名输入
+  // 规则：
+  // - 值块（hasOutput）：所有参数作为位置参数放括号内
+  // - 语句块 + 有语句输入：使用命名输入语法
+  const isValueBlock = block.connectionTypes?.hasOutput;
+  const useNamedInputs = !isValueBlock && statementInputs.length > 0;
+  
   // 处理字段参数（按顺序添加到括号内）
   if (block.fields && block.fields.length > 0) {
     for (const field of block.fields) {
+      // 跳过动态标记
+      if (field.name === '_DYNAMIC_') continue;
+      
       if (field.type === 'variable') {
-        // 变量字段使用 $varName 格式
-        params.push('$varName');
+        // field_variable 使用 $varName 格式
+        params.push('$var');
       } else if (field.type === 'dropdown') {
         const defaultVal = getDropdownDefaultValue(field);
         if (defaultVal) {
-          // 检查是否是动态字段（PIN/WIRE 等）
-          if (field.name === 'PIN' || field.name === 'WIRE') {
-            // 动态字段，添加占位符说明
-            params.push(field.name === 'WIRE' ? 'Wire' : '2');
-          } else {
-            params.push(defaultVal);
-          }
+          params.push(defaultVal);
         }
       } else if (field.type === 'text') {
+        // field_input 直接写引号字符串
         const val = field.defaultValue || 'text';
         params.push(`"${val}"`);
       } else if (field.type === 'number') {
-        const val = field.defaultValue || '0';
-        params.push(val);
+        // field_number 直接写数字
+        const val = field.defaultValue ?? '0';
+        params.push(String(val));
+      } else if (field.type === 'checkbox') {
+        params.push(field.defaultValue ? 'TRUE' : 'FALSE');
       }
     }
   }
   
-  // 处理值输入（添加到括号内或使用命名输入格式）
-  if (block.inputs && block.inputs.length > 0) {
-    for (const input of block.inputs) {
-      if (input.type === 'value') {
-        // 值输入：简单情况用 math_number/text 等，复杂情况用 @InputName:
-        if (block.inputs.length === 1) {
-          params.push('math_number(n)');
-        } else {
-          namedInputs.push(`@${input.name}: value_block()`);
-        }
-      } else if (input.type === 'statement') {
-        // 语句输入：缩进子块
-        namedInputs.push(`@${input.name}:\n        statement_block()`);
+  // 处理值输入
+  if (valueInputs.length > 0) {
+    for (const input of valueInputs) {
+      // 根据 check 类型生成合适的示例
+      const exampleBlock = getInputExampleBlock(input);
+      
+      if (useNamedInputs) {
+        // 语句块 + 有语句输入时，值输入也用命名格式（规范化名称）
+        const normalizedName = normalizeInputNameForAbs(input.name);
+        namedInputs.push(`@${normalizedName}: ${exampleBlock}`);
+      } else {
+        // 值块或简单语句块：值输入作为位置参数
+        params.push(exampleBlock);
+      }
+    }
+  }
+  
+  // 处理语句输入
+  if (statementInputs.length > 0) {
+    // 与 abiAbsConverter 一致：只有多个语句输入时才添加命名标记
+    const useStatementLabels = statementInputs.length > 1;
+    
+    for (const input of statementInputs) {
+      // 语句输入使用规范化名称
+      const normalizedName = normalizeInputNameForAbs(input.name);
+      if (useStatementLabels) {
+        namedInputs.push(`@${normalizedName}:`);
+      } else {
+        // 单个语句输入时可省略标签（简化表示）
+        namedInputs.push(`[statements]`);
       }
     }
   }
@@ -11206,17 +11236,58 @@ function generateAbsFormat(block: any): string {
   // 组装 ABS 格式
   let abs = `${block.type}(${params.join(', ')})`;
   
-  // 如果有命名输入，添加到下面
+  // 如果有命名输入，添加简化说明（单行格式更适合表格）
   if (namedInputs.length > 0) {
-    abs += '\n    ' + namedInputs.join('\n    ');
+    abs += ' ' + namedInputs.join(' ');
   }
   
-  // 截断过长内容
-  if (abs.length > 80) {
-    abs = abs.substring(0, 77) + '...';
+  // 截断过长内容（保留有效信息）
+  if (abs.length > 120) {
+    abs = abs.substring(0, 117) + '...';
   }
   
   return '`' + abs + '`';
+}
+
+/**
+ * 根据输入的 check 类型生成合适的示例值块
+ */
+function getInputExampleBlock(input: any): string {
+  const check = input.check;
+  const inputName = input.name?.toLowerCase() || '';
+  
+  // 根据输入名称猜测更有意义的示例
+  if (inputName.includes('condition') || inputName === 'if' || inputName === 'bool') {
+    return 'condition';
+  }
+  if (inputName.includes('value') || inputName === 'then' || inputName === 'else') {
+    return 'value';
+  }
+  if (inputName === 'a' || inputName === 'b') {
+    return inputName === 'a' ? '$a' : '$b';
+  }
+  
+  if (!check) {
+    // 无类型限制
+    return 'value';
+  }
+  
+  // check 可能是字符串或数组
+  const checkTypes = Array.isArray(check) ? check : [check];
+  const primaryCheck = checkTypes[0];
+  
+  switch (primaryCheck) {
+    case 'Number':
+      return 'math_number(n)';
+    case 'Boolean':
+      return 'condition';
+    case 'String':
+      return 'text("s")';
+    case 'Array':
+      return 'list';
+    default:
+      return 'value';
+  }
 }
 
 /**
@@ -11252,86 +11323,42 @@ function getDropdownDefaultValue(field: any): string {
 
 /**
  * 收集块定义中的字段类型示例
- * 参考 readme 的字段类型映射格式
+ * 符合 ABS 语法规范的参数类型映射
  */
 function collectFieldTypeExamples(blocks: any[]): Record<string, { format: string; sample: string }> {
   const examples: Record<string, { format: string; sample: string }> = {};
   
-  // 收集所有输入类型
-  let hasInputValue = false;
-  let hasInputStatement = false;
-  
-  // 预设常见字段类型的格式说明
-  const fieldTypeFormats: Record<string, string> = {
-    'field_input': '字符串',
-    'field_dropdown': '字符串',
-    'field_variable': '对象',
-    'field_number': '数字',
-    'input_value': '块连接',
-    'input_statement': '语句块连接'
+  // ABS 规范的标准类型映射
+  const standardMappings: Record<string, { format: string; sample: string }> = {
+    'field_dropdown': { format: 'ENUM_VALUE', sample: 'HIGH, Serial, OUTPUT' },
+    'field_input': { format: '"text"', sample: '"myValue"' },
+    'field_number': { format: 'number', sample: '9600, 13, 0' },
+    'field_variable': { format: '$varName', sample: '$count, $sensor' },
+    'field_checkbox': { format: 'TRUE/FALSE', sample: 'TRUE' },
+    'input_value': { format: 'value_block()', sample: 'math_number(10), text("s"), $var' },
+    'input_statement': { format: 'indented block', sample: '@DO:\\n    statement()' },
   };
   
+  // 收集实际使用的类型
+  let hasInputValue = false;
+  let hasInputStatement = false;
+  let hasVariable = false;
+  let hasDropdown = false;
+  let hasText = false;
+  let hasNumber = false;
+  
   for (const block of blocks) {
-    // 处理字段
     if (block.fields) {
       for (const field of block.fields) {
-        const fieldTypeKey = `field_${field.type === 'text' ? 'input' : field.type}`;
-        
-        // 跳过已经收集过的类型
-        if (examples[fieldTypeKey]) continue;
-        
+        if (field.name === '_DYNAMIC_') continue;
         switch (field.type) {
-          case 'variable':
-            examples[fieldTypeKey] = {
-              format: '$varName',
-              sample: `$myVar`
-            };
-            break;
-          case 'text':
-            examples[fieldTypeKey] = {
-              format: '"字符串"',
-              sample: `"${field.defaultValue || 'Hello'}"`
-            };
-            break;
-          case 'dropdown':
-            // 检查是否是动态选项
-            const isDynamic = typeof field.options === 'string' && field.options.startsWith('${');
-            const optVal = getDropdownDefaultValue(field);
-            if (isDynamic) {
-              examples['field_dropdown(动态)'] = {
-                format: '枚举值',
-                sample: optVal
-              };
-            } else if (!examples[fieldTypeKey]) {
-              examples[fieldTypeKey] = {
-                format: '枚举值',
-                sample: optVal
-              };
-            }
-            break;
-          case 'number':
-            examples[fieldTypeKey] = {
-              format: '数字',
-              sample: field.defaultValue || '100'
-            };
-            break;
-          case 'checkbox':
-            examples[fieldTypeKey] = {
-              format: 'TRUE/FALSE',
-              sample: 'TRUE'
-            };
-            break;
-          case 'colour':
-            examples[fieldTypeKey] = {
-              format: '"#颜色"',
-              sample: `"${field.defaultValue || '#ff0000'}"`
-            };
-            break;
+          case 'variable': hasVariable = true; break;
+          case 'dropdown': hasDropdown = true; break;
+          case 'text': hasText = true; break;
+          case 'number': hasNumber = true; break;
         }
       }
     }
-    
-    // 处理输入
     if (block.inputs) {
       for (const input of block.inputs) {
         if (input.type === 'value') hasInputValue = true;
@@ -11340,19 +11367,13 @@ function collectFieldTypeExamples(blocks: any[]): Record<string, { format: strin
     }
   }
   
-  // 添加输入类型示例
-  if (hasInputValue && !examples['input_value']) {
-    examples['input_value'] = {
-      format: '值块(参数)',
-      sample: `math_number(10)`
-    };
-  }
-  if (hasInputStatement && !examples['input_statement']) {
-    examples['input_statement'] = {
-      format: '缩进子块',
-      sample: `块名()\\n    子块()`
-    };
-  }
+  // 只返回实际使用的类型
+  if (hasDropdown) examples['field_dropdown'] = standardMappings['field_dropdown'];
+  if (hasText) examples['field_input'] = standardMappings['field_input'];
+  if (hasNumber) examples['field_number'] = standardMappings['field_number'];
+  if (hasVariable) examples['field_variable'] = standardMappings['field_variable'];
+  if (hasInputValue) examples['input_value'] = standardMappings['input_value'];
+  if (hasInputStatement) examples['input_statement'] = standardMappings['input_statement'];
   
   return examples;
 }
@@ -11643,7 +11664,7 @@ export async function analyzeLibraryBlocksTool(
     const analysisTime = Date.now() - startTime;
     
     // 生成简化的块定义报告（类似 readme.md 格式）
-    let report = `# 库块定义\n\n`;
+    let report = `# Library Block Definitions\n\n`;
 
     for (const [libraryName, knowledge] of Object.entries(libraryResults)) {
       report += `## ${libraryName}\n\n`;
@@ -11652,22 +11673,22 @@ export async function analyzeLibraryBlocksTool(
         // 检测有动态扩展的块
         const dynamicBlocks: string[] = [];
         
-        // 生成块定义表格（省略生成代码列，建议读取generator.js了解具体实现）
-        report += `| 块类型 | 连接 | 字段/输入 | ABS格式 |\n`;
-        report += `|--------|------|----------|---------|\n`;
+        // 生成块定义表格
+        report += `| Block Type | Connection | Parameters | ABS Format |\n`;
+        report += `|------------|------------|------------|------------|\n`;
         
         for (const block of knowledge.blocks) {
           const blockType = block.type;
           
-          // 连接类型
+          // 连接类型（符合 ABS 规范术语）
           const connectionParts: string[] = [];
           if (block.connectionTypes.hasPrevious || block.connectionTypes.hasNext) {
-            connectionParts.push('语句块');
+            connectionParts.push('Statement');
           }
           if (block.connectionTypes.hasOutput) {
-            connectionParts.push('值块');
+            connectionParts.push('Value');
           }
-          const connectionType = connectionParts.length > 0 ? connectionParts.join('/') : '独立块';
+          const connectionType = connectionParts.length > 0 ? connectionParts.join('/') : 'Hat';
           
           // 字段/输入信息（过滤掉 _DYNAMIC_ 标记）
           const fieldInputParts: string[] = [];
@@ -11700,7 +11721,7 @@ export async function analyzeLibraryBlocksTool(
           // 如果有动态扩展，在字段列添加标记
           let fieldInputStr = fieldInputParts.length > 0 ? fieldInputParts.join(', ') : '-';
           if (hasDynamicExtension) {
-            fieldInputStr += ', **+动态字段**';
+            fieldInputStr += ', **+dynamic**';
           }
           
           // ABS格式示例 - 已经包含反引号格式
@@ -11713,16 +11734,16 @@ export async function analyzeLibraryBlocksTool(
         
         // 如果有动态扩展的块，添加提示信息
         if (dynamicBlocks.length > 0) {
-          report += `### ⚠️ 动态扩展提示\n\n`;
-          report += `以下块具有动态扩展，实际参数可能根据其他字段值动态变化：\n`;
-          report += `- ${dynamicBlocks.map(b => `\`${b}\``).join('、')}\n\n`;
-          report += `**建议**：读取该库的 \`generator.js\` 文件了解完整的参数用法和动态行为。\n\n`;
+          report += `### ⚠️ Dynamic Fields Notice\n\n`;
+          report += `The following blocks have dynamic fields that may change based on other field values:\n`;
+          report += `- ${dynamicBlocks.map(b => `\`${b}\``).join(', ')}\n\n`;
+          report += `**Tip**: Read the library's \`generator.js\` file for complete parameter usage.\n\n`;
         }
         
         // 添加 ABS 参数类型映射说明
-        report += `### ABS参数类型映射\n\n`;
-        report += `| 类型 | ABS格式 | 示例 |\n`;
-        report += `|------|---------|------|\n`;
+        report += `### ABS Parameter Type Mapping\n\n`;
+        report += `| Type | ABS Format | Example |\n`;
+        report += `|------|------------|---------|`;
         
         const fieldTypeExamples = collectFieldTypeExamples(knowledge.blocks);
         for (const [fieldType, example] of Object.entries(fieldTypeExamples)) {
@@ -11731,16 +11752,20 @@ export async function analyzeLibraryBlocksTool(
         
         report += '\n';
         
-        // 添加连接规则说明
-        report += `### 连接规则\n\n`;
+        // 添加连接规则说明（符合 ABS 规范描述）
+        report += `### Connection Rules\n\n`;
         const statementBlocks = knowledge.blocks.filter(b => b.connectionTypes.hasPrevious || b.connectionTypes.hasNext);
         const valueBlocks = knowledge.blocks.filter(b => b.connectionTypes.hasOutput);
+        const hatBlocks = knowledge.blocks.filter(b => !b.connectionTypes.hasPrevious && !b.connectionTypes.hasNext && !b.connectionTypes.hasOutput);
         
         if (statementBlocks.length > 0) {
-          report += `- **语句块**: ${statementBlocks.map(b => `\`${b.type}\``).join('、')} 具有 \`previousStatement\`/\`nextStatement\`\n`;
+          report += `- **Statement**: ${statementBlocks.map(b => `\`${b.type}\``).join(', ')} — standalone line, chains via \`next\`\n`;
         }
         if (valueBlocks.length > 0) {
-          report += `- **值块**: ${valueBlocks.map(b => `\`${b.type}\``).join('、')} 有 \`output\`，可作为表达式使用\n`;
+          report += `- **Value**: ${valueBlocks.map(b => `\`${b.type}\``).join(', ')} — embedded as parameter\n`;
+        }
+        if (hatBlocks.length > 0) {
+          report += `- **Hat**: ${hatBlocks.map(b => `\`${b.type}\``).join(', ')} — root block, program entry\n`;
         }
         
         report += '\n';
@@ -11748,9 +11773,9 @@ export async function analyzeLibraryBlocksTool(
         // 收集并添加参数枚举选项表格
         const dropdownOptions = collectDropdownOptionsFromBlocks(knowledge.blocks);
         if (Object.keys(dropdownOptions).length > 0) {
-          report += `### 参数选项\n\n`;
-          report += `| 参数 | 可选值 | 说明 |\n`;
-          report += `|------|--------|------|\n`;
+          report += `### Parameter Options\n\n`;
+          report += `| Parameter | Values | Description |\n`;
+          report += `|-----------|--------|-------------|`;
           
           for (const [fieldName, options] of Object.entries(dropdownOptions)) {
             const optionsStr = options.values.slice(0, 10).join(', ') + (options.values.length > 10 ? '...' : '');
