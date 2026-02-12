@@ -3507,8 +3507,9 @@ ${JSON.stringify(errData)}
 【准备工作】
 1. 使用todo_write_tool规划项目流程，明确每一步要实现的功能和使用的工具。
 2. 使用get_workspace_overview_tool分析当前工作区，获取ABS代码和变量列表，了解现有资源。
-3. 列出需要使用的库，确保包含核心库（如lib-core-logic、lib-core-variables等）。如果需要新库，使用search_boards_libraries工具查询并安装。
-4. 阅读所有相关库的readme_ai.md，了解块定义和ABS语法。没有readme的库需要直接分析库文件获取信息。
+3. 列出需要使用的库，必须包含\`lib-core-*\`等核心库（如lib-core-logic、lib-core-variables等）。如果需要新库，使用search_boards_libraries工具查询并安装。
+4. 逐一阅读库的readme_ai.md，了解块定义和ABS语法。没有readme的库需要直接分析库文件获取信息。
+5. 使用get_abs_syntax工具了解ABS语法规范，确保代码符合要求。
 
 【实现阶段】
 1. 完整规划代码逻辑，构思ABS结构。
@@ -3529,7 +3530,6 @@ ${JSON.stringify(errData)}
 - 深入分析嵌入式代码逻辑和硬件特性，确保逻辑正确。
 - ABS代码保持清晰的缩进和换行，便于阅读和调试。
 - 复杂结构分步创建，先创建外层再填充内层。
-- 使用get_abs_syntax工具了解ABS语法规范，确保代码符合要求。
 </rules>
 <toolResult>${toolResult?.content}</toolResult>\n<info>如果想结束对话，转交给用户，可以使用[to_xxx]，这里的xxx为user</info>`;
               } else if (shouldIncludeKeyInfo) {
