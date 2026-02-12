@@ -7,6 +7,8 @@
 import { parseAbs, BlocklyAbsParser } from './absParser';
 import { getGlobalBlockMetas } from '../services/block-definition.service';
 
+declare const Blockly: any;
+
 // =============================================================================
 // ABI JSON → ABS 转换
 // =============================================================================
@@ -627,27 +629,85 @@ function formatBlockAsValue(block: any, context: ConversionContext): string {
   }
 }
 
+// 运行时查询缓存：blockType -> Set<语句输入名>
+const runtimeStatementInputCache = new Map<string, Set<string>>();
+
+/**
+ * 通过 Blockly 运行时查询块的语句输入名称
+ * 这是最可靠的方式，因为它直接从块定义中获取，包括 mutator 动态添加的输入
+ */
+function queryStatementInputsFromBlockly(blockType: string): Set<string> | null {
+  // 检查缓存
+  if (runtimeStatementInputCache.has(blockType)) {
+    return runtimeStatementInputCache.get(blockType)!;
+  }
+  
+  // 检查 Blockly 是否可用
+  if (typeof Blockly === 'undefined' || !Blockly.Blocks || !Blockly.Blocks[blockType]) {
+    return null;
+  }
+  
+  try {
+    // 获取工作区用于创建临时块
+    const workspace = Blockly.getMainWorkspace?.();
+    if (!workspace) return null;
+    
+    // 创建临时块来查询输入类型
+    const tempBlock = workspace.newBlock(blockType);
+    const statementInputs = new Set<string>();
+    
+    if (tempBlock.inputList) {
+      for (const input of tempBlock.inputList) {
+        // connection.type === 3 表示 NEXT_STATEMENT（语句输入）
+        if (input.connection && input.connection.type === 3) {
+          statementInputs.add(input.name);
+        }
+      }
+    }
+    
+    // 清理临时块
+    tempBlock.dispose();
+    
+    // 缓存结果
+    runtimeStatementInputCache.set(blockType, statementInputs);
+    return statementInputs;
+  } catch (e) {
+    console.warn(`[abiAbsConverter] Failed to query block ${blockType} from Blockly:`, e);
+    return null;
+  }
+}
+
 /**
  * 获取块的语句输入名称
  * 
- * 采用两层检测策略：
- * 1. 从动态块定义获取已知的语句输入（来自 block.json 的 input_statement）
- * 2. 使用启发式规则补充（输入名模式匹配，用于 mutator 动态添加的输入）
- * 
- * 注意：不再使用"从子块类型推断"策略，因为 ABI JSON 中没有可靠的
- * 方式区分值块和语句块。正确的方式是依赖块定义元数据或输入名模式。
+ * 采用三层检测策略（按优先级）：
+ * 1. 【最可靠】从 Blockly 运行时查询（直接获取块定义，包括 mutator 动态输入）
+ * 2. 从静态块元数据获取（来自 block.json 的 input_statement）
+ * 3. 【回退】启发式规则（用于 Blockly 不可用时）
  */
 function getStatementInputs(block: any): string[] {
   if (!block.inputs) return [];
   
+  const inputNames = Object.keys(block.inputs);
   const result = new Set<string>();
   
-  // 1. 从动态块定义获取已知的语句输入名称
+  // 1. 优先从 Blockly 运行时查询（最可靠）
+  const runtimeInputs = queryStatementInputsFromBlockly(block.type);
+  if (runtimeInputs) {
+    for (const inputName of inputNames) {
+      if (runtimeInputs.has(inputName)) {
+        result.add(inputName);
+      }
+    }
+    // 运行时查询成功，直接返回
+    return Array.from(result);
+  }
+  
+  // 2. 从静态块元数据获取
   const dynamicMetas = getGlobalBlockMetas();
   if (dynamicMetas) {
     const meta = dynamicMetas.get(block.type);
     if (meta && meta.statementInputNames.length > 0) {
-      // 添加元数据中定义的语句输入（仅当块中实际存在时）
       for (const name of meta.statementInputNames) {
         if (block.inputs[name]) {
           result.add(name);
@@ -656,10 +716,10 @@ function getStatementInputs(block: any): string[] {
     }
   }
   
-  // 2. 启发式规则：通过输入名模式匹配
-  // 这能捕获 mutator 动态添加的语句输入（如 controls_switch 的 DO1, DO2...）
-  for (const inputName of Object.keys(block.inputs)) {
-    if (isLikelyStatementInput(inputName)) {
+  // 3. 启发式规则（回退方案）
+  // 仅当前面的方法都无法判断时使用
+  for (const inputName of inputNames) {
+    if (!result.has(inputName) && isLikelyStatementInput(inputName)) {
       result.add(inputName);
     }
   }
@@ -668,9 +728,14 @@ function getStatementInputs(block: any): string[] {
 }
 
 /**
- * 判断输入名是否可能是语句输入
+ * 【回退方案】判断输入名是否可能是语句输入
+ * 
+ * 此函数仅在 Blockly 运行时不可用且静态元数据缺失时使用。
+ * 优先应使用 queryStatementInputsFromBlockly() 从 Blockly 运行时查询。
+ * 
+ * @deprecated 优先使用 Blockly 运行时查询
  */
-function isLikelyStatementInput(inputName: string): boolean {
+export function isLikelyStatementInput(inputName: string): boolean {
   const patterns = [
     /^DO\d*$/,           // DO, DO0, DO1...
     /^ELSE$/,            // ELSE
@@ -688,7 +753,7 @@ function isLikelyStatementInput(inputName: string): boolean {
 /**
  * 规范化输入名用于 ABS 显示
  */
-function normalizeInputNameForAbs(inputName: string): string {
+export function normalizeInputNameForAbs(inputName: string): string {
   const mapping: Record<string, string> = {
     'DO0': 'do',
     'DO': 'do',

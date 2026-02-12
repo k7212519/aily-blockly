@@ -4,6 +4,7 @@ import { jsonrepair } from 'jsonrepair';
 import { injectTodoReminder } from './todoWriteTool';
 import { ArduinoSyntaxTool } from "./arduinoSyntaxTool";
 import { fixBlockConfig } from './blockConfigFixer';
+import { normalizeInputNameForAbs } from './abiAbsConverter';
 declare const Blockly: any;
 
 /**
@@ -11205,8 +11206,9 @@ function generateAbsFormat(block: any): string {
       const exampleBlock = getInputExampleBlock(input);
       
       if (useNamedInputs) {
-        // 语句块 + 有语句输入时，值输入也用命名格式
-        namedInputs.push(`@${input.name}: ${exampleBlock}`);
+        // 语句块 + 有语句输入时，值输入也用命名格式（规范化名称）
+        const normalizedName = normalizeInputNameForAbs(input.name);
+        namedInputs.push(`@${normalizedName}: ${exampleBlock}`);
       } else {
         // 值块或简单语句块：值输入作为位置参数
         params.push(exampleBlock);
@@ -11216,9 +11218,18 @@ function generateAbsFormat(block: any): string {
   
   // 处理语句输入
   if (statementInputs.length > 0) {
+    // 与 abiAbsConverter 一致：只有多个语句输入时才添加命名标记
+    const useStatementLabels = statementInputs.length > 1;
+    
     for (const input of statementInputs) {
-      // 语句输入使用 @NAME: + 缩进
-      namedInputs.push(`@${input.name}: statements`);
+      // 语句输入使用规范化名称
+      const normalizedName = normalizeInputNameForAbs(input.name);
+      if (useStatementLabels) {
+        namedInputs.push(`@${normalizedName}:`);
+      } else {
+        // 单个语句输入时可省略标签（简化表示）
+        namedInputs.push(`[statements]`);
+      }
     }
   }
   
