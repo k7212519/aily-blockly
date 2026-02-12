@@ -1575,7 +1575,7 @@ Do not create non-existent boards and libraries.
     }
   }
 
-  debug = true; // TODO 用于测试本地流式数据，生产不要提交true！！！
+  debug = false; // TODO 用于测试本地流式数据，生产不要提交true！！！
 
   async startSession(): Promise<void> {
     if (this.debug) {
