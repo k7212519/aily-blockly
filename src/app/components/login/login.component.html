@@ -77,7 +77,7 @@
                 @if (wechatStatus === 'pending') {
                 <div class="status-message">{{ getWeChatStatusMessage() }}</div>
                 } @else if (wechatStatus === 'confirmed') {
-                <div class="status-message success">{{ getWeChatSuccessText() }}</div>
+                <!-- <div class="status-message success">{{ getWeChatSuccessText() }}</div> -->
                 } @else if (wechatStatus === 'expired') {
                 <div class="status-message expired">{{ wechatStatusMessage }}</div>
                 <button nz-button nzType="primary" nzSize="small" (click)="refreshWeChatQrcode()" style="margin-top: 10px;">
