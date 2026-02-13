@@ -111,7 +111,7 @@
       "allowElevation": true,
       "deleteAppDataOnUninstall": true,
       "include": "build/installer.nsh",
-      "runAfterFinish": false,
+      "runAfterFinish": true,
       "differentialPackage": false,
       "artifactName": "aily-blockly-Setup-${version}.${ext}",
       "createStartMenuShortcut": true,

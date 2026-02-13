@@ -1,3 +1,8 @@
+!macro customHeader
+  ; 安装完成页面：添加"启动应用程序"复选框
+  !define MUI_FINISHPAGE_RUN_TEXT "启动 ${PRODUCT_NAME}"
+!macroend
+
 !macro customInit
   ; 多种方式尝试关闭可能运行的实例
   nsExec::Exec 'taskkill /F /IM aily-blockly.exe /T'
