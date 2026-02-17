@@ -142,7 +142,7 @@ function registerCmdHandlers(mainWindow) {
       // 监听标准输出
       process.stdout.on('data', (data) => {
         const output = data.toString();
-        console.log(`[CMD][${streamId}] stdout: ${output}`);
+        // console.log(`[CMD][${streamId}] stdout: ${output}`);
         senderWindow.send(`cmd-data-${streamId}`, {
           type: 'stdout',
           data: output,
@@ -153,7 +153,7 @@ function registerCmdHandlers(mainWindow) {
       // 监听错误输出
       process.stderr.on('data', (data) => {
         const output = data.toString();
-        console.error(`[CMD][${streamId}] stderr: ${output}`);
+        // console.error(`[CMD][${streamId}] stderr: ${output}`);
         senderWindow.send(`cmd-data-${streamId}`, {
           type: 'stderr',
           data: output,
@@ -163,7 +163,7 @@ function registerCmdHandlers(mainWindow) {
 
       // 监听进程关闭
       process.on('close', (code, signal) => {
-        console.log(`[CMD][${streamId}] 进程关闭, code: ${code}, signal: ${signal}`);
+        console.log(`[CMD][${streamId}] close, code: ${code}, signal: ${signal}`);
         senderWindow.send(`cmd-data-${streamId}`, {
           type: 'close',
           code,
@@ -175,7 +175,7 @@ function registerCmdHandlers(mainWindow) {
 
       // 监听进程错误
       process.on('error', (error) => {
-        console.error(`[CMD][${streamId}] 进程错误: ${error.message}`);
+        console.error(`[CMD][${streamId}] error: ${error.message}`);
         senderWindow.send(`cmd-data-${streamId}`, {
           type: 'error',
           error: error.message,
