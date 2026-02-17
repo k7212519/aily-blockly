@@ -63,8 +63,8 @@ import { ElectronService } from '../../services/electron.service';
 export class SerialMonitorComponent {
   private destroyRef = inject(DestroyRef);
 
-  // 更新防抖定时器
-  private updateTimer: any = null;
+  // requestAnimationFrame ID，用于合并高频数据更新到单帧渲染
+  private rafId: number | null = null;
 
   // TanStack Virtual 滚动容器引用
   dataListScrollEl = viewChild<ElementRef<HTMLDivElement>>('dataListBox');
@@ -258,26 +258,17 @@ export class SerialMonitorComponent {
     }, 30);
   }
 
-  // 处理数据更新
+  // 处理数据更新：用 requestAnimationFrame 合并多次数据事件到一帧内渲染
   private handleDataUpdate(data: dataItem | void) {
-    if (!data) {
-      this.dataCount.set(this.dataList.length);
+    // 如果已有待处理的RAF，跳过，等下一帧统一刷新
+    if (this.rafId !== null) return;
+    this.rafId = requestAnimationFrame(() => {
+      this.rafId = null;
+      const count = this.dataList.length;
+      this.dataCount.set(count);
       this.cd.detectChanges();
       this.scrollToBottom();
-      return;
-    }
-    // 如果数据被清空
-    if (this.dataList.length === 0) {
-      this.dataCount.set(0);
-      this.cd.detectChanges();
-      return;
-    }
-
-    const currentDataCount = this.dataList.length;
-    this.dataCount.set(currentDataCount);
-    this.cd.detectChanges();
-    // 如果开启自动滚动,滚动到底部
-    this.scrollToBottom();
+    });
   }
 
 
@@ -336,8 +327,8 @@ export class SerialMonitorComponent {
   }
 
   ngOnDestroy() {
-    if (this.updateTimer) {
-      clearTimeout(this.updateTimer);
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
     }
     if (this.scrollTimeoutId) {
       clearTimeout(this.scrollTimeoutId);

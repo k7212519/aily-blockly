@@ -22,6 +22,11 @@ declare global {
   providedIn: 'root'
 })
 export class SerialMonitorService {
+  // 数据列表最大条数，超过时裁剪旧数据以节省内存
+  private static readonly MAX_DATA_SIZE = 100000;
+  // 裁剪后保留的条数（批量裁剪，避免频繁操作）
+  private static readonly TRIM_TARGET_SIZE = 90000;
+
   viewMode = {
     showHex: false, // hex显示
     showCtrlChar: false, // 控制字符显示
@@ -46,6 +51,10 @@ export class SerialMonitorService {
   private lastDataTime = 0;
   private firstDataTime = 0; // 当前记录首次接收数据的时间
   private isConnected = false;
+
+  // 数据更新节流控制：高频数据流下最多 ~20次/秒 通知UI
+  private static readonly UPDATE_THROTTLE_MS = 50;
+  private updateThrottleTimer: any = null;
 
   // 状态观察对象
   connectionStatus = new BehaviorSubject<boolean>(false);
@@ -184,7 +193,6 @@ export class SerialMonitorService {
         dir: 'RX'
       }
       this.dataList.push(item);
-      this.dataUpdated.next(item);
       // 记录这是新记录的首次接收时间
       this.firstDataTime = currentTime;
     } else {
@@ -198,7 +206,33 @@ export class SerialMonitorService {
     // 更新最后一次接收数据的时间
     this.lastDataTime = currentTime;
 
-    this.dataUpdated.next();
+    // 检查数据量是否超过上限
+    this.trimDataListIfNeeded();
+
+    // 节流通知UI更新，避免高频数据导致过多变更检测
+    this.scheduleUpdate();
+  }
+
+  /**
+   * 节流调度UI通知：在一个节流窗口内只发出一次 dataUpdated 通知
+   */
+  private scheduleUpdate() {
+    if (this.updateThrottleTimer === null) {
+      this.updateThrottleTimer = setTimeout(() => {
+        this.updateThrottleTimer = null;
+        this.dataUpdated.next();
+      }, SerialMonitorService.UPDATE_THROTTLE_MS);
+    }
+  }
+
+  /**
+   * 当数据条数超过上限时，丢弃最前面的旧数据
+   */
+  private trimDataListIfNeeded() {
+    if (this.dataList.length > SerialMonitorService.MAX_DATA_SIZE) {
+      const removeCount = this.dataList.length - SerialMonitorService.TRIM_TARGET_SIZE;
+      this.dataList = this.dataList.slice(removeCount);
+    }
   }
 
   /**
