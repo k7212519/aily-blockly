@@ -190,7 +190,7 @@ export class SerialChartComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    console.log('收到图表数据:', JSON.stringify(dataStr));
+    // console.log('收到图表数据:', JSON.stringify(dataStr));
 
     // 将新数据添加到缓冲区
     this.dataBuffer += dataStr;
@@ -205,7 +205,7 @@ export class SerialChartComponent implements OnInit, AfterViewInit, OnDestroy {
     for (const line of lines) {
       if (line.trim() === '') continue;
 
-      console.log('处理行:', JSON.stringify(line));
+      // console.log('处理行:', JSON.stringify(line));
 
       // 尝试解析逗号分隔的数值
       const values = line.split(',').map(v => {
@@ -215,7 +215,7 @@ export class SerialChartComponent implements OnInit, AfterViewInit, OnDestroy {
 
       if (values.length === 0) continue;
 
-      console.log('解析到数值个数:', values.length, '值:', values);
+      // console.log('解析到数值个数:', values.length, '值:', values);
 
       // 使用当前时间戳（秒，保留小数以支持毫秒精度）作为时间轴
       // 确保时间戳严格递增

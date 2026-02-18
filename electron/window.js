@@ -69,7 +69,7 @@ function registerWindowHandlers(mainWindow) {
 
     mainWindow.on('focus', () => {
         try {
-            if (mainWindow && mainWindow.webContents) {
+            if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
                 mainWindow.webContents.send('window-focus');
             }
 
@@ -81,7 +81,7 @@ function registerWindowHandlers(mainWindow) {
     mainWindow.on('blur', () => {
         // 检查窗口是否已销毁以及 webContents 是否有效
         try {
-            if (mainWindow && mainWindow.webContents) {
+            if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
                 mainWindow.webContents.send('window-blur');
             }
 
@@ -92,7 +92,7 @@ function registerWindowHandlers(mainWindow) {
 
     mainWindow.on('enter-full-screen', () => {
         try {
-            if (mainWindow && mainWindow.webContents) {
+            if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
                 mainWindow.webContents.send('window-full-screen-changed', true);
             }
         } catch (error) {
@@ -102,7 +102,7 @@ function registerWindowHandlers(mainWindow) {
 
     mainWindow.on('leave-full-screen', () => {
         try {
-            if (mainWindow && mainWindow.webContents) {
+            if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
                 mainWindow.webContents.send('window-full-screen-changed', false);
             }
         } catch (error) {
@@ -113,7 +113,7 @@ function registerWindowHandlers(mainWindow) {
     // 为主窗口注册最大化/还原状态监听
     mainWindow.on('maximize', () => {
         try {
-            if (mainWindow && mainWindow.webContents) {
+            if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
                 mainWindow.webContents.send('window-maximize-changed', true);
             }
         } catch (error) {
@@ -123,7 +123,7 @@ function registerWindowHandlers(mainWindow) {
 
     mainWindow.on('unmaximize', () => {
         try {
-            if (mainWindow && mainWindow.webContents) {
+            if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
                 mainWindow.webContents.send('window-maximize-changed', false);
             }
         } catch (error) {
