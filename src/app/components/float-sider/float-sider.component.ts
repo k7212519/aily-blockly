@@ -74,6 +74,24 @@ export class FloatSiderComponent implements OnInit, OnDestroy {
   }
 
   showPinmap() {
+    const pinmapPath = this.boardPackagePath + '/pinmap.json';
+    if (this.electronService.exists(pinmapPath)) {
+      // 使用子窗口打开，通过 URL 查询参数传递文件路径
+      // this.uiService.openWindow({
+      //   path: `pinjson?filePath=${encodeURIComponent(pinjsonPath)}`,
+      //   width: 800,
+      //   height: 600
+      // });
+      this.uiService.openWindow({
+        path: `iframe?url=${encodeURIComponent('https://tool.aily.pro/component-viewer?type=json')}`,
+        // path: `iframe?url=${encodeURIComponent('http://localhost:3051/component-viewer?type=json')}`,
+        data: this.electronService.readFile(pinmapPath),
+        width: 800,
+        height: 600
+      });
+      return;
+    }
+    // this.message.error(this.translate.instant('FLOAT_SIDER.NO_PINMAP'));
     if (!this.electronService.exists(this.boardPackagePath + '/pinmap.webp')) {
       this.message.error(this.translate.instant('FLOAT_SIDER.NO_PINMAP'));
       return;
@@ -91,24 +109,6 @@ export class FloatSiderComponent implements OnInit, OnDestroy {
       },
       nzWidth: '500px',
     });
-  }
-
-  showPinjson() {
-    const pinjsonPath = this.boardPackagePath + '/pinmap.json';
-    if (!this.electronService.exists(pinjsonPath)) {
-      // this.message.error(this.translate.instant('FLOAT_SIDER.NO_PINMAP'));
-      this.showPinmap();
-      return;
-    }
-    
-    // 使用子窗口打开，通过 URL 查询参数传递文件路径
-    if (this.electronService.isElectron && window['subWindow']) {
-      window['subWindow'].open({
-        path: `pinjson?filePath=${encodeURIComponent(pinjsonPath)}`,
-        width: 800,
-        height: 600
-      });
-    }
   }
 
 
@@ -141,5 +141,14 @@ export class FloatSiderComponent implements OnInit, OnDestroy {
 
   showCircuit() {
     this.message.info(this.translate.instant('FLOAT_SIDER.CIRCUIT') + ' ' + this.translate.instant('COMMON.FEATURE_COMING_SOON'));
+    // if (this.electronService.isElectron) {
+    //   this.uiService.openWindow({
+    //     // path: `iframe?url=${encodeURIComponent('https://tool.aily.pro/connection-graph')}`,
+    //     path: `iframe?url=${encodeURIComponent('http://localhost:3051/connection-graph?type=json')}`,
+    //     data: { a: 1, b: 2 },
+    //     width: 800,
+    //     height: 600
+    //   });
+    // }
   }
 }

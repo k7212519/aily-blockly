@@ -273,6 +273,7 @@ export class UiService {
 
 export interface WindowOpts {
   path: string;
+  data?: any;
   title?: string;
   alwaysOnTop?: boolean;
   width?: number;

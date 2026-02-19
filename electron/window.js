@@ -215,6 +215,17 @@ function registerWindowHandlers(mainWindow) {
             openWindows.delete(windowUrl);
         });
 
+        // 页面加载完成后，将 data/url/title 发送给子窗口
+        if (data.data || data.url || data.title) {
+            subWindow.webContents.on('did-finish-load', () => {
+                subWindow.webContents.send('window-init-data', {
+                    url: data.url,
+                    title: data.title,
+                    data: data.data,
+                });
+            });
+        }
+
         if (process.env.DEV === 'true' || process.env.DEV === true) {
             subWindow.loadURL(`http://localhost:4200/#/${data.path}`);
             // subWindow.webContents.openDevTools();

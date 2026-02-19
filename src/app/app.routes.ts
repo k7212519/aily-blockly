@@ -93,6 +93,10 @@ export const routes: Routes = [
         loadComponent: () => import('./app-store/pinjson/pinjson.component').then(m => m.PinjsonComponent)
     },
     {
+        path: "iframe",
+        loadComponent: () => import('./windows/iframe/iframe.component').then(m => m.IframeComponent)
+    },
+    {
         path: "model-store",
         loadComponent: () => import('./tools/model-store/model-store.component').then(m => m.ModelStoreComponent)
     },

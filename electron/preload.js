@@ -146,10 +146,31 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.send("window-close-confirmed");
     },
   },
-  subWindow: {
-    open: (options) => ipcRenderer.send("window-open", options),
-    close: () => ipcRenderer.send("window-close"),
-  },
+  subWindow: (() => {
+    // 立即监听 window-init-data，缓存数据，避免 Angular 组件注册监听前数据丢失
+    let _cachedInitData = null;
+    let _initDataReceived = false;
+    let _initDataCallback = null;
+    ipcRenderer.on("window-init-data", (_event, data) => {
+      _cachedInitData = data;
+      _initDataReceived = true;
+      if (_initDataCallback) {
+        _initDataCallback(data);
+      }
+    });
+    return {
+      open: (options) => ipcRenderer.send("window-open", options),
+      close: () => ipcRenderer.send("window-close"),
+      onInitData: (callback) => {
+        _initDataCallback = callback;
+        // 如果数据已到达，立即回调
+        if (_initDataReceived) {
+          callback(_cachedInitData);
+        }
+        return () => { _initDataCallback = null; };
+      },
+    };
+  })(),
   builder: {
     init: (data) => {
       return new Promise((resolve, reject) => {
