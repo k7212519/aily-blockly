@@ -1477,6 +1477,19 @@ function configureBlockFields(block: any, fields: FieldConfig): {
             if (matchedOption !== null) {
               // 找到匹配的选项，设置值（注意：空字符串 "" 也是有效的匹配值）
               try {
+                // 🆕 在 setFieldValue 前记录字段列表，用于检测 validator 是否触发了形状变更
+                let fieldsBeforeSet: Set<string> | null = null;
+                if (!shapeStable && block.updateShape_ && typeof block.updateShape_ === 'function') {
+                  fieldsBeforeSet = new Set<string>();
+                  try {
+                    for (const input of block.inputList || []) {
+                      for (const field of input.fieldRow || []) {
+                        if (field.name) fieldsBeforeSet.add(field.name);
+                      }
+                    }
+                  } catch (e) { /* ignore */ }
+                }
+                
                 block.setFieldValue(matchedOption, fieldName);
                 
                 // 🔑 关键：验证设置是否成功
@@ -1485,21 +1498,16 @@ function configureBlockFields(block: any, fields: FieldConfig): {
                   // console.log(`✅ 下拉菜单设置成功: ${fieldName} = ${matchedOption}`);
                   configSuccess = true;
                   
-                  // 🆕 检测 updateShape_() 是否会创建新的动态字段
-                  // 如果形状已稳定，跳过 updateShape_() 避免重置已设置的值
+                  // 🆕 检测 setFieldValue + validator 是否已创建新的动态字段
+                  // 注意：不再额外调用 updateShape_()，因为 validator 在 setFieldValue 时
+                  // 已经带正确参数调用了 updateShape_()。无参调用会导致 validator-driven 块
+                  // （如 dht_init_dynamic）走错误的 default 分支。
                   if (!shapeStable && block.updateShape_ && typeof block.updateShape_ === 'function') {
-                    // 记录 updateShape_() 前的字段列表
-                    const fieldsBefore = new Set<string>();
-                    try {
-                      for (const input of block.inputList || []) {
-                        for (const field of input.fieldRow || []) {
-                          if (field.name) fieldsBefore.add(field.name);
-                        }
-                      }
-                    } catch (e) { /* ignore */ }
+                    // 比较 setFieldValue 前后的字段列表（fieldsBefore 在 setFieldValue 前记录）
+                    const fieldsBefore = fieldsBeforeSet || new Set<string>();
                     
                     try {
-                      block.updateShape_();
+                      // 不再调用 updateShape_()，validator 已在 setFieldValue 中触发
                       hadUpdateShape = true;
                       
                       // 检查是否有新字段创建
@@ -3777,12 +3785,26 @@ function analyzeDynamicInputPattern(block: any, blockType: string): any {
   
   // 通用检测：如果有 updateShape_ 方法，很可能支持动态输入
   if (block.updateShape_ && typeof block.updateShape_ === 'function') {
+    // 区分 validator-driven（不需要 extraState）和 mutator-based（需要 extraState）
+    // validator-driven: 只有 updateShape_，由下拉字段验证器触发形状变更（如 dht_init_dynamic）
+    // mutator-based: 有 loadExtraState/saveExtraState 或 itemCount_ 等属性
+    const hasMutatorState = block.loadExtraState || block.saveExtraState ||
+                            block.itemCount_ !== undefined || block.mutationToDom;
+    if (hasMutatorState) {
+      return {
+        inputPattern: 'GENERIC',
+        extraStateKey: 'itemCount',
+        defaultCount: 2,
+        minCount: 1,
+        maxCount: 10
+      };
+    }
+    // validator-driven 形状变化：updateShape_ 由下拉 validator 带参数调用，
+    // 无参调用会导致错误的 default 分支，不需要 extraState 管理
+    // console.log(`ℹ️ ${blockType} 有 updateShape_ 但没有状态管理方法，判定为 validator-driven`);
     return {
-      inputPattern: 'GENERIC',
-      extraStateKey: 'itemCount',
-      defaultCount: 2,
-      minCount: 1,
-      maxCount: 10
+      supportsDynamic: false,
+      inputPattern: 'VALIDATOR_DRIVEN'
     };
   }
   
@@ -4497,6 +4519,15 @@ function remapExtraFieldsToActualFields(block: any, fields: Record<string, any>)
   // 如果没有 EXTRA_N 字段，直接返回
   if (extraFields.length === 0) {
     return fields;
+  }
+  
+  // 🆕 如果块有 updateShape_ 方法，形状可能在字段配置时改变（如 dht_init 的 TYPE 下拉
+  //     触发 validator → updateShape_ 将 PIN_SET 切换为 WIRE_SET），此时基于初始形状
+  //     的预映射会导致字段名错误。跳过预映射，由 configureBlockFields 的二次尝试机制
+  //     在形状稳定后进行正确映射。
+  if (block.updateShape_ && typeof block.updateShape_ === 'function') {
+    // console.log(`ℹ️ ${block.type} 有 updateShape_，跳过 EXTRA_N 预映射，交由 configureBlockFields 处理`);
+    return fields; // 保留 EXTRA_N 原名，configureBlockFields 会延迟处理
   }
   
   // 按索引排序

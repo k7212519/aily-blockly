@@ -260,6 +260,24 @@ const FALLBACK_BLOCKS: Record<string, Partial<BlockMeta>> = {
 };
 
 /**
+ * 反转义字符串中的转义序列（与 abiAbsConverter 的 escapeString 对应）
+ * 使用单次遍历避免 `\\n` 等多重转义的顺序问题
+ */
+function unescapeString(str: string): string {
+  return str.replace(/\\(n|r|t|"|'|\\)/g, (_match, char) => {
+    switch (char) {
+      case 'n': return '\n';
+      case 'r': return '\r';
+      case 't': return '\t';
+      case '"': return '"';
+      case "'": return "'";
+      case '\\': return '\\';
+      default: return _match;
+    }
+  });
+}
+
+/**
  * 去掉字符串两端的引号
  */
 function stripQuotes(str: string): string {
@@ -933,10 +951,10 @@ export class BlocklyAbsParser {
    * 解析字段值
    */
   private parseFieldValue(value: string): any {
-    // 移除引号
+    // 移除引号并处理转义序列
     if ((value.startsWith('"') && value.endsWith('"')) ||
         (value.startsWith("'") && value.endsWith("'"))) {
-      return value.slice(1, -1);
+      return unescapeString(value.slice(1, -1));
     }
     
     // 变量字段 $varName
@@ -1034,7 +1052,7 @@ export class BlocklyAbsParser {
         (value.startsWith("'") && value.endsWith("'"))) {
       return {
         type: 'text',
-        fields: { TEXT: value.slice(1, -1) },
+        fields: { TEXT: unescapeString(value.slice(1, -1)) },
         inputs: {},
         children: [],
         indent: 0,

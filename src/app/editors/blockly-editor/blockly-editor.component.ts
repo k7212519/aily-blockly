@@ -150,7 +150,7 @@ export class BlocklyEditorComponent {
           showProgress: false,
           setTimeout: 3000
         });
-      }, 1000);
+      }, 100);
     }
     // 3. 加载开发板module中的board.json
     this.uiService.updateFooterState({ state: 'doing', text: this.translate.instant('BLOCKLY_EDITOR.LOADING_BOARD_CONFIG') });

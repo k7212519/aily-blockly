@@ -528,16 +528,23 @@ export class NpmService {
 
   // 检查npm依赖是否安装正常
   async installedOk(path) {
+    const startTime = performance.now();
+    console.log('[installedOk] 开始检查依赖状态...');
     try {
       const result = await window['npm'].run({
-        cmd: `npm list --depth=0 --json --prefix "${path}"`,
+        cmd: `npm list --depth=0 --offline --json --prefix "${path}"`,
         option: { ignoreErr: true },
       });
+      const elapsed = (performance.now() - startTime).toFixed(1);
       if (result === false) {
+        console.log(`[installedOk] 检查完成，依赖未安装，耗时: ${elapsed}ms`);
         return false;
       }
+      console.log(`[installedOk] 检查完成，依赖已安装，耗时: ${elapsed}ms`);
       return true;
     } catch (err) {
+      const elapsed = (performance.now() - startTime).toFixed(1);
+      console.log(`[installedOk] 检查异常，耗时: ${elapsed}ms`, err);
       return false;
     }
   }
