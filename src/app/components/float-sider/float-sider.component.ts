@@ -80,7 +80,7 @@ export class FloatSiderComponent implements OnInit, OnDestroy {
       //   height: 600
       // });
       this.uiService.openWindow({
-        path: `iframe?url=${encodeURIComponent('https://tool.aily.pro/component-viewer?type=json')}`,
+        path: `iframe?url=${encodeURIComponent('https://tool.aily.pro/component-viewer?type=json&theme=dark')}`,
         // path: `iframe?url=${encodeURIComponent('http://localhost:3051/component-viewer?type=json')}`,
         data: this.electronService.readFile(pinmapJsonPath),
         width: 800,
@@ -126,14 +126,15 @@ export class FloatSiderComponent implements OnInit, OnDestroy {
 
   showCircuit() {
     this.message.info(this.translate.instant('FLOAT_SIDER.CIRCUIT') + ' ' + this.translate.instant('COMMON.FEATURE_COMING_SOON'));
-    // if (this.electronService.isElectron) {
-    //   this.uiService.openWindow({
-    //     // path: `iframe?url=${encodeURIComponent('https://tool.aily.pro/connection-graph')}`,
-    //     path: `iframe?url=${encodeURIComponent('http://localhost:3051/connection-graph?type=json')}`,
-    //     data: { a: 1, b: 2 },
-    //     width: 800,
-    //     height: 600
-    //   });
-    // }
+    return;
+    if (this.electronService.isElectron) {
+      this.uiService.openWindow({
+        // path: `iframe?url=${encodeURIComponent('https://tool.aily.pro/connection-graph?type=json&theme=dark')}`,
+        path: `iframe?url=${encodeURIComponent('http://localhost:50002/connection-graph?type=json&theme=dark')}`,
+        data: { a: 1, b: 2 },
+        width: 800,
+        height: 600
+      });
+    }
   }
 }
