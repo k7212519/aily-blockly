@@ -3,6 +3,7 @@ import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { NZ_MODAL_DATA } from 'ng-zorro-antd/modal';
 import { ActivatedRoute } from '@angular/router';
 import { ElectronService } from '../../services/electron.service';
+import { ConnectionGraphService } from '../../services/connection-graph.service';
 import { SubWindowComponent } from '../../components/sub-window/sub-window.component';
 import { WindowMessenger, connect, Connection } from 'penpal';
 
@@ -46,6 +47,7 @@ export class IframeComponent implements OnInit, OnDestroy {
     private sanitizer: DomSanitizer,
     private route: ActivatedRoute,
     private electronService: ElectronService,
+    private connectionGraphService: ConnectionGraphService,
   ) {
     // 如果是从 modal 打开，使用 modal data
     if (this.data) {
@@ -116,6 +118,7 @@ export class IframeComponent implements OnInit, OnDestroy {
    * 处理来自 openWindow 传递的 IPC 初始化数据
    */
   private handleInitData(initData: any): void {
+    console.log('[IframeComponent] handleInitData received:', initData ? 'has data' : 'null');
     if (!initData) return;
 
     if (initData.title) {
@@ -132,6 +135,7 @@ export class IframeComponent implements OnInit, OnDestroy {
     }
 
     this.iframeData = initData.data !== undefined ? initData.data : initData;
+    console.log('[IframeComponent] iframeData set:', this.iframeData ? JSON.stringify(this.iframeData).slice(0, 300) + '...' : 'null');
 
     // 如果 penpal 连接已建立且有数据，立即推送给子页面
     this.pushDataToRemote();
@@ -175,11 +179,24 @@ export class IframeComponent implements OnInit, OnDestroy {
           getData: () => {
             return this.iframeData ?? null;
           },
+          // 子页面编辑连线后回调此方法，持久化更新
+          onConnectionsChanged: (data: any) => {
+            try {
+              if (data && typeof data === 'object') {
+                this.connectionGraphService.saveConnectionGraph(data);
+              }
+            } catch (e) {
+              console.warn('onConnectionsChanged 持久化失败:', e);
+            }
+          },
         },
       });
 
       const remote = await this.penpalConnection.promise;
       this.remoteApi = remote;
+
+      // 将 remote API 注册到 ConnectionGraphService，供 Agent 工具推送数据
+      this.connectionGraphService.setIframeApi(remote);
 
       // 连接成功，结束 loading
       this.isLoading = false;
@@ -189,20 +206,23 @@ export class IframeComponent implements OnInit, OnDestroy {
       this.pushDataToRemote();
     } catch (error) {
       console.error('Penpal 连接失败:', error);
-      // 连接失败时降级：直接显示 iframe 内容
+      // 连接失败时降级：使用 postMessage 发送数据
       this.isLoading = false;
       this.showEmptyState = false;
     }
   }
 
   /**
-   * 推送数据给已连接的子页面
+   * 推送数据给已连接的子页面（penpal 方式）
    */
   private async pushDataToRemote(): Promise<void> {
+    console.log('[IframeComponent] pushDataToRemote called, hasRemoteApi:', !!this.remoteApi, 'hasData:', !!this.iframeData);
     if (!this.remoteApi || !this.iframeData) return;
     try {
       if (typeof this.remoteApi['receiveData'] === 'function') {
+        console.log('[IframeComponent] calling remoteApi.receiveData...');
         await (this.remoteApi['receiveData'] as (data: unknown) => Promise<void>)(this.iframeData);
+        console.log('[IframeComponent] receiveData completed');
       }
     } catch (error) {
       console.warn('推送数据给子页面失败:', error);
@@ -229,6 +249,8 @@ export class IframeComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    // 清除 ConnectionGraphService 中的 iframe API 引用
+    this.connectionGraphService.clearIframeApi();
     if (this.penpalConnection) {
       this.penpalConnection.destroy();
       this.penpalConnection = null;

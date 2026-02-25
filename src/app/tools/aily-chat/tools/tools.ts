@@ -2133,6 +2133,214 @@ IMPORTANT: 任务ID为简单的递增数字（1, 2, 3...），请使用正确的
             properties: {},
             required: []
         }
+    },
+    // =============================================================================
+    // 连线图工具 (Connection Graph)
+    // =============================================================================
+    {
+        name: 'generate_connection_graph',
+        description: `根据用户描述的硬件连接需求，分析开发板和外设的引脚信息，生成连接配置。工具会返回引脚摘要和提示词规则，你需要根据这些信息输出标准格式的连线 JSON，然后调用 validate_connection_graph 工具验证和保存。
+
+适用场景：
+- 用户说"帮我连线"、"怎么接 DHT20"、"生成接线图"等
+- 用户描述了硬件连接需求
+
+**组件类型支持：**
+1. **硬件组件**（如传感器、显示屏）：有物理引脚，需要生成连线
+2. **软件组件**（如 WiFi/MQTT/HTTP）：无物理引脚，以信息卡片形式展示
+
+**多实例支持：**
+- 同一传感器需要多个实例时（如两个 DHT20），使用对象格式指定别名
+- 示例：[{ "id": "lib-dht:dht20:asair", "alias": "dht_indoor", "label": "室内" }, { "id": "lib-dht:dht20:asair", "alias": "dht_outdoor", "label": "室外" }]
+
+**软件组件输出格式：**
+软件组件在 components 数组中需设置 componentType: "software" 和 softwareConfig 字段：
+\`\`\`json
+{
+  "refId": "wifi",
+  "componentId": "WiFi",
+  "componentName": "WiFi 连接",
+  "pinmapId": "lib-wifi:default:default",
+  "componentType": "software",
+  "softwareConfig": {
+    "libraryType": "wifi",
+    "icon": "wifi",
+    "properties": { "ssid": "MyNetwork" }
+  }
+}
+\`\`\`
+
+提示：如果不确定传感器有哪些变体可用，先调用 get_sensor_pinmap_catalog 工具查询。`,
+        input_schema: {
+            type: 'object',
+            properties: {
+                pinmapIds: {
+                    type: 'array',
+                    description: `组件的 pinmapId 列表。支持两种格式：
+1. 字符串：直接使用 pinmapId（如 "lib-dht:dht20:asair"）
+2. 对象：带别名和标签（如 { "id": "lib-dht:dht20:asair", "alias": "dht_indoor", "label": "室内温湿度" }）
+
+多实例示例（两个 DHT20）：
+[
+  { "id": "lib-dht:dht20:asair", "alias": "dht_indoor", "label": "室内" },
+  { "id": "lib-dht:dht20:asair", "alias": "dht_outdoor", "label": "室外" }
+]`,
+                    items: {
+                        oneOf: [
+                            { type: 'string' },
+                            {
+                                type: 'object',
+                                properties: {
+                                    id: { type: 'string', description: 'pinmapId 完整标识符' },
+                                    alias: { type: 'string', description: '用户定义的别名（用于 refId），如 "dht_indoor"' },
+                                    label: { type: 'string', description: '显示名称，如 "室内温湿度"' }
+                                },
+                                required: ['id']
+                            }
+                        ]
+                    }
+                },
+                components: {
+                    type: 'array',
+                    description: '（旧版兼容）组件简称列表，如 ["dht20", "servo"]。优先使用 pinmapIds 参数。',
+                    items: { type: 'string' }
+                },
+                requirements: {
+                    type: 'string',
+                    description: '用户的特殊连接需求，如"DHT20 用 3.3V 供电"、"舵机接 D0"等'
+                }
+            },
+            required: []
+        }
+    },
+    {
+        name: 'get_pinmap_summary',
+        description: `获取当前项目所用开发板和外设的引脚摘要信息，包括每个引脚的功能列表和类型。同时返回已有的连线图摘要（如果存在）。
+
+支持通过 pinmapIds 参数指定具体的传感器变体，适用于多变体传感器（如 DHT20 有 Asair/Seeed 不同版本）。`,
+        input_schema: {
+            type: 'object',
+            properties: {
+                pinmapIds: {
+                    type: 'array',
+                    description: '可选，指定要获取摘要的组件 pinmapId 列表（如 ["lib-dht:dht20:asair"]）。如果为空则返回开发板引脚摘要。',
+                    items: { type: 'string' }
+                }
+            },
+            required: []
+        }
+    },
+    {
+        name: 'get_sensor_pinmap_catalog',
+        description: `获取已安装传感器库的 pinmap 目录，列出可用的传感器型号和变体。用于发现项目中可用的传感器及其 pinmapId。
+
+**返回信息包括：**
+
+1. **有 pinmap_catalog.json 的库（catalogs）：**
+   - 库名称和显示名
+   - 传感器型号列表（如 DHT11、DHT20、DHT22）
+   - 每个型号的变体（协议、厂家、分辨率等）
+   - 变体的 pinmapId（用于 generate_connection_graph）
+   - 变体状态（available/needs_generation）
+
+2. **没有 pinmap_catalog.json 的库（librariesMissingCatalog）：**
+   - 库名称和显示名
+   - catalogStatus: "missing_catalog"
+   - 使用 generate_pinmap 工具为这些库生成配置`,
+        input_schema: {
+            type: 'object',
+            properties: {
+                libraryFilter: {
+                    type: 'string',
+                    description: '可选，只返回指定库的目录（库的 packageSlug，如 "lib-dht"、"lib-u8g2"）'
+                },
+                includeNeedsGeneration: {
+                    type: 'boolean',
+                    description: '是否包含需要生成 pinmap 的项目（status=needs_generation）',
+                    default: true
+                },
+                includeBoards: {
+                    type: 'boolean',
+                    description: '是否包含开发板',
+                    default: false
+                }
+            },
+            required: []
+        }
+    },
+    {
+        name: 'validate_connection_graph',
+        description: `验证连线配置的安全性（短路、电压不匹配、引脚冲突、缺少电源/接地等），并将连线数据保存到项目文件。如果传入 connection_data 参数则验证并保存该数据；否则验证项目中已保存的连线。
+
+使用流程：generate_connection_graph → 你生成 JSON → validate_connection_graph(connection_data=JSON) → 验证+保存`,
+        input_schema: {
+            type: 'object',
+            properties: {
+                connection_data: {
+                    type: 'object',
+                    description: '要验证并保存的连线数据 JSON（符合 connection_output.json 格式）。如果为空则验证项目中已保存的连线。'
+                }
+            },
+            required: []
+        }
+    },
+    {
+        name: 'generate_pinmap',
+        description: `为缺失 pinmap 配置的传感器/模块生成引脚配置文件。
+
+**适用场景：**
+1. get_sensor_pinmap_catalog 返回的变体 status 为 "needs_generation"
+2. get_sensor_pinmap_catalog 返回的库 catalogStatus 为 "missing_catalog"（库没有 pinmap_catalog.json）
+
+工具会返回：
+- 库的 README.md 文档内容（如果存在）
+- 示例代码
+- 参考的 pinmap 模板
+- 生成规则和格式说明
+
+你需要根据这些信息输出标准格式的 pinmap JSON（ComponentConfig 格式），然后工具会将其保存到对应库的 pinmaps 目录。
+
+使用流程：
+1. get_sensor_pinmap_catalog 发现 status=needs_generation 的变体或 catalogStatus=missing_catalog 的库
+2. 调用本工具获取库文档和模板
+3. 你生成 pinmap JSON
+4. 调用 save_pinmap 工具保存（会自动创建/更新 pinmap_catalog.json）`,
+        input_schema: {
+            type: 'object',
+            properties: {
+                pinmapId: {
+                    type: 'string',
+                    description: '目标组件的 fullId（如 "lib-servo:sg90:default"）'
+                },
+                referenceSource: {
+                    type: 'string',
+                    enum: ['readme', 'example', 'auto'],
+                    description: '参考信息来源，默认 auto（自动收集所有可用信息）',
+                    default: 'auto'
+                }
+            },
+            required: ['pinmapId']
+        }
+    },
+    {
+        name: 'save_pinmap',
+        description: `保存 LLM 生成的 pinmap 配置到传感器库。配合 generate_pinmap 工具使用。
+
+保存成功后会自动更新 pinmap_catalog.json 中的 status 为 "available"。`,
+        input_schema: {
+            type: 'object',
+            properties: {
+                pinmapId: {
+                    type: 'string',
+                    description: '目标组件的 fullId（如 "lib-servo:sg90:default"）'
+                },
+                pinmapConfig: {
+                    type: 'object',
+                    description: '完整的 pinmap 配置 JSON（ComponentConfig 格式，包含 id, name, width, height, images, pins, functionTypes 字段）'
+                }
+            },
+            required: ['pinmapId', 'pinmapConfig']
+        }
     }
     // {
     //     name: 'verify_block_existence',

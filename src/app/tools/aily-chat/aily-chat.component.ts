@@ -63,6 +63,9 @@ import {
 // import { insertDslHandler, getDslHelpHandler } from './tools/dslTool';
 import { syncAbsFileHandler } from './tools/syncAbsFileTool';
 import { getAbsSyntaxTool } from './tools/getAbsSyntaxTool';
+// 连线图工具
+import { generateConnectionGraphTool, getPinmapSummaryTool, validateConnectionGraphTool, getSensorPinmapCatalogTool, generatePinmapTool, savePinmapTool } from './tools/connectionGraphTool';
+import { ConnectionGraphService } from '../../services/connection-graph.service';
 // // 原子化块操作工具
 // import {
 //   createSingleBlockTool,
@@ -571,6 +574,19 @@ export class AilyChatComponent implements OnDestroy {
         return "查询块定义信息...";
       case 'getBlockConnectionCompatibilityTool':
         return "分析块连接兼容性...";
+      // 连线图工具
+      case 'generate_connection_graph':
+        return "分析引脚信息，准备连线方案...";
+      case 'get_pinmap_summary':
+        return "获取引脚摘要信息...";
+      case 'get_sensor_pinmap_catalog':
+        return "扫描传感器库 pinmap 目录...";
+      case 'validate_connection_graph':
+        return "验证连线配置安全性...";
+      case 'generate_pinmap':
+        return "获取 pinmap 生成参考信息...";
+      case 'save_pinmap':
+        return "保存 pinmap 配置...";
       default:
         return `执行工具: ${cleanToolName}`;
     }
@@ -703,6 +719,18 @@ export class AilyChatComponent implements OnDestroy {
         return `块定义查询完成`;
       case 'getBlockConnectionCompatibilityTool':
         return `块连接兼容性分析完成`;
+      case 'generate_connection_graph':
+        return `连线方案生成完成`;
+      case 'get_pinmap_summary':
+        return `引脚摘要获取成功`;
+      case 'get_sensor_pinmap_catalog':
+        return `传感器目录获取完成`;
+      case 'validate_connection_graph':
+        return `连线配置验证完成`;
+      case 'generate_pinmap':
+        return `Pinmap 参考信息获取完成`;
+      case 'save_pinmap':
+        return `Pinmap 配置保存成功`;
       default:
         return `${cleanToolName} 执行成功`;
     }
@@ -1079,7 +1107,8 @@ Do not create non-existent boards and libraries.
     private electronService: ElectronService,
     private ailyChatConfigService: AilyChatConfigService,
     private onboardingService: OnboardingService,
-    private absAutoSyncService: AbsAutoSyncService
+    private absAutoSyncService: AbsAutoSyncService,
+    private connectionGraphService: ConnectionGraphService
   ) {
     // securityContext 改为 getter，每次使用时动态获取当前项目路径
   }
@@ -2089,7 +2118,7 @@ ${JSON.stringify(errData)}
             let resultState = "done";
             let resultText = '';
 
-            // console.log("工具调用请求: ", data.tool_name, toolArgs);
+            console.log("工具调用请求: ", data.tool_name, toolArgs);
 
             // 定义 block 工具列表
             const blockTools = [
@@ -3468,6 +3497,150 @@ ${JSON.stringify(errData)}
                   //                       resultText = 'Arduino代码语法检查通过';
                   //                     }
                   //                     break;
+
+                  case 'generate_connection_graph':
+                    this.appendMessage('aily', `
+
+\`\`\`aily-state
+{
+  "state": "doing",
+  "text": "分析引脚信息，准备连线方案...",
+  "id": "${toolCallId}"
+}
+\`\`\`\n\n
+                    `);
+                    toolResult = await generateConnectionGraphTool(
+                      this.connectionGraphService,
+                      this.projectService,
+                      toolArgs
+                    );
+                    if (toolResult?.is_error) {
+                      resultState = "error";
+                      resultText = '连线方案生成失败';
+                    } else {
+                      resultText = '连线方案生成完成';
+                    }
+                    break;
+
+                  case 'get_pinmap_summary':
+                    this.appendMessage('aily', `
+
+\`\`\`aily-state
+{
+  "state": "doing",
+  "text": "获取引脚摘要信息...",
+  "id": "${toolCallId}"
+}
+\`\`\`\n\n
+                    `);
+                    toolResult = await getPinmapSummaryTool(
+                      this.connectionGraphService,
+                      this.projectService,
+                      toolArgs
+                    );
+                    if (toolResult?.is_error) {
+                      resultState = "error";
+                      resultText = '引脚摘要获取失败';
+                    } else {
+                      resultText = '引脚摘要获取成功';
+                    }
+                    break;
+
+                  case 'validate_connection_graph':
+                    this.appendMessage('aily', `
+
+\`\`\`aily-state
+{
+  "state": "doing",
+  "text": "验证连线配置安全性...",
+  "id": "${toolCallId}"
+}
+\`\`\`\n\n
+                    `);
+                    toolResult = await validateConnectionGraphTool(
+                      this.connectionGraphService,
+                      this.projectService,
+                      toolArgs
+                    );
+                    if (toolResult?.is_error) {
+                      resultState = "error";
+                      resultText = '连线配置验证失败';
+                    } else {
+                      resultText = '连线配置验证完成';
+                    }
+                    break;
+
+                  case 'get_sensor_pinmap_catalog':
+                    this.appendMessage('aily', `
+
+\`\`\`aily-state
+{
+  "state": "doing",
+  "text": "扫描传感器库 pinmap 目录...",
+  "id": "${toolCallId}"
+}
+\`\`\`\n\n
+                    `);
+                    toolResult = await getSensorPinmapCatalogTool(
+                      this.connectionGraphService,
+                      this.projectService,
+                      toolArgs
+                    );
+                    if (toolResult?.is_error) {
+                      resultState = "error";
+                      resultText = '传感器目录获取失败';
+                    } else {
+                      resultText = '传感器目录获取完成';
+                    }
+                    break;
+
+                  case 'generate_pinmap':
+                    this.appendMessage('aily', `
+
+\`\`\`aily-state
+{
+  "state": "doing",
+  "text": "获取 pinmap 生成参考信息...",
+  "id": "${toolCallId}"
+}
+\`\`\`\n\n
+                    `);
+                    toolResult = await generatePinmapTool(
+                      this.connectionGraphService,
+                      this.projectService,
+                      toolArgs
+                    );
+                    if (toolResult?.is_error) {
+                      resultState = "error";
+                      resultText = 'Pinmap 参考信息获取失败';
+                    } else {
+                      resultText = 'Pinmap 参考信息获取完成';
+                    }
+                    break;
+
+                  case 'save_pinmap':
+                    this.appendMessage('aily', `
+
+\`\`\`aily-state
+{
+  "state": "doing",
+  "text": "保存 pinmap 配置...",
+  "id": "${toolCallId}"
+}
+\`\`\`\n\n
+                    `);
+                    toolResult = await savePinmapTool(
+                      this.connectionGraphService,
+                      this.projectService,
+                      toolArgs
+                    );
+                    if (toolResult?.is_error) {
+                      resultState = "error";
+                      resultText = 'Pinmap 配置保存失败';
+                    } else {
+                      resultText = 'Pinmap 配置保存成功';
+                    }
+                    break;
                 }
               }
 
@@ -3659,7 +3832,7 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
               this.completeToolCall(data.tool_id, data.tool_name, finalState, resultText);
             }
 
-            // console.log(`工具调用结果: `, toolResult, resultText);
+            console.log(`工具调用结果: `, toolResult, resultText);
 
             this.send("tool", JSON.stringify({
               "type": "tool",
