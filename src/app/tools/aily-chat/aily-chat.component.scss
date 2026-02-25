@@ -296,3 +296,14 @@ nz-resize-handle {
     }
   }
 }
+
+::ng-deep .x-markdown {
+  p {
+    margin-top: 0.5em;
+    margin-bottom: 0.5em;
+  }
+
+  pre {
+    margin-bottom: 0.5em;
+  }
+}
