@@ -13,7 +13,7 @@ import { XAilyButtonViewerComponent } from './x-aily-button-viewer/x-aily-button
 import { XAilyBoardViewerComponent } from './x-aily-board-viewer/x-aily-board-viewer.component';
 import { XAilyLibraryViewerComponent } from './x-aily-library-viewer/x-aily-library-viewer.component';
 import { XAilyThinkViewerComponent } from './x-aily-think-viewer/x-aily-think-viewer.component';
-import { MermaidCodeComponent } from '@anthropic/ngx-x-markdown';
+import { MermaidCodeComponent } from 'ngx-x-markdown';
 import { XAilyContextViewerComponent } from './x-aily-context-viewer/x-aily-context-viewer.component';
 import { XAilyBlocklyViewerComponent } from './x-aily-blockly-viewer/x-aily-blockly-viewer.component';
 import { XAilyErrorViewerComponent } from './x-aily-error-viewer/x-aily-error-viewer.component';

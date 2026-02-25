@@ -6,8 +6,8 @@ import {
   SimpleChanges,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { XMarkdownComponent } from '@anthropic/ngx-x-markdown';
-import type { StreamingOption, ComponentMap } from '@anthropic/ngx-x-markdown';
+import { XMarkdownComponent } from 'ngx-x-markdown';
+import type { StreamingOption, ComponentMap } from 'ngx-x-markdown';
 import { AilyChatCodeComponent } from './aily-chat-code.component';
 
 @Component({

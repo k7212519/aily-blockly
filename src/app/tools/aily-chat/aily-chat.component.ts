@@ -83,7 +83,7 @@ import { NzModalService } from 'ng-zorro-antd/modal';
 import { ConfigService } from '../../services/config.service';
 import { createSecurityContext } from './services/security.service';
 import { AilyChatConfigService } from './services/aily-chat-config.service';
-import { MermaidCodeComponent } from '@anthropic/ngx-x-markdown';
+import { MermaidCodeComponent } from 'ngx-x-markdown';
 
 export interface Tool {
   name: string;
