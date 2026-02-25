@@ -23,18 +23,27 @@ export class XDialogComponent implements OnChanges {
   @Input() doing = false;
 
   streamContent = signal('');
-  streamingConfig: StreamingOption = { hasNextChunk: false, enableAnimation: false };
+  streamingConfig = signal<StreamingOption>({ hasNextChunk: false, enableAnimation: false });
   readonly componentMap: ComponentMap = { code: AilyChatCodeComponent };
 
   private lastRaw = '';
 
+  /** 检测 think 是否执行中（存在未闭合的 <think> 标签） */
+  private isThinkExecuting(content: string): boolean {
+    const lastThink = content.lastIndexOf('<think>');
+    if (lastThink === -1) return false;
+    const afterThink = content.slice(lastThink + 7);
+    return !afterThink.includes('</think>');
+  }
+
   ngOnChanges(changes: SimpleChanges) {
-    if (changes['doing']) {
-      this.streamingConfig = {
-        hasNextChunk: this.doing,
-        enableAnimation: this.doing,
-        animationConfig: { fadeDuration: 150, easing: 'ease-in-out' },
-      };
+    if (changes['doing'] || changes['content']) {
+      const thinkExecuting = this.isThinkExecuting(this.content || '');
+      this.streamingConfig.set({
+        hasNextChunk: thinkExecuting ? false : this.doing,
+        // enableAnimation: this.doing,
+        // animationConfig: { fadeDuration: 150, easing: 'ease-in-out' },
+      });
       // 流式结束时重新预处理，以便 normalizeAilyMermaid 将 aily-mermaid 转为 JSON 对象
       if (!this.doing) {
         const processed = this.preprocess(this.content || '');

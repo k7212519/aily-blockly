@@ -13,7 +13,7 @@
     @if (streamContent()) {
       <x-markdown
         [content]="streamContent()"
-        [streaming]="streamingConfig"
+        [streaming]="streamingConfig()"
         [components]="componentMap"
         rootClassName="x-markdown-dark"
       >
