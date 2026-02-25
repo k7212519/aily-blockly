@@ -40,6 +40,7 @@ import { getHardwareCategoriesTool } from './tools/getHardwareCategoriesTools';
 import { getBoardParametersTool } from './tools/getBoardParametersTool';
 import globTool from './tools/globTool';
 import { fetchTool, FetchToolService } from './tools/fetchTool';
+import { webSearchTool, WebSearchToolService } from './tools/webSearchTool';
 import {
   smartBlockTool,
   connectBlocksTool,
@@ -75,7 +76,7 @@ import { getAbsSyntaxTool } from './tools/getAbsSyntaxTool';
 // import { flatCreateBlocksTool } from './tools/flatBlockTools';
 // // ABS 块操作工具 (Aily Block Syntax)
 // import { dslCreateBlocksTool } from './tools/dslBlockTools';
-import { todoWriteTool } from './tools';
+import { todoWriteTool, injectTodoReminder } from './tools';
 // import { arduinoSyntaxTool } from './tools/arduinoSyntaxTool';
 import { NzModalService } from 'ng-zorro-antd/modal';
 import { ConfigService } from '../../services/config.service';
@@ -519,6 +520,8 @@ export class AilyChatComponent implements OnDestroy {
       case 'fetch':
         const fetchUrl = args.url ? this.getUrlDisplayName(args.url) : 'unknown';
         return `进行网络请求: ${fetchUrl}`;
+      case 'web_search':
+        return `搜索: ${args.query || 'unknown'}`;
       case 'reload_project':
         return `重新加载项目...`;
       case 'edit_abi_file':
@@ -649,6 +652,9 @@ export class AilyChatComponent implements OnDestroy {
       case 'fetch':
         const fetchUrl = args?.url ? this.getUrlDisplayName(args.url) : 'unknown';
         return `网络请求 ${fetchUrl} 成功`;
+      case 'web_search':
+        const searchResultCount = result?.metadata?.resultCount || 0;
+        return `搜索完成，找到 ${searchResultCount} 条结果`;
       case 'reload_project':
         return "项目重新加载成功";
       case 'edit_abi_file':
@@ -1079,6 +1085,7 @@ Do not create non-existent boards and libraries.
     private cmdService: CmdService,
     private blocklyService: BlocklyService,
     private fetchToolService: FetchToolService,
+    private webSearchToolService: WebSearchToolService,
     private router: Router,
     private message: NzMessageService,
     private authService: AuthService,
@@ -1330,6 +1337,9 @@ Do not create non-existent boards and libraries.
         return;
       }
       this.send("user", text, false);
+      // 按钮点击后滚动到底部
+      this.autoScrollEnabled = true;
+      this.scrollToBottom();
       return;
     }
 
@@ -1755,6 +1765,21 @@ ${JSON.stringify(errData)}
 
   autoScrollEnabled = true; // 控制是否自动滚动到底部
 
+  // 标记是否收到了 user_input_required 和 StreamComplete，两者都到齐后再设置 done
+  private pendingUserInput = false;
+  private streamCompleted = false;
+
+  /**
+   * 当 user_input_required 和 StreamComplete 都到齐后，执行最终状态设置
+   */
+  private finalizeUserInput(): void {
+    this.pendingUserInput = false;
+    this.streamCompleted = false;
+    if (this.list.length > 0 && this.list[this.list.length - 1].role === 'aily') {
+      this.list[this.list.length - 1].state = 'done';
+    }
+    this.isWaiting = false;
+  }
 
   private _isWaiting = false;
 
@@ -1921,11 +1946,11 @@ ${JSON.stringify(errData)}
     this.chatService.cancelTask(this.sessionId).subscribe((res: any) => {
       if (res.status === 'success') {
         // console.log('任务已取消:', res);
-        this.isWaiting = false;
-        this.isCompleted = true;
       } else {
         console.warn('取消任务失败:', res);
       }
+      this.isWaiting = false;
+      this.isCompleted = true;
     });
   }
 
@@ -1943,6 +1968,10 @@ ${JSON.stringify(errData)}
       this.messageSubscription.unsubscribe();
       this.messageSubscription = null;
     }
+
+    // 重置待处理标记
+    this.pendingUserInput = false;
+    this.streamCompleted = false;
 
     this.messageSubscription = (this.debug ? this.chatService.debugStream(this.sessionId) : this.chatService.streamConnect(this.sessionId)).subscribe({
       next: async (data: any) => {
@@ -2085,7 +2114,7 @@ ${JSON.stringify(errData)}
             let resultState = "done";
             let resultText = '';
 
-            console.log("工具调用请求: ", data.tool_name, toolArgs);
+            // console.log("工具调用请求: ", data.tool_name, toolArgs);
 
             // 定义 block 工具列表
             const blockTools = [
@@ -2710,6 +2739,17 @@ ${JSON.stringify(errData)}
                       resultText = `网络请求异常，即将重试`;
                     } else {
                       resultText = `网络请求 ${fetchUrl} 成功`;
+                    }
+                    break;
+                  case 'web_search':
+                    this.startToolCall(toolCallId, data.tool_name, `搜索: ${toolArgs.query || ''}`, toolArgs);
+                    toolResult = await webSearchTool(this.webSearchToolService, toolArgs);
+                    if (toolResult?.is_error) {
+                      resultState = "error";
+                      resultText = `搜索失败，即将重试`;
+                    } else {
+                      const searchCount = toolResult?.metadata?.resultCount || 0;
+                      resultText = `搜索完成，找到 ${searchCount} 条结果`;
                     }
                     break;
                   case 'ask_approval':
@@ -3475,6 +3515,11 @@ ${JSON.stringify(errData)}
             // 获取keyinfo
             // const keyInfo = await this.getKeyInfo();
 
+            // 集中注入 todo 提醒 - 对所有非 todo 工具的结果统一注入
+            if (toolResult && data.tool_name !== 'todo_write_tool') {
+              toolResult = injectTodoReminder(toolResult, data.tool_name);
+            }
+
             let toolContent = '';
 
             // 拼接到工具结果中返回
@@ -3639,7 +3684,7 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
               this.completeToolCall(data.tool_id, data.tool_name, finalState, resultText);
             }
 
-            console.log(`工具调用结果: `, toolResult, resultText);
+            // console.log(`工具调用结果: `, toolResult, resultText);
 
             this.send("tool", JSON.stringify({
               "type": "tool",
@@ -3649,12 +3694,20 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
               "is_error": toolResult?.is_error ?? false
             }, null, 2), false);
           } else if (data.type === 'user_input_required') {
-            // 处理用户输入请求 - 需要用户补充消息时停止等待状态
-            // 设置最后一条消息状态为done
-            if (this.list.length > 0 && this.list[this.list.length - 1].role === 'aily') {
-              this.list[this.list.length - 1].state = 'done';
+            // 处理用户输入请求 - 需要与 StreamComplete 配合，两者都到齐后再设置 done
+            // 避免后续流式内容（如 aily-button）因提前设置 done 而未渲染
+            this.pendingUserInput = true;
+            if (this.streamCompleted) {
+              // StreamComplete 已先到达，立即完成
+              this.finalizeUserInput();
             }
-            this.isWaiting = false;
+          } else if (data.type === 'StreamComplete') {
+            // 流式内容传输完成
+            this.streamCompleted = true;
+            if (this.pendingUserInput) {
+              // user_input_required 已先到达，立即完成
+              this.finalizeUserInput();
+            }
           } else if (data.type === 'TaskCompleted') {
             const stopReason = data.stop_reason || 'unknown';
             // 判断停止原因
@@ -3732,6 +3785,10 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
       complete: () => {
         // 清理流式残留内容
         this.cleanupLastAiMessage();
+
+        // 清除待处理标记（兜底处理）
+        this.pendingUserInput = false;
+        this.streamCompleted = false;
 
         if (this.list.length > 0 && this.list[this.list.length - 1].role === 'aily') {
           this.list[this.list.length - 1].state = 'done';
