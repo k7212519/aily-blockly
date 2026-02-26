@@ -34,7 +34,7 @@ import { CommonModule } from '@angular/common';
       .ac-think {
         border-radius: 5px;
         padding: 5px 10px;
-        margin: 4px 0;
+        margin: 0;
         overflow: hidden;
         background-color: #3a3a3a;
         color: #ccc;

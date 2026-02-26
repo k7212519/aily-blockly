@@ -463,7 +463,6 @@ export class BlocklyComponent implements DoCheck, OnDestroy {
       this.workspace.addChangeListener((event: any) => {
         this.codeGenerationSubject.next();
         if (event.type !== Blockly.Events.SELECTED) {
-          console.log("🚀 ~ BlocklyComponent ~ ngAfterViewInit ~ event.type:", event.type)
           // 工作区变更时同步 Minimap（含 AI 批量修改 blocks 的场景）
           this.minimapSyncSubject.next();
         }
