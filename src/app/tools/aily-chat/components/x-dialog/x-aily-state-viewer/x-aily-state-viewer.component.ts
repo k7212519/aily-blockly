@@ -26,7 +26,7 @@ import { CommonModule } from '@angular/common';
         padding: 5px 10px;
         border-radius: 5px;
         font-size: 13px;
-        margin: 4px 0;
+        margin: 0;
         background-color: #3a3a3a;
         color: #ccc;
         overflow: hidden;

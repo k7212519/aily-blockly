@@ -18,9 +18,11 @@ import { CommonModule } from '@angular/common';
         margin: 0;
         border-radius: 4px;
         overflow-x: auto;
-        background: #1e1e1e;
+        background: #0d1117;
         padding: 12px;
         border: 1px solid #444;
+        scrollbar-width: thin !important;
+        scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
       }
       pre code {
         font-size: 12px;
@@ -32,7 +34,6 @@ import { CommonModule } from '@angular/common';
         color: #ffbd08;
         padding: 1px 4px;
         border-radius: 3px;
-        background: #1e1e1e;
       }
     `,
   ],
