@@ -60,7 +60,7 @@ export function resolvePin(
         for (const pin of config.pins) {
           if (pin.visible === false || pin.disabled) continue;
           const fn = pin.functions.find(f => 
-            f.name.toUpperCase() === pinOrFunc.toUpperCase()
+            f.name.trim().toUpperCase() === pinOrFunc.toUpperCase()
           );
           if (fn) {
             return { pinId: pin.id, functionName: assign.role };
@@ -77,8 +77,9 @@ export function resolvePin(
     for (const fn of pin.functions) {
       if (fn.visible === false || fn.disabled) continue;
       
-      if (fn.name.toUpperCase() === searchName) {
-        return { pinId: pin.id, functionName: fn.name };
+      // trim() 处理 pinmap 中可能存在的尾随空格
+      if (fn.name.trim().toUpperCase() === searchName) {
+        return { pinId: pin.id, functionName: fn.name.trim() };
       }
     }
   }
@@ -91,7 +92,8 @@ export function resolvePin(
     for (const fn of pin.functions) {
       if (fn.visible === false || fn.disabled) continue;
       
-      if (fn.name.toUpperCase() === searchName && 
+      const fnName = fn.name.trim();
+      if (fnName.toUpperCase() === searchName && 
           ['digital', 'gpio', 'analog'].includes(fn.type)) {
         // 如果有连接类型，尝试推断更具体的功能
         if (connectionType) {
@@ -99,10 +101,10 @@ export function resolvePin(
             f.type === connectionType && !f.disabled && f.visible !== false
           );
           if (specificFn) {
-            return { pinId: pin.id, functionName: specificFn.name };
+            return { pinId: pin.id, functionName: specificFn.name.trim() };
           }
         }
-        return { pinId: pin.id, functionName: fn.name };
+        return { pinId: pin.id, functionName: fnName };
       }
     }
   }
@@ -115,11 +117,12 @@ export function resolvePin(
     for (const fn of pin.functions) {
       if (fn.visible === false || fn.disabled) continue;
       
-      const fnNameUpper = fn.name.toUpperCase();
+      const fnName = fn.name.trim();
+      const fnNameUpper = fnName.toUpperCase();
       
       // 移除常见前缀进行匹配
       if (fnNameUpper.endsWith(searchName) || searchName.endsWith(fnNameUpper)) {
-        return { pinId: pin.id, functionName: fn.name };
+        return { pinId: pin.id, functionName: fnName };
       }
     }
   }

@@ -144,7 +144,6 @@ export class FloatSiderComponent implements OnInit, OnDestroy {
       // path: `iframe?url=${encodeURIComponent('https://tool.aily.pro/connection-graph?type=json&theme=dark')}`,
       path: `iframe?url=${encodeURIComponent('http://localhost:4201/connection-graph?type=json&theme=dark')}`,
       data: payload,
-      // data: {a: 1, b: 2}, // 先传个测试数据，看看能不能收到
       width: 900,
       height: 700,
     });

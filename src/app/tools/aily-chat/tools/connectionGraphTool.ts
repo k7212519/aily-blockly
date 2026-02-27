@@ -393,9 +393,13 @@ ${failedPinmapIds.map(f => `- ${f.pinmapId}: ${f.reason}`).join('\n')}
     // 构建 AWS 格式的组件摘要数组
     const awsSummaryParts: string[] = [];
     
+    // 从开发板包路径提取包名
+    const boardPkgName = boardPackagePath.split(/[\\/]/).pop() || 'board';
+    const boardPinmapId = `${boardPkgName}:default:default`;
+    
     // 添加开发板摘要
     if (boardSummary) {
-      awsSummaryParts.push(generatePinmapSummary(boardSummary, 'board', 'board'));
+      awsSummaryParts.push(generatePinmapSummary(boardSummary, 'board', boardPinmapId));
     }
     
     // 添加组件摘要
@@ -680,7 +684,7 @@ export async function getSensorPinmapCatalogTool(
                 catalogStatus: 'legacy_pinmap',
                 isCurrentBoard: true,
                 tip: '该开发板使用旧版 pinmap.json 格式，可直接使用。如需更新可使用 generate_pinmap 工具。',
-                pinmapId: `${boardPkgName}:${boardConfig.id || 'default'}:default`,
+                pinmapId: `${boardPkgName}:default:default`,
               };
             } else {
               // 开发板既没有 catalog 也没有 pinmap.json
@@ -1457,11 +1461,14 @@ export async function applySchematicTool(
     // 先添加开发板组件
     const components: any[] = [];
     if (boardConfig) {
+      // 从开发板包路径提取包名（如 board-xiao_esp32s3）
+      const boardPkgName = boardPackagePath.split(/[\\/]/).pop() || 'board';
+      // 对于旧版开发板（无 pinmap_catalog.json），使用 default 作为 modelId
       components.push({
         refId: 'board',
         componentId: boardConfig.id,
         componentName: boardConfig.name,
-        pinmapId: `board-${boardConfig.id}:default`,
+        pinmapId: `${boardPkgName}:default:default`,
         isBoard: true,
       });
     }

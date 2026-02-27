@@ -1,10 +1,11 @@
-import { Component, Inject, OnDestroy, Optional, OnInit } from '@angular/core';
+import { Component, Inject, OnDestroy, Optional, OnInit, NgZone } from '@angular/core';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { NZ_MODAL_DATA } from 'ng-zorro-antd/modal';
 import { ActivatedRoute } from '@angular/router';
 import { ElectronService } from '../../services/electron.service';
 import { ConnectionGraphService } from '../../services/connection-graph.service';
 import { SubWindowComponent } from '../../components/sub-window/sub-window.component';
+import { CommonModule } from '@angular/common';
 import { WindowMessenger, connect, Connection } from 'penpal';
 
 export interface IframeModalData {
@@ -18,7 +19,7 @@ export interface IframeModalData {
 
 @Component({
   selector: 'app-iframe',
-  imports: [SubWindowComponent],
+  imports: [SubWindowComponent, CommonModule],
   templateUrl: './iframe.component.html',
   styleUrl: './iframe.component.scss'
 })
@@ -34,6 +35,9 @@ export class IframeComponent implements OnInit, OnDestroy {
   // IPC 初始化数据清理函数
   private initDataCleanup: (() => void) | null = null;
 
+  // IPC 监听器清理函数
+  private ipcCleanup: (() => void) | null = null;
+
   // 窗口标题
   windowTitle = '';
 
@@ -41,6 +45,8 @@ export class IframeComponent implements OnInit, OnDestroy {
   showEmptyState = false;
   // Loading 状态显示控制
   isLoading = true;
+  // 文件更新提示
+  hasUpdate = false;
 
   constructor(
     @Optional() @Inject(NZ_MODAL_DATA) public data: IframeModalData | null,
@@ -48,6 +54,7 @@ export class IframeComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private electronService: ElectronService,
     private connectionGraphService: ConnectionGraphService,
+    private ngZone: NgZone,
   ) {
     // 如果是从 modal 打开，使用 modal data
     if (this.data) {
@@ -137,6 +144,8 @@ export class IframeComponent implements OnInit, OnDestroy {
     this.iframeData = initData.data !== undefined ? initData.data : initData;
     console.log('[IframeComponent] iframeData set:', this.iframeData ? JSON.stringify(this.iframeData).slice(0, 300) + '...' : 'null');
 
+
+
     // 如果 penpal 连接已建立且有数据，立即推送给子页面
     this.pushDataToRemote();
   }
@@ -204,6 +213,9 @@ export class IframeComponent implements OnInit, OnDestroy {
 
       // 如果有数据，主动推送给子页面
       this.pushDataToRemote();
+
+      // 开始监听 IPC 通知
+      this.startIpcListener();
     } catch (error) {
       console.error('Penpal 连接失败:', error);
       // 连接失败时降级：使用 postMessage 发送数据
@@ -259,5 +271,85 @@ export class IframeComponent implements OnInit, OnDestroy {
       this.initDataCleanup();
       this.initDataCleanup = null;
     }
+    // 停止 IPC 监听
+    this.stopIpcListener();
+  }
+
+  // =====================================================
+  // IPC 监听相关
+  // =====================================================
+
+  /**
+   * 开始监听连线图更新 IPC 通知
+   */
+  private startIpcListener(): void {
+    if (!this.electronService.isElectron || !window['ipcRenderer']) return;
+
+    console.log('[IframeComponent] 开始监听 IPC connection-graph-updated');
+
+    const handler = (_event: any, data: any) => {
+      console.log('[IframeComponent] 收到 IPC connection-graph-updated');
+      this.ngZone.run(() => {
+        this.handleConnectionGraphUpdate(data);
+      });
+    };
+
+    window['ipcRenderer'].on('connection-graph-updated', handler);
+
+    // 保存清理函数
+    this.ipcCleanup = () => {
+      window['ipcRenderer'].removeListener('connection-graph-updated', handler);
+    };
+  }
+
+  /**
+   * 停止 IPC 监听
+   */
+  private stopIpcListener(): void {
+    if (this.ipcCleanup) {
+      this.ipcCleanup();
+      this.ipcCleanup = null;
+    }
+  }
+
+  /**
+   * 处理连线图更新通知
+   */
+  private async handleConnectionGraphUpdate(data: any): Promise<void> {
+    if (!data) return;
+
+    try {
+      // 保留初始 payload 中的 componentConfigs（board pinmap 等），更新 components 和 connections
+      const currentPayload = this.iframeData as any;
+      if (currentPayload) {
+        const newPayload = {
+          componentConfigs: currentPayload.componentConfigs || {},
+          components: data.components || [],
+          connections: data.connections || [],
+          theme: currentPayload.theme || 'dark',
+        };
+        this.iframeData = newPayload;
+        // 推送给 iframe
+        await this.pushDataToRemote();
+        console.log('[IframeComponent] 连线图已自动更新');
+        
+        // 显示更新提示，3秒后自动隐藏
+        this.hasUpdate = true;
+        setTimeout(() => {
+          this.ngZone.run(() => {
+            this.hasUpdate = false;
+          });
+        }, 3000);
+      }
+    } catch (error) {
+      console.error('[IframeComponent] 处理连线图更新失败:', error);
+    }
+  }
+
+  /**
+   * 关闭更新提示（用户选择不刷新）
+   */
+  dismissUpdate(): void {
+    this.hasUpdate = false;
   }
 }

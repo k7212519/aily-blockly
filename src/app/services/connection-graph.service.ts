@@ -1133,10 +1133,26 @@ export class ConnectionGraphService {
     try {
       const filePath = this.getConnectionGraphPath(projectPath);
       this.electronService.writeFile(filePath, JSON.stringify(data, null, 2));
+      // 通知子窗口数据已更新
+      this.notifyConnectionGraphUpdated(data);
       return true;
     } catch (e) {
       console.error('保存连线图数据失败:', e);
       return false;
+    }
+  }
+
+  /**
+   * 通过 IPC 通知子窗口连线图数据已更新
+   */
+  private notifyConnectionGraphUpdated(data: ConnectionGraphData): void {
+    if (this.electronService.isElectron && window['ipcRenderer']) {
+      try {
+        window['ipcRenderer'].send('connection-graph-updated', data);
+        console.log('[ConnectionGraphService] 已发送 connection-graph-updated IPC');
+      } catch (e) {
+        console.warn('[ConnectionGraphService] 发送 IPC 失败:', e);
+      }
     }
   }
 
@@ -1229,6 +1245,8 @@ export class ConnectionGraphService {
     try {
       const filePath = this.getJSONFilePath(projectPath);
       this.electronService.writeFile(filePath, JSON.stringify(data, null, 2));
+      // 通知子窗口数据已更新
+      this.notifyConnectionGraphUpdated(data);
       return true;
     } catch (e) {
       console.error('保存 JSON 文件失败:', e);
