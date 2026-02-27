@@ -372,6 +372,12 @@ function registerWindowHandlers(mainWindow) {
             }
         });
     });
+
+    // 子窗口请求主窗口保存连线图数据
+    ipcMain.on('save-connection-graph', (event, data) => {
+        console.log('[IPC] save-connection-graph, 转发给主窗口');
+        mainWindow.webContents.send('save-connection-graph', data);
+    });
 }
 
 

@@ -2328,7 +2328,7 @@ IMPORTANT: 任务ID为简单的递增数字（1, 2, 3...），请使用正确的
 
 **AWS 编辑流程（推荐）：**
 1. read_file 读取 connection.aws
-2. replace_string_in_file 修改 AWS 内容
+2. edit_file 修改 AWS 内容
 3. apply_schematic() 解析并保存`,
         input_schema: {
             type: 'object',
@@ -2363,7 +2363,7 @@ IMPORTANT: 任务ID为简单的递增数字（1, 2, 3...），请使用正确的
             properties: {},
             required: []
         },
-        agents: ["schematicAgent"]
+        agents: ["mainAgent", "schematicAgent"]
     },
     {
         name: 'generate_pinmap',

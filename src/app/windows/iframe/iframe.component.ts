@@ -189,10 +189,29 @@ export class IframeComponent implements OnInit, OnDestroy {
             return this.iframeData ?? null;
           },
           // 子页面编辑连线后回调此方法，持久化更新
-          onConnectionsChanged: (data: any) => {
+          onConnectionsChanged: (connections: any) => {
             try {
-              if (data && typeof data === 'object') {
-                this.connectionGraphService.saveConnectionGraph(data);
+              if (connections && Array.isArray(connections)) {
+                // 获取当前 payload 数据（包含 componentConfigs, components, connections）
+                const currentPayload = this.iframeData as any;
+                if (currentPayload && currentPayload.components) {
+                  // 通过 IPC 让主窗口保存数据（子窗口无法直接访问 projectPath）
+                  if (this.electronService.isElectron && window['ipcRenderer']) {
+                    const updatedData = {
+                      version: '1.0.0',
+                      description: '',
+                      components: currentPayload.components,
+                      connections: connections,
+                    };
+                    window['ipcRenderer'].send('save-connection-graph', updatedData);
+                    // 同步本地 iframeData（payload 格式）
+                    this.iframeData = {
+                      ...currentPayload,
+                      connections: connections,
+                    };
+                    console.log('[IframeComponent] 已发送保存请求:', connections.length);
+                  }
+                }
               }
             } catch (e) {
               console.warn('onConnectionsChanged 持久化失败:', e);
@@ -319,28 +338,27 @@ export class IframeComponent implements OnInit, OnDestroy {
     if (!data) return;
 
     try {
-      // 保留初始 payload 中的 componentConfigs（board pinmap 等），更新 components 和 connections
+      // 使用 IPC 发送过来的完整 payload（包含最新的 componentConfigs）
       const currentPayload = this.iframeData as any;
-      if (currentPayload) {
-        const newPayload = {
-          componentConfigs: currentPayload.componentConfigs || {},
-          components: data.components || [],
-          connections: data.connections || [],
-          theme: currentPayload.theme || 'dark',
-        };
-        this.iframeData = newPayload;
-        // 推送给 iframe
-        await this.pushDataToRemote();
-        console.log('[IframeComponent] 连线图已自动更新');
-        
-        // 显示更新提示，3秒后自动隐藏
-        this.hasUpdate = true;
-        setTimeout(() => {
-          this.ngZone.run(() => {
-            this.hasUpdate = false;
-          });
-        }, 3000);
-      }
+      const newPayload = {
+        // 优先使用新的 componentConfigs，如果没有则保留旧的
+        componentConfigs: data.componentConfigs || currentPayload?.componentConfigs || {},
+        components: data.components || [],
+        connections: data.connections || [],
+        theme: data.theme || currentPayload?.theme || 'dark',
+      };
+      this.iframeData = newPayload;
+      // 推送给 iframe
+      await this.pushDataToRemote();
+      console.log('[IframeComponent] 连线图已自动更新');
+      
+      // 显示更新提示，3秒后自动隐藏
+      this.hasUpdate = true;
+      setTimeout(() => {
+        this.ngZone.run(() => {
+          this.hasUpdate = false;
+        });
+      }, 3000);
     } catch (error) {
       console.error('[IframeComponent] 处理连线图更新失败:', error);
     }

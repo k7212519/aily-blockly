@@ -389,7 +389,23 @@ export class ConnectionGraphService {
   constructor(
     private electronService: ElectronService,
     private projectService: ProjectService
-  ) {}
+  ) {
+    // 监听子窗口请求保存连线图数据
+    this.setupIpcListeners();
+  }
+
+  /** 设置 IPC 监听器 */
+  private setupIpcListeners(): void {
+    if (this.electronService.isElectron && window['ipcRenderer']) {
+      window['ipcRenderer'].on('save-connection-graph', (_event: any, data: any) => {
+        console.log('[ConnectionGraphService] 收到子窗口保存请求');
+        if (data && data.components && data.connections) {
+          // 静默保存，不触发 IPC 通知（避免循环）
+          this.saveConnectionGraphSilent(data);
+        }
+      });
+    }
+  }
 
   // -------------------------------------------------
   // iframe API 管理
@@ -1143,13 +1159,45 @@ export class ConnectionGraphService {
   }
 
   /**
-   * 通过 IPC 通知子窗口连线图数据已更新
+   * 静默保存连线图数据（不触发 IPC 通知）
+   * 用于子窗口编辑后持久化，避免循环通知
    */
-  private notifyConnectionGraphUpdated(data: ConnectionGraphData): void {
+  saveConnectionGraphSilent(data: ConnectionGraphData, projectPath?: string): boolean {
+    try {
+      const filePath = this.getConnectionGraphPath(projectPath);
+      this.electronService.writeFile(filePath, JSON.stringify(data, null, 2));
+      return true;
+    } catch (e) {
+      console.error('保存连线图数据失败:', e);
+      return false;
+    }
+  }
+
+  /**
+   * 通过 IPC 通知子窗口连线图数据已更新
+   * 发送完整的 payload（包含 componentConfigs），确保子窗口能正确渲染
+   */
+  private async notifyConnectionGraphUpdated(data: ConnectionGraphData): Promise<void> {
     if (this.electronService.isElectron && window['ipcRenderer']) {
       try {
-        window['ipcRenderer'].send('connection-graph-updated', data);
-        console.log('[ConnectionGraphService] 已发送 connection-graph-updated IPC');
+        // 获取 boardPackagePath 以构建完整 payload
+        const boardPackagePath = await this.projectService.getBoardPackagePath();
+        if (!boardPackagePath) {
+          console.warn('[ConnectionGraphService] 无法获取 boardPackagePath，跳过 IPC 通知');
+          return;
+        }
+        
+        // 构建完整的 payload（包含 componentConfigs）
+        const componentConfigs = this.getComponentConfigs(boardPackagePath, data);
+        const payload: ConnectionGraphPayload = {
+          componentConfigs,
+          components: data.components,
+          connections: data.connections,
+          theme: 'dark',
+        };
+        
+        window['ipcRenderer'].send('connection-graph-updated', payload);
+        console.log('[ConnectionGraphService] 已发送 connection-graph-updated IPC (完整 payload)');
       } catch (e) {
         console.warn('[ConnectionGraphService] 发送 IPC 失败:', e);
       }
