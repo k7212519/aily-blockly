@@ -143,6 +143,7 @@ import { OnboardingService } from '../../services/onboarding.service';
 import { AILY_CHAT_ONBOARDING_CONFIG } from '../../configs/onboarding.config';
 import { AbsAutoSyncService } from './services/abs-auto-sync.service';
 import { absVersionControlHandler } from './tools/absVersionControlTool';
+import { RepetitionDetectionService } from './services/repetition-detection.service';
 
 // import { reloadAbiJsonTool, reloadAbiJsonToolSimple } from './tools';
 
@@ -1140,7 +1141,8 @@ Do not create non-existent boards and libraries.
     private ailyChatConfigService: AilyChatConfigService,
     private onboardingService: OnboardingService,
     private absAutoSyncService: AbsAutoSyncService,
-    private connectionGraphService: ConnectionGraphService
+    private connectionGraphService: ConnectionGraphService,
+    private repetitionDetectionService: RepetitionDetectionService
   ) {
     // securityContext 改为 getter，每次使用时动态获取当前项目路径
   }
@@ -1681,6 +1683,9 @@ Do not create non-existent boards and libraries.
     // 清空会话期间的额外允许路径
     this.sessionAllowedPaths = [];
 
+    // 重置重复检测状态
+    this.repetitionDetectionService.resetAll();
+
     if (!this.mcpInitialized) {
       this.mcpInitialized = true;
       await this.mcpService.init();
@@ -1894,6 +1899,9 @@ ${JSON.stringify(errData)}
         return;
       }
 
+      // 重置流式文本检测状态（新消息开始）
+      this.repetitionDetectionService.resetStreamTokens();
+
       // 将用户输入的文本包裹在<user-query>标签中
       text = `<user-query>${text}</user-query>`;
 
@@ -2056,6 +2064,8 @@ ${JSON.stringify(errData)}
           if (this.list.length > 0 && this.list[this.list.length - 1].role === 'aily') {
             this.list[this.list.length - 1].state = 'done';
           }
+          // 重置流式文本检测状态（新 Agent 开始输出）
+          this.repetitionDetectionService.resetStreamTokens();
           console.log(`Source changed: ${this.currentMessageSource} -> ${messageSource}`);
         }
         this.currentMessageSource = messageSource;
@@ -2064,6 +2074,15 @@ ${JSON.stringify(errData)}
           if (data.type === 'ModelClientStreamingChunkEvent') {
             // 处理流式数据
             if (data.content) {
+              // 检测流式文本重复
+              const streamRepetitionCheck = this.repetitionDetectionService.checkStreamRepetition(data.content);
+              if (streamRepetitionCheck.isRepetitive) {
+                console.warn('[重复检测] 流式文本重复:', streamRepetitionCheck.pattern);
+                // 显示提示并终止响应
+                this.appendMessage('aily', `\n\n> ⚠️ ${streamRepetitionCheck.pattern}，已自动终止响应。\n\n`, messageSource);
+                this.stop();
+                return;
+              }
               this.appendMessage('aily', data.content, messageSource);
             }
           } else if (data.type === 'TextMessage') {
@@ -2180,6 +2199,20 @@ ${JSON.stringify(errData)}
             let resultText = '';
 
             console.log("工具调用请求: ", data.tool_name, toolArgs);
+
+            // 检测重复工具调用
+            const toolRepetitionCheck = this.repetitionDetectionService.checkToolCallRepetition(data.tool_name, toolArgs);
+            if (toolRepetitionCheck.isRepetitive) {
+              console.warn('[重复检测] 工具调用重复:', toolRepetitionCheck.pattern);
+              // 返回错误让 Agent 反思
+              this.send("tool", JSON.stringify({
+                "type": "tool_result",
+                "tool_id": data.tool_id,
+                "content": `检测到重复调用模式 (${toolRepetitionCheck.pattern})。${toolRepetitionCheck.suggestion || '请重新思考解决方案。'}`,
+                "is_error": true
+              }, null, 2), false);
+              return;
+            }
 
             // 定义 block 工具列表
             const blockTools = [
