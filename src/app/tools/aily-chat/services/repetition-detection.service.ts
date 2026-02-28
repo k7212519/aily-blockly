@@ -72,7 +72,7 @@ export class RepetitionDetectionService {
   private streamTokens: string[] = [];
   
   /** 最大保留的 token 数量 */
-  private readonly MAX_STREAM_TOKENS = 200;
+  private readonly MAX_STREAM_TOKENS = 500;
   
   /** 检测间隔（每 N 个 token 检测一次） */
   private readonly CHECK_INTERVAL = 5;
@@ -256,7 +256,13 @@ export class RepetitionDetectionService {
       return phraseRepetition;
     }
     
-    // 检测 2: 使用 KMP 算法检测 token 序列重复模式
+    // 检测 2: 句子/段落级别重复检测
+    const sentenceRepetition = this.checkSentenceRepetition();
+    if (sentenceRepetition.isRepetitive) {
+      return sentenceRepetition;
+    }
+    
+    // 检测 3: 使用 KMP 算法检测 token 序列重复模式
     if (this.isRepetitivePattern(this.streamTokens)) {
       return {
         isRepetitive: true,
@@ -265,7 +271,7 @@ export class RepetitionDetectionService {
       };
     }
     
-    // 检测 3: 行级别重复
+    // 检测 4: 行级别重复
     const lineRepetition = this.checkLineRepetition();
     if (lineRepetition.isRepetitive) {
       return lineRepetition;
@@ -365,6 +371,118 @@ export class RepetitionDetectionService {
     }
     
     return null;
+  }
+
+  /**
+   * 检测句子/段落级别的重复
+   * 用于检测相同的较长文本块在输出中多次出现（即使中间有其他内容分隔）
+   */
+  private checkSentenceRepetition(): RepetitionCheckResult {
+    const text = this.streamTokens.join('');
+    
+    // 文本太短时不检测
+    if (text.length < 80) {
+      return { isRepetitive: false };
+    }
+    
+    // 按句子分隔符分割（中英文句号、问号、感叹号、换行等）
+    const sentences = text
+      .split(/[。？！\?\!\n]+/)
+      .map(s => s.trim())
+      .filter(s => s.length >= 15); // 只考虑长度>=15的句子
+    
+    if (sentences.length < 2) {
+      return { isRepetitive: false };
+    }
+    
+    // 统计每个句子出现的次数
+    const sentenceCount = new Map<string, number>();
+    for (const sentence of sentences) {
+      // 标准化句子（去除首尾空白，统一空格）
+      const normalized = sentence.replace(/\s+/g, ' ').trim();
+      if (normalized.length >= 15) {
+        sentenceCount.set(normalized, (sentenceCount.get(normalized) || 0) + 1);
+      }
+    }
+    
+    // 查找重复的长句子
+    for (const [sentence, count] of sentenceCount.entries()) {
+      // 根据句子长度调整阈值
+      // 长句子只需重复 2 次就很可疑
+      const threshold = sentence.length >= 30 ? 2 : 3;
+      
+      if (count >= threshold) {
+        const displaySentence = sentence.length > 25 
+          ? sentence.substring(0, 25) + '...' 
+          : sentence;
+        return {
+          isRepetitive: true,
+          pattern: `相同段落出现 ${count} 次: "${displaySentence}"`,
+          suggestion: '检测到重复的段落内容。'
+        };
+      }
+    }
+    
+    // 检测子串重复：相同的较长片段在不同位置出现
+    const longPhraseResult = this.checkLongPhraseRepetition(text);
+    if (longPhraseResult.isRepetitive) {
+      return longPhraseResult;
+    }
+    
+    return { isRepetitive: false };
+  }
+
+  /**
+   * 检测较长短语的重复（不要求连续）
+   * 用于检测如 "我在一次回复中生成了多个版本" 这样的长短语重复
+   */
+  private checkLongPhraseRepetition(text: string): RepetitionCheckResult {
+    if (text.length < 100) {
+      return { isRepetitive: false };
+    }
+    
+    // 提取 20-50 字符长度的子串，检测是否重复
+    const minLen = 20;
+    const maxLen = 50;
+    const checkStart = Math.max(0, text.length - 200); // 只检查最后 200 个字符区域
+    
+    for (let len = maxLen; len >= minLen; len -= 5) {
+      // 从末尾取一个片段
+      const endPos = text.length;
+      const startPos = endPos - len;
+      
+      if (startPos < 0) continue;
+      
+      const phrase = text.slice(startPos, endPos);
+      
+      // 跳过空白或太简单的内容
+      if (phrase.trim().length < minLen * 0.8) continue;
+      
+      // 在前面的文本中查找这个片段
+      const searchArea = text.slice(0, startPos - 10); // 在更早的文本中搜索，留一点间隔
+      const firstOccurrence = searchArea.indexOf(phrase);
+      
+      if (firstOccurrence !== -1) {
+        // 找到重复，计算出现次数
+        let count = 1;
+        let pos = firstOccurrence;
+        while ((pos = searchArea.indexOf(phrase, pos + 1)) !== -1) {
+          count++;
+        }
+        count++; // 加上末尾的那个
+        
+        const displayPhrase = phrase.length > 30 
+          ? phrase.substring(0, 30) + '...' 
+          : phrase;
+        return {
+          isRepetitive: true,
+          pattern: `相同内容重复 ${count} 次: "${displayPhrase}"`,
+          suggestion: '检测到重复的文本内容。'
+        };
+      }
+    }
+    
+    return { isRepetitive: false };
   }
 
   /**

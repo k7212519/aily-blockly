@@ -2074,8 +2074,7 @@ ${JSON.stringify(errData)}
           if (this.list.length > 0 && this.list[this.list.length - 1].role === 'aily') {
             this.list[this.list.length - 1].state = 'done';
           }
-          // 重置流式文本检测状态（新 Agent 开始输出）
-          this.repetitionDetectionService.resetStreamTokens();
+          // 注意：不在 source 变更时重置流式检测状态，以便检测跨工具调用的重复内容
           console.log(`Source changed: ${this.currentMessageSource} -> ${messageSource}`);
         }
         this.currentMessageSource = messageSource;
@@ -2208,7 +2207,7 @@ ${JSON.stringify(errData)}
             let resultState = "done";
             let resultText = '';
 
-            console.log("工具调用请求: ", data.tool_name, toolArgs);
+            // console.log("工具调用请求: ", data.tool_name, toolArgs);
 
             // 检测重复工具调用
             const toolRepetitionCheck = this.repetitionDetectionService.checkToolCallRepetition(data.tool_name, toolArgs);
@@ -3826,7 +3825,7 @@ ${JSON.stringify(errData)}
 
             // 集中注入 todo 提醒 - 仅对 mainAgent 的非 todo 工具结果注入
             if (toolResult && data.tool_name !== 'todo_write_tool' && !isSubagent) {
-              console.log('=============================🔔 注入 TODO 提醒=============================');
+              // console.log('=============================🔔 注入 TODO 提醒=============================');
               toolResult = injectTodoReminder(toolResult, data.tool_name);
             }
 
@@ -3930,7 +3929,7 @@ ${JSON.stringify(errData)}
 // - 复杂结构分步创建，先创建外层再填充内层
 // - 使用get_abs_syntax工具了解ABS语法规范，确保代码符合要求
                 toolContent += `
-<rules>
+<rules>Blockly代码编辑流程:
 【需求分析】
 仔细分析用户需求，理解要实现的功能和目标。对于不明确的需求，提出澄清问题。
 
@@ -4000,7 +3999,7 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
               this.completeToolCall(data.tool_id, data.tool_name, finalState, resultText);
             }
 
-            console.log(`工具调用结果: `, toolResult, resultText);
+            // console.log(`工具调用结果: `, toolResult, resultText);
 
             this.send("tool", JSON.stringify({
               "type": "tool",
