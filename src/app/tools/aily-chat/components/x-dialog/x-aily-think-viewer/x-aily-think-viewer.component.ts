@@ -34,7 +34,7 @@ import { CommonModule } from '@angular/common';
       .ac-think {
         border-radius: 5px;
         padding: 5px 10px;
-        margin: 4px 0;
+        margin: 0;
         overflow: hidden;
         background-color: #3a3a3a;
         color: #ccc;
@@ -54,7 +54,7 @@ import { CommonModule } from '@angular/common';
         margin: -5px -10px;
         padding: 5px 10px;
       }
-      .ac-think-icon { flex-shrink: 0; }
+      .ac-think-icon { flex-shrink: 0; margin-right: 5px; }
       .ac-think-icon.loading { color: #1890ff; }
       .ac-think-icon.done { color: #52c41a; }
       .ac-think-arrow {

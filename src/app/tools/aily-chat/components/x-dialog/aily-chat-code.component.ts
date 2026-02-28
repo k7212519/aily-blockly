@@ -109,7 +109,7 @@ const AILY_TYPES = [
     }
   `,
   styles: [`
-    :host { display: block; }
+    :host { display: block; padding: 0.5em 0; }
     .aily-mermaid-clickable {
       cursor: pointer;
       transition: opacity 0.2s;
@@ -236,7 +236,7 @@ export class AilyChatCodeComponent implements OnChanges, OnDestroy {
         nzBodyStyle: { padding: '0' },
         nzContent: MermaidComponent,
         nzData: { svg: enhancedSvg },
-        nzWidth: '90vw',
+        nzWidth: 'fit-content',
       });
     } catch (err) {
       console.warn('Mermaid fullscreen failed:', err);
