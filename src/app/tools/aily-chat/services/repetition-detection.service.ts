@@ -59,6 +59,9 @@ export class RepetitionDetectionService {
   
   /** 相同工具连续调用阈值 */
   private readonly SAME_TOOL_THRESHOLD = 3;
+
+  /** 相同工具不同参数连续调用阈值 */
+  private readonly SAME_TOOL_DIFF_ARGS_THRESHOLD = 10;
   
   /** 循环模式检测的历史长度 */
   private readonly CYCLE_PATTERN_LENGTH = 6;
@@ -143,14 +146,14 @@ export class RepetitionDetectionService {
    * 检测同一工具的连续调用（即使参数不同）
    */
   private checkSameToolRepetition(toolName: string): RepetitionCheckResult {
-    const recent = this.toolCallHistory.slice(-5);
+    const recent = this.toolCallHistory.slice(-this.SAME_TOOL_DIFF_ARGS_THRESHOLD);
     const consecutiveSameTool = recent.filter(h => h.name === toolName);
     
-    // 如果最近 5 次调用中有 4 次以上是同一工具
-    if (consecutiveSameTool.length >= 4) {
+    // 如果最近 N 次调用中有 N-1 次以上是同一工具
+    if (consecutiveSameTool.length >= this.SAME_TOOL_DIFF_ARGS_THRESHOLD - 1) {
       return {
         isRepetitive: true,
-        pattern: `${toolName} 在最近 5 次调用中出现 ${consecutiveSameTool.length} 次`,
+        pattern: `${toolName} 在最近 ${this.SAME_TOOL_DIFF_ARGS_THRESHOLD} 次调用中出现 ${consecutiveSameTool.length} 次`,
         suggestion: '建议尝试使用其他工具或方法来解决问题。'
       };
     }

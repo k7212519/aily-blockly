@@ -1593,7 +1593,7 @@ export class ConnectionGraphService {
       height: 100,
       images: [
         {
-          url: 'images/sensor.png',
+          url: '组件图片的base64编码',
           x: 0,
           y: 0,
           width: 200,
@@ -1614,60 +1614,62 @@ export class ConnectionGraphService {
     };
 
     // 根据协议类型提供示例引脚
+    // 左侧引脚: labelX=-20, labelAnchor="right"; 右侧引脚: labelX=212 (width+12), labelAnchor="left"
+    // labelY = y - 7
     switch (protocol) {
       case 'i2c':
         baseTemplate.pins = [
-          { id: 'pin_1', x: 10, y: 50, layout: 'horizontal', functions: [{ name: 'VCC', type: 'power' }] },
-          { id: 'pin_2', x: 10, y: 70, layout: 'horizontal', functions: [{ name: 'GND', type: 'gnd' }] },
-          { id: 'pin_3', x: 10, y: 90, layout: 'horizontal', functions: [{ name: 'SDA', type: 'i2c' }] },
-          { id: 'pin_4', x: 190, y: 50, layout: 'horizontal', functions: [{ name: 'SCL', type: 'i2c' }] }
+          { id: 'pin_1', x: 10, y: 50, labelX: -20, labelY: 43, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'VCC', type: 'power' }] },
+          { id: 'pin_2', x: 10, y: 70, labelX: -20, labelY: 63, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'GND', type: 'gnd' }] },
+          { id: 'pin_3', x: 10, y: 90, labelX: -20, labelY: 83, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'SDA', type: 'i2c' }] },
+          { id: 'pin_4', x: 190, y: 50, labelX: 212, labelY: 43, labelAnchor: 'left', layout: 'horizontal', functions: [{ name: 'SCL', type: 'i2c' }] }
         ];
         break;
       case 'spi':
         baseTemplate.pins = [
-          { id: 'pin_1', x: 10, y: 30, layout: 'horizontal', functions: [{ name: 'VCC', type: 'power' }] },
-          { id: 'pin_2', x: 10, y: 50, layout: 'horizontal', functions: [{ name: 'GND', type: 'gnd' }] },
-          { id: 'pin_3', x: 10, y: 70, layout: 'horizontal', functions: [{ name: 'MOSI', type: 'spi' }] },
-          { id: 'pin_4', x: 10, y: 90, layout: 'horizontal', functions: [{ name: 'MISO', type: 'spi' }] },
-          { id: 'pin_5', x: 190, y: 30, layout: 'horizontal', functions: [{ name: 'SCK', type: 'spi' }] },
-          { id: 'pin_6', x: 190, y: 50, layout: 'horizontal', functions: [{ name: 'CS', type: 'digital' }] }
+          { id: 'pin_1', x: 10, y: 30, labelX: -20, labelY: 23, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'VCC', type: 'power' }] },
+          { id: 'pin_2', x: 10, y: 50, labelX: -20, labelY: 43, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'GND', type: 'gnd' }] },
+          { id: 'pin_3', x: 10, y: 70, labelX: -20, labelY: 63, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'MOSI', type: 'spi' }] },
+          { id: 'pin_4', x: 10, y: 90, labelX: -20, labelY: 83, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'MISO', type: 'spi' }] },
+          { id: 'pin_5', x: 190, y: 30, labelX: 212, labelY: 23, labelAnchor: 'left', layout: 'horizontal', functions: [{ name: 'SCK', type: 'spi' }] },
+          { id: 'pin_6', x: 190, y: 50, labelX: 212, labelY: 43, labelAnchor: 'left', layout: 'horizontal', functions: [{ name: 'CS', type: 'digital' }] }
         ];
         break;
       case 'uart':
         baseTemplate.pins = [
-          { id: 'pin_1', x: 10, y: 50, layout: 'horizontal', functions: [{ name: 'VCC', type: 'power' }] },
-          { id: 'pin_2', x: 10, y: 70, layout: 'horizontal', functions: [{ name: 'GND', type: 'gnd' }] },
-          { id: 'pin_3', x: 10, y: 90, layout: 'horizontal', functions: [{ name: 'TX', type: 'uart' }] },
-          { id: 'pin_4', x: 190, y: 50, layout: 'horizontal', functions: [{ name: 'RX', type: 'uart' }] }
+          { id: 'pin_1', x: 10, y: 50, labelX: -20, labelY: 43, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'VCC', type: 'power' }] },
+          { id: 'pin_2', x: 10, y: 70, labelX: -20, labelY: 63, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'GND', type: 'gnd' }] },
+          { id: 'pin_3', x: 10, y: 90, labelX: -20, labelY: 83, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'TX', type: 'uart' }] },
+          { id: 'pin_4', x: 190, y: 50, labelX: 212, labelY: 43, labelAnchor: 'left', layout: 'horizontal', functions: [{ name: 'RX', type: 'uart' }] }
         ];
         break;
       case 'pwm':
         baseTemplate.pins = [
-          { id: 'pin_1', x: 10, y: 50, layout: 'horizontal', functions: [{ name: 'VCC', type: 'power' }] },
-          { id: 'pin_2', x: 10, y: 70, layout: 'horizontal', functions: [{ name: 'GND', type: 'gnd' }] },
-          { id: 'pin_3', x: 10, y: 90, layout: 'horizontal', functions: [{ name: 'SIG', type: 'pwm' }] }
+          { id: 'pin_1', x: 10, y: 50, labelX: -20, labelY: 43, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'VCC', type: 'power' }] },
+          { id: 'pin_2', x: 10, y: 70, labelX: -20, labelY: 63, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'GND', type: 'gnd' }] },
+          { id: 'pin_3', x: 10, y: 90, labelX: -20, labelY: 83, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'SIG', type: 'pwm' }] }
         ];
         break;
       case 'digital':
         baseTemplate.pins = [
-          { id: 'pin_1', x: 10, y: 50, layout: 'horizontal', functions: [{ name: 'VCC', type: 'power' }] },
-          { id: 'pin_2', x: 10, y: 70, layout: 'horizontal', functions: [{ name: 'GND', type: 'gnd' }] },
-          { id: 'pin_3', x: 10, y: 90, layout: 'horizontal', functions: [{ name: 'OUT', type: 'digital' }] }
+          { id: 'pin_1', x: 10, y: 50, labelX: -20, labelY: 43, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'VCC', type: 'power' }] },
+          { id: 'pin_2', x: 10, y: 70, labelX: -20, labelY: 63, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'GND', type: 'gnd' }] },
+          { id: 'pin_3', x: 10, y: 90, labelX: -20, labelY: 83, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'OUT', type: 'digital' }] }
         ];
         break;
       case 'analog':
         baseTemplate.pins = [
-          { id: 'pin_1', x: 10, y: 50, layout: 'horizontal', functions: [{ name: 'VCC', type: 'power' }] },
-          { id: 'pin_2', x: 10, y: 70, layout: 'horizontal', functions: [{ name: 'GND', type: 'gnd' }] },
-          { id: 'pin_3', x: 10, y: 90, layout: 'horizontal', functions: [{ name: 'OUT', type: 'analog' }] }
+          { id: 'pin_1', x: 10, y: 50, labelX: -20, labelY: 43, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'VCC', type: 'power' }] },
+          { id: 'pin_2', x: 10, y: 70, labelX: -20, labelY: 63, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'GND', type: 'gnd' }] },
+          { id: 'pin_3', x: 10, y: 90, labelX: -20, labelY: 83, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'OUT', type: 'analog' }] }
         ];
         break;
       default:
         // 通用 4 引脚模块
         baseTemplate.pins = [
-          { id: 'pin_1', x: 10, y: 50, layout: 'horizontal', functions: [{ name: 'VCC', type: 'power' }] },
-          { id: 'pin_2', x: 10, y: 70, layout: 'horizontal', functions: [{ name: 'GND', type: 'gnd' }] },
-          { id: 'pin_3', x: 10, y: 90, layout: 'horizontal', functions: [{ name: 'DATA', type: 'digital' }] }
+          { id: 'pin_1', x: 10, y: 50, labelX: -20, labelY: 43, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'VCC', type: 'power' }] },
+          { id: 'pin_2', x: 10, y: 70, labelX: -20, labelY: 63, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'GND', type: 'gnd' }] },
+          { id: 'pin_3', x: 10, y: 90, labelX: -20, labelY: 83, labelAnchor: 'right', layout: 'horizontal', functions: [{ name: 'DATA', type: 'digital' }] }
         ];
     }
 
@@ -1704,7 +1706,10 @@ export class ConnectionGraphService {
       this.electronService.writeFile(filePath, JSON.stringify(config, null, 2));
 
       // 更新 catalog 状态（传入 config 以便创建新条目时使用）
-      this.updateCatalogStatus(pinmapId, 'available', `pinmaps/${fileName}`, packagesBasePath, config);
+      const catalogUpdated = this.updateCatalogStatus(pinmapId, 'available', `pinmaps/${fileName}`, packagesBasePath, config);
+      if (!catalogUpdated) {
+        console.warn('[savePinmapConfig] catalog 更新失败，但 pinmap 文件已保存');
+      }
 
       return { success: true, filePath };
     } catch (e: any) {
@@ -1740,13 +1745,16 @@ export class ConnectionGraphService {
         console.log('[updateCatalogStatus] 创建新的 pinmap_catalog.json');
         catalog = this.createNewCatalog(ref.packageSlug, componentConfig);
       } else {
+        console.log('[updateCatalogStatus] 读取现有 catalog:', catalogPath);
         catalog = JSON.parse(this.electronService.readFile(catalogPath));
+        console.log('[updateCatalogStatus] 现有 models 数量:', catalog.models?.length || 0);
+        console.log('[updateCatalogStatus] 现有 model IDs:', catalog.models?.map(m => m.id).join(', ') || 'none');
       }
 
       // 查找或创建对应的 model
       let model = catalog.models.find(m => m.id === ref.modelId);
       if (!model) {
-        console.log('[updateCatalogStatus] 创建新的 model:', ref.modelId);
+        console.log('[updateCatalogStatus] 未找到 model，创建新的:', ref.modelId);
         model = {
           id: ref.modelId,
           name: componentConfig?.name || ref.modelId.toUpperCase(),
@@ -1755,6 +1763,9 @@ export class ConnectionGraphService {
           variants: []
         };
         catalog.models.push(model);
+        console.log('[updateCatalogStatus] 新增后 models 数量:', catalog.models.length);
+      } else {
+        console.log('[updateCatalogStatus] 找到现有 model:', model.id);
       }
 
       // 查找或创建对应的 variant
@@ -1777,7 +1788,9 @@ export class ConnectionGraphService {
       }
 
       // 保存 catalog
-      this.electronService.writeFile(catalogPath, JSON.stringify(catalog, null, 2));
+      console.log('[updateCatalogStatus] 保存前 models 数量:', catalog.models.length, 'model IDs:', catalog.models.map(m => m.id).join(', '));
+      const catalogContent = JSON.stringify(catalog, null, 2);
+      this.electronService.writeFile(catalogPath, catalogContent);
       console.log('[updateCatalogStatus] catalog 已更新:', catalogPath);
       
       return true;

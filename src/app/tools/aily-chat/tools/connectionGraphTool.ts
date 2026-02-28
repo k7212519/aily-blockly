@@ -983,14 +983,14 @@ export async function generatePinmapTool(
     const protocol = variantInfo?.protocol || 'other';
     const template = connectionGraphService.getPinmapTemplate(protocol as PinmapProtocol);
 
-    // 如果已有同库的其他 pinmap，读取一个作为参考
-    let existingPinmapExample: ComponentConfig | null = null;
-    if (libraryInfo.existingPinmaps && libraryInfo.existingPinmaps.length > 0) {
-      const packagePath = `${packagesBasePath}/@aily-project/${ref.packageSlug}`;
-      const exampleFileName = libraryInfo.existingPinmaps[0];
-      const examplePath = `${packagePath}/pinmaps/${exampleFileName}`;
-      existingPinmapExample = connectionGraphService.readComponentConfig(examplePath);
-    }
+    // // 如果已有同库的其他 pinmap，读取一个作为参考（精简版）
+    // let existingPinmapExample: any = null;
+    // if (libraryInfo.existingPinmaps && libraryInfo.existingPinmaps.length > 0) {
+    //   const packagePath = `${packagesBasePath}/@aily-project/${ref.packageSlug}`;
+    //   const exampleFileName = libraryInfo.existingPinmaps[0];
+    //   const examplePath = `${packagePath}/pinmaps/${exampleFileName}`;
+    //   existingPinmapExample = connectionGraphService.readComponentConfig(examplePath);
+    // }
 
     // 构建返回结果
     const result: any = {
@@ -1008,64 +1008,58 @@ export async function generatePinmapTool(
     // 根据 referenceSource 决定返回哪些信息
     const source = input.referenceSource || 'auto';
     
+    // README 限制最大长度（约 2000 字符，避免过多 token 消耗）
+    const MAX_README_LENGTH = 2000;
     if (source === 'auto' || source === 'readme') {
       if (libraryInfo.readme) {
-        result.readme = libraryInfo.readme;
+        if (libraryInfo.readme.length > MAX_README_LENGTH) {
+          result.readme = libraryInfo.readme.slice(0, MAX_README_LENGTH) + '\n\n... (内容已截断，仅显示前 2000 字符)';
+        } else {
+          result.readme = libraryInfo.readme;
+        }
       }
     }
 
+    // 示例代码也限制长度
+    const MAX_EXAMPLE_LENGTH = 1500;
     if (source === 'auto' || source === 'example') {
       if (libraryInfo.exampleCode) {
-        result.exampleCode = libraryInfo.exampleCode;
+        if (libraryInfo.exampleCode.length > MAX_EXAMPLE_LENGTH) {
+          result.exampleCode = libraryInfo.exampleCode.slice(0, MAX_EXAMPLE_LENGTH) + '\n\n// ... (代码已截断)';
+        } else {
+          result.exampleCode = libraryInfo.exampleCode;
+        }
       }
     }
 
-    // 总是返回模板和现有示例
+    // // 只返回现有示例（移除 pinmapTemplate，因为 instructions 中已有详细规则）
+    // if (existingPinmapExample) {
+    //   result.existingPinmapExample = existingPinmapExample;
+    // }
+
+    // 返回模板结构（让 LLM 直接参照 JSON 结构）
     result.pinmapTemplate = template;
-    if (existingPinmapExample) {
-      result.existingPinmapExample = existingPinmapExample;
-    }
 
-    // 生成指导说明
-    result.instructions = `请根据以上信息生成完整的 pinmap 配置 JSON。
+    // 生成简化的补充说明
+    result.instructions = `根据 pinmapTemplate 结构和 readme 信息生成 pinmap 配置。
 
-## 要求
+## 关键规则
 
-1. **id**: 使用 "component_${ref.modelId}_${ref.variantId}" 格式
-2. **name**: 组件的中文名称
-3. **width/height**: 组件图形的宽高（像素），建议 200x100 或根据引脚数量调整
-4. **images**: 组件图片的base64编码，用于在连线图中展示组件图标
-5. **pins**: 引脚数组，每个引脚包含：
-   - id: "pin_1", "pin_2" 等
-   - x, y: 引脚在图形上的位置
-   - layout: "horizontal" 或 "vertical"
-   - functions: 引脚功能数组，每个功能有 name 和 type
-6. **functionTypes**: 功能类型定义（颜色映射）
+1. **id**: 使用 "component_${ref.modelId}_${ref.variantId}"
+2. **尺寸计算**:
+   - height = max(左侧引脚数, 右侧引脚数) × 20 + 40
+   - width = 根据引脚名称长度调整，通常 120-200，名称长则增大
+3. **引脚位置**:
+   - y 值: 首个 y≈32，间距 20
+   - 左侧引脚: x≈10, labelX≈-20, labelAnchor="right"（文字右对齐到 labelX）
+   - 右侧引脚: x≈width-15, labelX≈width+12, labelAnchor="left"（文字左对齐从 labelX 起）
+   - labelY = y - 7
+4. **images.url**: 使用可渲染图片的 base64（如 data:image/png;base64,...）
+5. **images**: 必须包含这个字段
 
-## 引脚功能类型对照
+## 保存
 
-| type | 说明 | 示例 name |
-|------|------|-----------|
-| power | 电源 | VCC, 3V3, 5V, VIN |
-| gnd | 接地 | GND |
-| i2c | I2C 通信 | SDA, SCL |
-| spi | SPI 通信 | MOSI, MISO, SCK, CS |
-| uart | 串口 | TX, RX |
-| pwm | PWM 信号 | SIG, PWM |
-| digital | 数字信号 | OUT, IN, DATA |
-| analog | 模拟信号 | AOUT, AIN |
-
-## 输出格式
-
-生成完整的 JSON 后，调用 save_pinmap 工具保存：
-\`\`\`
-save_pinmap(pinmapId="${input.pinmapId}", pinmapConfig={生成的JSON})
-\`\`\`
-
-**注意**：save_pinmap 工具会自动：
-1. 将 pinmap 文件保存到 \`pinmaps/${ref.modelId}_${ref.variantId}.json\`
-2. 创建或更新 \`pinmap_catalog.json\`（如果不存在会自动创建）
-3. 将变体状态设置为 "available"`;
+生成后调用：save_pinmap(pinmapId="${input.pinmapId}", pinmapConfig={JSON})`;
 
     const toolResult: ToolUseResult = {
       is_error: false,

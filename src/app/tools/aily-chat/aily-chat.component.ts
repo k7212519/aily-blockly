@@ -1708,10 +1708,20 @@ Do not create non-existent boards and libraries.
     // tools + mcp tools
     this.isCompleted = false;
 
-    // 根据配置过滤启用的工具
-    const enabledToolNames = this.ailyChatConfigService.enabledTools;
-    const disabledToolNames = this.ailyChatConfigService.disabledTools || [];
-    const hasEnabledToolsConfig = enabledToolNames && enabledToolNames.length > 0;
+    // 根据配置过滤启用的工具（合并所有 Agent 的启用工具）
+    const mainAgentConfig = this.ailyChatConfigService.getAgentToolsConfig('mainAgent');
+    const schematicAgentConfig = this.ailyChatConfigService.getAgentToolsConfig('schematicAgent');
+    
+    // 合并所有 Agent 的启用和禁用工具
+    const enabledToolNames = [
+      ...(mainAgentConfig?.enabledTools || []),
+      ...(schematicAgentConfig?.enabledTools || [])
+    ];
+    const disabledToolNames = [
+      ...(mainAgentConfig?.disabledTools || []),
+      ...(schematicAgentConfig?.disabledTools || [])
+    ];
+    const hasEnabledToolsConfig = enabledToolNames.length > 0;
 
     // 过滤工具逻辑：
     // 1. 如果没有配置，使用全部工具
@@ -3811,12 +3821,21 @@ ${JSON.stringify(errData)}
             // 获取keyinfo
             // const keyInfo = await this.getKeyInfo();
 
-            // 集中注入 todo 提醒 - 对所有非 todo 工具的结果统一注入
-            if (toolResult && data.tool_name !== 'todo_write_tool') {
+            // 判断是否为子Agent
+            const isSubagent = messageSource !== 'mainAgent';
+
+            // 集中注入 todo 提醒 - 仅对 mainAgent 的非 todo 工具结果注入
+            if (toolResult && data.tool_name !== 'todo_write_tool' && !isSubagent) {
+              console.log('=============================🔔 注入 TODO 提醒=============================');
               toolResult = injectTodoReminder(toolResult, data.tool_name);
             }
 
             let toolContent = '';
+            
+            // 根据 Agent 类型生成不同的提示信息
+            const agentInfoTip = isSubagent 
+              ? '<info>如果子任务已完成，请返回结果给主Agent</info>'
+              : '<info>如果想结束对话，转交给用户，可以使用[to_xxx]，这里的xxx为user</info>';
 
             // 拼接到工具结果中返回
             if (toolResult?.content && this.chatService.currentMode === 'agent') {
@@ -3857,15 +3876,16 @@ ${JSON.stringify(errData)}
                 'reload_abi_json'
               ].includes(data.tool_name);
 
-              // 只在 Blockly 工具失败或警告时添加规则提示
-              const needsRules = isBlocklyTool && (toolResult?.is_error || resultState === 'warn');
+              // 只在 Blockly 工具失败或警告时添加规则提示（仅限 mainAgent）
+              const needsRules = !isSubagent && isBlocklyTool && (toolResult?.is_error || resultState === 'warn');
 
               // console.log('needsRules:', needsRules, 'isBlocklyTool:', isBlocklyTool, 'needsPathInfo:', needsPathInfo, 'resultState:', resultState, 'toolResult.is_error:', toolResult?.is_error);
 
               // 智能决定是否包含 keyInfo：需要路径信息的工具 或 工具失败/警告时
               const shouldIncludeKeyInfo = needsPathInfo || toolResult?.is_error || resultState === 'warn';
-
-              if (needsRules || newConnect || newProject) {
+              
+              // 规则提示仅对 mainAgent 生效
+              if (!isSubagent && (needsRules || newConnect || newProject)) {
                 console.log('======================================包含规则提示======================================');
                 newConnect = false;
                 newProject = false;
@@ -3946,20 +3966,20 @@ ${JSON.stringify(errData)}
 - 深入分析嵌入式代码逻辑和硬件特性，确保逻辑正确。
 - ABS代码保持清晰的缩进和换行，便于阅读和调试。
 </rules>
-<toolResult>${toolResult?.content}</toolResult>\n<info>如果想结束对话，转交给用户，可以使用[to_xxx]，这里的xxx为user</info>`;
+<toolResult>${toolResult?.content}</toolResult>\n${agentInfoTip}`;
               } else if (shouldIncludeKeyInfo) {
                 // 需要路径信息的工具 或 工具失败时：只包含 keyInfo
-                // toolContent += `\n${keyInfo}\n<toolResult>${toolResult?.content}</toolResult>\n<info>如果想结束对话，转交给用户，可以使用[to_xxx]，这里的xxx为user</info>`;
-                toolContent += `\n<toolResult>${toolResult?.content}</toolResult>\n<info>如果想结束对话，转交给用户，可以使用[to_xxx]，这里的xxx为user</info>`;
+                // toolContent += `\n${keyInfo}\n<toolResult>${toolResult?.content}</toolResult>\n${agentInfoTip}`;
+                toolContent += `\n<toolResult>${toolResult?.content}</toolResult>\n${agentInfoTip}`;
               } else {
                 // 其他成功的工具：不包含 keyInfo
-                // toolContent += `\n<toolResult>${toolResult?.content}</toolResult>\n<info>如果想结束对话，转交给用户，可以使用[to_xxx]，这里的xxx为user</info>`;
-                toolContent += `<toolResult>${toolResult?.content}</toolResult>\n<info>如果想结束对话，转交给用户，可以使用[to_xxx]，这里的xxx为user</info>`;
+                // toolContent += `\n<toolResult>${toolResult?.content}</toolResult>\n${agentInfoTip}`;
+                toolContent += `<toolResult>${toolResult?.content}</toolResult>\n${agentInfoTip}`;
               }
             } else {
               toolContent = `
 Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendations, and guidance ONLY. You do NOT execute actual tasks or changes.
-<toolResult>${toolResult?.content || '工具执行完成，无返回内容'}</toolResult>\n<info>如果想结束对话，转交给用户，可以使用[to_xxx]，这里的xxx为user</info>`;
+<toolResult>${toolResult?.content || '工具执行完成，无返回内容'}</toolResult>\n${agentInfoTip}`;
             }
 
             // 显示工具完成状态（除了 todo_write_tool，以及 resultText 为空的情况）
