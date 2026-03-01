@@ -61,7 +61,7 @@ export class RepetitionDetectionService {
   private readonly SAME_TOOL_THRESHOLD = 3;
 
   /** 相同工具不同参数连续调用阈值 */
-  private readonly SAME_TOOL_DIFF_ARGS_THRESHOLD = 10;
+  private readonly SAME_TOOL_DIFF_ARGS_THRESHOLD = 30;
   
   /** 循环模式检测的历史长度 */
   private readonly CYCLE_PATTERN_LENGTH = 6;
