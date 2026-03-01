@@ -1,7 +1,7 @@
 {
   "name": "aily-blockly",
   "productName": "aily blockly",
-  "version": "0.9.29",
+  "version": "0.9.30",
   "author": "coloz",
   "description": "aily blockly dev",
   "main": "electron/main.js",
@@ -123,7 +123,9 @@
     "start": "ng serve",
     "watch": "ng build --watch --configuration development",
     "electron": "concurrently \"npm start\" \"wait-on tcp:4200 && electron ./electron/main.js --serve\"",
-    "build": "ng build --base-href ./ && electron-builder build"
+    "build": "ng build --base-href ./ && electron-builder build",
+    "build:mac": "ng build --base-href ./ && electron-builder --mac --arm64 --x64",
+    "build:mac:universal": "ng build --base-href ./ && electron-builder --mac --universal"
   },
   "private": true,
   "dependencies": {
