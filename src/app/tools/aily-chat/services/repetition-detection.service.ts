@@ -59,9 +59,6 @@ export class RepetitionDetectionService {
   
   /** 相同工具连续调用阈值 */
   private readonly SAME_TOOL_THRESHOLD = 3;
-
-  /** 相同工具不同参数连续调用阈值 */
-  private readonly SAME_TOOL_DIFF_ARGS_THRESHOLD = 30;
   
   /** 循环模式检测的历史长度 */
   private readonly CYCLE_PATTERN_LENGTH = 6;
@@ -140,14 +137,8 @@ export class RepetitionDetectionService {
       return exactMatchResult;
     }
     
-    // 检测 2: 同一工具不同参数的连续调用
-    const sameToolResult = this.checkSameToolRepetition(toolName);
-    if (sameToolResult.isRepetitive) {
-      return sameToolResult;
-    }
-    
-    // 检测 3: A→B→A→B 或 A→B→C→A→B→C 循环模式
-    const cycleResult = this.checkCyclePattern(toolName);
+    // 检测 2: A→B→A→B 或 A→B→C→A→B→C 循环模式（必须参数也相同才触发）
+    const cycleResult = this.checkCyclePattern(toolName, argsHash);
     if (cycleResult.isRepetitive) {
       return cycleResult;
     }
@@ -178,64 +169,48 @@ export class RepetitionDetectionService {
   }
 
   /**
-   * 检测同一工具的连续调用（即使参数不同）
-   */
-  private checkSameToolRepetition(toolName: string): RepetitionCheckResult {
-    const recent = this.toolCallHistory.slice(-this.SAME_TOOL_DIFF_ARGS_THRESHOLD);
-    const consecutiveSameTool = recent.filter(h => h.name === toolName);
-    
-    // 如果最近 N 次调用中有 N-1 次以上是同一工具
-    if (consecutiveSameTool.length >= this.SAME_TOOL_DIFF_ARGS_THRESHOLD - 1) {
-      return {
-        isRepetitive: true,
-        pattern: `${toolName} 在最近 ${this.SAME_TOOL_DIFF_ARGS_THRESHOLD} 次调用中出现 ${consecutiveSameTool.length} 次`,
-        suggestion: '建议尝试使用其他工具或方法来解决问题。'
-      };
-    }
-    
-    return { isRepetitive: false };
-  }
-
-  /**
    * 检测循环调用模式 (A→B→A→B 或 A→B→C→A→B→C)
+   * 必须同时满足：工具名循环 + 参数也相同
    */
-  private checkCyclePattern(toolName: string): RepetitionCheckResult {
+  private checkCyclePattern(toolName: string, argsHash: string): RepetitionCheckResult {
     const recent = this.toolCallHistory.slice(-this.CYCLE_PATTERN_LENGTH);
     
     if (recent.length < 4) {
       return { isRepetitive: false };
     }
     
-    // 检测 2 元素循环: A→B→A→B
+    // 检测 2 元素循环: A→B→A→B（工具名+参数都相同）
     if (recent.length >= 4) {
       const last4 = recent.slice(-4);
       if (
         last4[0].name === last4[2].name &&
         last4[1].name === last4[3].name &&
-        last4[0].name !== last4[1].name
+        last4[0].name !== last4[1].name && // A 和 B 是不同的工具
+        last4[0].argsHash === last4[2].argsHash && // 参数也相同
+        last4[1].argsHash === last4[3].argsHash
       ) {
-        // 检查参数是否也相似
-        const argsAlsoMatch = 
-          last4[0].argsHash === last4[2].argsHash &&
-          last4[1].argsHash === last4[3].argsHash;
-        
-        if (argsAlsoMatch) {
-          return {
-            isRepetitive: true,
-            pattern: `${last4[0].name} ↔ ${last4[1].name} 循环调用（参数相同）`,
-            suggestion: '检测到工具间的循环依赖，请重新思考解决方案。'
-          };
-        }
+        return {
+          isRepetitive: true,
+          pattern: `${last4[0].name} ↔ ${last4[1].name} 循环调用（参数相同）`,
+          suggestion: '检测到工具间的循环依赖，请重新思考解决方案。'
+        };
       }
     }
     
-    // 检测 3 元素循环: A→B→C→A→B→C
+    // 检测 3 元素循环: A→B→C→A→B→C（工具名+参数都相同）
     if (recent.length >= 6) {
       const last6 = recent.slice(-6);
+      // 确保至少有2个不同的工具（避免 A→A→A→A→A→A 被误判为循环）
+      const uniqueTools = new Set([last6[0].name, last6[1].name, last6[2].name]);
       if (
+        uniqueTools.size >= 2 &&
         last6[0].name === last6[3].name &&
         last6[1].name === last6[4].name &&
-        last6[2].name === last6[5].name
+        last6[2].name === last6[5].name &&
+        // 参数也必须相同
+        last6[0].argsHash === last6[3].argsHash &&
+        last6[1].argsHash === last6[4].argsHash &&
+        last6[2].argsHash === last6[5].argsHash
       ) {
         return {
           isRepetitive: true,
