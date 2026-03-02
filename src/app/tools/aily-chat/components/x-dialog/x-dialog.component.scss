@@ -160,6 +160,57 @@
         border-radius: 2px;
         padding: 0 2px;
       }
+
+      table {
+        border-collapse: collapse;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(255, 255, 255, 0.05);
+        border-radius: 3px;
+      }
+      
+      thead {
+        background-color: rgb(50, 50, 50);
+      }
+      
+      tbody {
+        background-color: rgb(46, 45, 45);
+      }
+      
+      tbody tr {
+        background-color: rgb(46, 45, 45);
+        transition: background-color 200ms linear;
+      }
+      
+      tbody tr:hover {
+        background-color: rgba(29, 29, 29, 1);
+      }
+      
+      th,
+      td {
+        padding: 10px 12px;
+        border: 1px solid #444;
+      }
+      
+      th {
+        color: #ffffff;
+      }
+      
+      td {
+        color: #ffffff;
+      }
+
+      blockquote {
+        border-left: 4px solid #6b6b6b;
+        padding: 4px 12px;
+        margin: 16px 0;
+        background-color: rgba(187, 187, 187, 0.1);
+        border-radius: 0 3px 3px 0;
+        transition: background-color 0.2s ease;
+      }
+      
+      blockquote:hover {
+        background-color: rgba(187, 187, 187, 0.2);
+      }
     }
   }
 }
