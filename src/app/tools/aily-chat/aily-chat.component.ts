@@ -2061,6 +2061,9 @@ ${JSON.stringify(errData)}
         if (!this.isWaiting) {
           return; // 如果不在等待状态，直接返回
         }
+        if (this.isCancelled) {
+          return; // 用户已中断，阻止流继续渲染（含 think loading 被覆盖）
+        }
 
         // console.log("Recv: ", data);
 

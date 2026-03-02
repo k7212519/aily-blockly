@@ -200,10 +200,11 @@ export class XDialogComponent implements OnChanges {
       i++;
     }
 
-    // 流式传输中 think 块尚未闭合
+    // think 块尚未闭合：流式中显示 loading，流式结束（含用户中断）标记为完成
     if (inThink && buf.trim()) {
       const encoded = btoa(encodeURIComponent(buf.trim()));
-      result += '\n```aily-think\n' + JSON.stringify({ content: encoded, isComplete: false, encoded: true }) + '\n```\n';
+      const isComplete = !this.doing;
+      result += '\n```aily-think\n' + JSON.stringify({ content: encoded, isComplete, encoded: true }) + '\n```\n';
     }
 
     return result;
