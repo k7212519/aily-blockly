@@ -1,7 +1,7 @@
-import { Component, ElementRef, Input, ViewChild, DoCheck, OnDestroy } from '@angular/core';
+import { Component, ElementRef, Input, ViewChild, OnDestroy, OnInit, ChangeDetectorRef } from '@angular/core';
 import * as Blockly from 'blockly';
-import { Subject } from 'rxjs';
-import { debounceTime, takeUntil } from 'rxjs/operators';
+import { Subject, combineLatest } from 'rxjs';
+import { debounceTime, takeUntil, map, distinctUntilChanged, pairwise, startWith } from 'rxjs/operators';
 import { TranslateService } from '@ngx-translate/core';
 
 // Blockly 多语言包
@@ -141,7 +141,7 @@ class OverlayFlyoutMetricsManager extends (Blockly as any).MetricsManager {
   templateUrl: './blockly.component.html',
   styleUrl: './blockly.component.scss',
 })
-export class BlocklyComponent implements DoCheck, OnDestroy {
+export class BlocklyComponent implements OnInit, OnDestroy {
   @ViewChild('blocklyDiv', { static: true }) blocklyDiv!: ElementRef;
 
   @Input() devmode;
@@ -157,13 +157,10 @@ export class BlocklyComponent implements DoCheck, OnDestroy {
   // Control bitmap upload handler visibility
   showBitmapUploadHandler = true;
 
-  get aiWriting() {
-    return this.blocklyService.aiWriting || this.blocklyService.aiWaitWriting;
-  }
-
+  aiWriting = false;
   showSpinOverlay = false;
   isFadingOut = false;
-  private previousAiWriting = false;
+  private fadeOutTimer: any = null;
 
   get workspace() {
     return this.blocklyService.workspace;
@@ -250,7 +247,8 @@ export class BlocklyComponent implements DoCheck, OnDestroy {
     private configService: ConfigService,
     private bitmapUploadService: BitmapUploadService,
     private noticeService: NoticeService,
-    private translateService: TranslateService
+    private translateService: TranslateService,
+    private cdr: ChangeDetectorRef
   ) {
     // Initialize GlobalServiceManager with BitmapUploadService
     const globalServiceManager = GlobalServiceManager.getInstance();
@@ -265,6 +263,7 @@ export class BlocklyComponent implements DoCheck, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.initAiWritingSubscription();
     this.initDevMode();
     this.initPrompt();
     this.initCodeGenerationDebounce();
@@ -307,23 +306,36 @@ export class BlocklyComponent implements DoCheck, OnDestroy {
     this.destroy$.complete();
   }
 
-  ngDoCheck(): void {
-    const currentAiWriting = this.aiWriting;
-
-    if (!this.previousAiWriting && currentAiWriting) {
-      this.isFadingOut = false;
-      this.showSpinOverlay = true;
-    }
-
-    if (this.previousAiWriting && !currentAiWriting) {
-      this.isFadingOut = true;
-      setTimeout(() => {
-        this.showSpinOverlay = false;
+  private initAiWritingSubscription(): void {
+    combineLatest([
+      this.blocklyService.aiWriting$,
+      this.blocklyService.aiWaiting$
+    ]).pipe(
+      map(([writing, waiting]) => writing || waiting),
+      distinctUntilChanged(),
+      startWith(false),
+      pairwise(),
+      takeUntil(this.destroy$)
+    ).subscribe(([prev, curr]) => {
+      this.aiWriting = curr;
+      if (!prev && curr) {
+        if (this.fadeOutTimer) {
+          clearTimeout(this.fadeOutTimer);
+          this.fadeOutTimer = null;
+        }
         this.isFadingOut = false;
-      }, 300);
-    }
-
-    this.previousAiWriting = currentAiWriting;
+        this.showSpinOverlay = true;
+      } else if (prev && !curr) {
+        this.isFadingOut = true;
+        this.fadeOutTimer = setTimeout(() => {
+          this.showSpinOverlay = false;
+          this.isFadingOut = false;
+          this.fadeOutTimer = null;
+          this.cdr.markForCheck();
+        }, 300);
+      }
+      this.cdr.markForCheck();
+    });
   }
 
   ngAfterViewInit(): void {
