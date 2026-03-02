@@ -291,13 +291,7 @@ export class RepetitionDetectionService {
       return phraseRepetition;
     }
     
-    // 检测 2: 句子/段落级别重复检测
-    const sentenceRepetition = this.checkSentenceRepetition();
-    if (sentenceRepetition.isRepetitive) {
-      return sentenceRepetition;
-    }
-    
-    // 检测 3: 使用 KMP 算法检测 token 序列重复模式
+    // 检测 2: 使用 KMP 算法检测 token 序列重复模式（检测 ABABAB 循环模式）
     if (this.isRepetitivePattern(this.streamTokens)) {
       return {
         isRepetitive: true,
@@ -306,8 +300,8 @@ export class RepetitionDetectionService {
       };
     }
     
-    // 检测 4: 行级别重复
-    const lineRepetition = this.checkLineRepetition();
+    // 检测 3: 连续行重复检测（如相同的行连续出现多次）
+    const lineRepetition = this.checkConsecutiveLineRepetition();
     if (lineRepetition.isRepetitive) {
       return lineRepetition;
     }
@@ -413,129 +407,7 @@ export class RepetitionDetectionService {
     return null;
   }
 
-  /**
-   * 检测句子/段落级别的重复
-   * 用于检测相同的较长文本块在输出中多次出现（即使中间有其他内容分隔）
-   */
-  private checkSentenceRepetition(): RepetitionCheckResult {
-    const text = this.streamTokens.join('');
-    
-    // 文本太短时不检测
-    if (text.length < 80) {
-      return { isRepetitive: false };
-    }
-    
-    // 按句子分隔符分割（中英文句号、问号、感叹号、换行等）
-    const sentences = text
-      .split(/[。？！\?\!\n]+/)
-      .map(s => s.trim())
-      .filter(s => s.length >= 15); // 只考虑长度>=15的句子
-    
-    if (sentences.length < 2) {
-      return { isRepetitive: false };
-    }
-    
-    // 统计每个句子出现的次数
-    const sentenceCount = new Map<string, number>();
-    for (const sentence of sentences) {
-      // 标准化句子（去除首尾空白，统一空格）
-      const normalized = sentence.replace(/\s+/g, ' ').trim();
-      if (normalized.length >= 15) {
-        sentenceCount.set(normalized, (sentenceCount.get(normalized) || 0) + 1);
-      }
-    }
-    
-    // 查找重复的长句子
-    for (const [sentence, count] of sentenceCount.entries()) {
-      // 跳过白名单中的模式（如代码块标记、格式化标记等）
-      if (this.isWhitelisted(sentence)) continue;
-      
-      // 跳过看起来像 JSON 的内容
-      if (/^\s*[\{\[\"\']/.test(sentence) || /[\}\]\"\']\s*$/.test(sentence)) {
-        continue;
-      }
-      
-      // 要求更严格：句子要足够长且重复次数足够多
-      // 只有 40+ 字符的句子重复 3+ 次才触发
-      if (sentence.length >= 40 && count >= 3) {
-        const displaySentence = sentence.length > 30 
-          ? sentence.substring(0, 30) + '...' 
-          : sentence;
-        return {
-          isRepetitive: true,
-          pattern: `相同段落出现 ${count} 次: "${displaySentence}"`,
-          suggestion: '检测到重复的段落内容。'
-        };
-      }
-    }
-    
-    // 检测子串重复：相同的较长片段在不同位置出现
-    const longPhraseResult = this.checkLongPhraseRepetition(text);
-    if (longPhraseResult.isRepetitive) {
-      return longPhraseResult;
-    }
-    
-    return { isRepetitive: false };
-  }
 
-  /**
-   * 检测较长短语的重复（不要求连续）
-   * 用于检测完整段落的重复输出，要求更严格以避免误报
-   */
-  private checkLongPhraseRepetition(text: string): RepetitionCheckResult {
-    // 要求更长的文本才检测
-    if (text.length < 200) {
-      return { isRepetitive: false };
-    }
-    
-    // 只检测较长的片段（60-100 字符），避免 JSON 属性等短片段误报
-    const minLen = 60;
-    const maxLen = 100;
-    
-    for (let len = maxLen; len >= minLen; len -= 10) {
-      // 从末尾取一个片段
-      const endPos = text.length;
-      const startPos = endPos - len;
-      
-      if (startPos < 0) continue;
-      
-      const phrase = text.slice(startPos, endPos);
-      
-      // 跳过空白或太简单的内容
-      if (phrase.trim().length < minLen * 0.8) continue;
-      
-      // 跳过看起来像 JSON 的内容
-      if (/^\s*[\{\[\"\']/.test(phrase) || /[\}\]\"\']\s*$/.test(phrase)) {
-        continue;
-      }
-      
-      // 在前面的文本中查找这个片段
-      const searchArea = text.slice(0, startPos - 20); // 在更早的文本中搜索，留更大间隔
-      
-      // 计算出现次数
-      let count = 0;
-      let pos = 0;
-      while ((pos = searchArea.indexOf(phrase, pos)) !== -1) {
-        count++;
-        pos += phrase.length; // 不允许重叠匹配
-      }
-      count++; // 加上末尾的那个
-      
-      // 要求至少重复 3 次才触发
-      if (count >= 3) {
-        const displayPhrase = phrase.length > 35 
-          ? phrase.substring(0, 35) + '...' 
-          : phrase;
-        return {
-          isRepetitive: true,
-          pattern: `相同内容重复 ${count} 次: "${displayPhrase}"`,
-          suggestion: '检测到重复的文本内容。'
-        };
-      }
-    }
-    
-    return { isRepetitive: false };
-  }
 
   /**
    * 使用 KMP 前缀函数检测 token 序列重复
@@ -593,40 +465,55 @@ export class RepetitionDetectionService {
   }
 
   /**
-   * 检测行级别重复
+   * 检测连续的行重复
+   * 只有当相同的行连续出现多次时才触发（而非分散在文本各处）
+   * 例如：检测 "line1\nline1\nline1\nline1" 这种真正的重复
    */
-  private checkLineRepetition(): RepetitionCheckResult {
+  private checkConsecutiveLineRepetition(): RepetitionCheckResult {
     const text = this.streamTokens.join('');
-    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    const lines = text.split('\n').filter(l => l.trim().length > 0);
     
-    if (lines.length < 5) {
+    if (lines.length < 4) {
       return { isRepetitive: false };
     }
     
-    // 统计行重复次数
-    const lineCount = new Map<string, number>();
-    for (const line of lines) {
-      lineCount.set(line, (lineCount.get(line) || 0) + 1);
+    // 从末尾往前检测连续相同的行
+    const lastLine = lines[lines.length - 1].trim();
+    
+    // 跳过太短的行或白名单中的行
+    if (lastLine.length < 10 || this.isWhitelisted(lastLine)) {
+      return { isRepetitive: false };
     }
     
-    // 找出重复最多的行
-    let maxCount = 0;
-    let mostRepeated = '';
-    for (const [line, count] of lineCount.entries()) {
-      // 忽略太短的行和白名单中的行
-      if (count > maxCount && line.length > 10 && !this.isWhitelisted(line)) {
-        maxCount = count;
-        mostRepeated = line;
+    // 计算末尾有多少连续相同的行
+    let consecutiveCount = 1;
+    for (let i = lines.length - 2; i >= 0; i--) {
+      if (lines[i].trim() === lastLine) {
+        consecutiveCount++;
+      } else {
+        break; // 不再连续，停止计数
       }
     }
     
-    // 如果某行重复超过总行数的 30%，认为是重复
-    const repetitionRatio = maxCount / lines.length;
-    if (repetitionRatio > 0.3 && maxCount >= 3) {
+    // 连续相同的行达到阈值才报告
+    // 根据行的长度调整阈值
+    let threshold: number;
+    if (lastLine.length < 20) {
+      threshold = 6; // 短行需要更多重复
+    } else if (lastLine.length < 50) {
+      threshold = 4; // 中等长度的行
+    } else {
+      threshold = 3; // 长行
+    }
+    
+    if (consecutiveCount >= threshold) {
+      const displayLine = lastLine.length > 30 
+        ? lastLine.substring(0, 30) + '...' 
+        : lastLine;
       return {
         isRepetitive: true,
-        pattern: `行 "${mostRepeated.substring(0, 30)}..." 重复 ${maxCount} 次`,
-        suggestion: '检测到相同内容的重复输出。'
+        pattern: `行 "${displayLine}" 连续重复 ${consecutiveCount} 次`,
+        suggestion: '检测到相同行的连续重复输出。'
       };
     }
     
