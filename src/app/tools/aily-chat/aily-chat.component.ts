@@ -2090,7 +2090,11 @@ ${JSON.stringify(errData)}
             if (data.content) {
               // 检测 <think> 标签作为内容边界
               if (data.content.includes('<think>')) {
-                this.repetitionDetectionService.markBoundary('think');
+                this.repetitionDetectionService.markBoundary('think_start');
+              }
+              // 检测 </think> 结束标签，丢弃 think 内容块
+              if (data.content.includes('</think>')) {
+                this.repetitionDetectionService.markBoundary('think_end');
               }
 
               // 检测流式文本重复
@@ -2098,7 +2102,7 @@ ${JSON.stringify(errData)}
               if (streamRepetitionCheck.isRepetitive) {
                 console.warn('[重复检测] 流式文本重复:', streamRepetitionCheck.pattern);
                 // 显示提示并终止响应
-                this.appendMessage('aily', `\n\n> ⚠️ ${streamRepetitionCheck.pattern}，已自动终止响应。\n\n`, messageSource);
+                this.appendMessage('aily', data.content, messageSource);
                 this.stop();
                 return;
               }

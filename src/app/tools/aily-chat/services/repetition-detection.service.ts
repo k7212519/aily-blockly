@@ -103,8 +103,13 @@ export class RepetitionDetectionService {
   /** 块级相似度阈值（0-1，1=完全相同） */
   private readonly BLOCK_SIMILARITY_THRESHOLD = 0.85;
 
-  /** 块的最小长度（太短的块不参与检测） */
-  private readonly MIN_BLOCK_LENGTH = 30;
+  /** 块的最小长度（太短的块不参与检测，中文场景下一个句子可能只有 8-15 字符） */
+  private readonly MIN_BLOCK_LENGTH = 10;
+
+  // ==================== Think 状态跟踪 ====================
+
+  /** 当前是否在 <think> 标签内部（思考内容不参与重复检测） */
+  private insideThink = false;
 
   constructor() {}
 
@@ -241,14 +246,28 @@ export class RepetitionDetectionService {
    * @returns 检测结果
    */
   checkStreamRepetition(token: string): RepetitionCheckResult {
+    // 检测 think 标签边界
+    if (token.includes('<think>')) {
+      this.insideThink = true;
+    }
+    if (token.includes('</think>')) {
+      this.insideThink = false;
+      return { isRepetitive: false }; // 刚出 think，跳过本次检测
+    }
+
+    // think 内容不加入检测缓冲区（但仍计入 streamTokens 以保持索引一致性）
     this.streamTokens.push(token);
 
     // 保持 token 数量在限制内
     if (this.streamTokens.length > this.MAX_STREAM_TOKENS) {
       const trimCount = this.streamTokens.length - this.MAX_STREAM_TOKENS;
       this.streamTokens = this.streamTokens.slice(trimCount);
-      // 同步调整边界索引，避免错位
       this.lastBoundaryTokenIndex = Math.max(0, this.lastBoundaryTokenIndex - trimCount);
+    }
+
+    // think 内容不参与重复检测（思考过程天然含重复模式）
+    if (this.insideThink) {
+      return { isRepetitive: false };
     }
 
     // 每 N 个 token 检测一次
@@ -398,7 +417,7 @@ export class RepetitionDetectionService {
     return cleanText
       .split(/(?:[。？！\n]|(?:\.\s))+/)
       .map(s => s.trim())
-      .filter(s => s.length >= 15); // 只保留 ≥15 字符的句子
+      .filter(s => s.length >= 8); // 只保留 ≥8 字符的句子（中文场景较短）
   }
 
   /**
@@ -461,25 +480,33 @@ export class RepetitionDetectionService {
 
   /**
    * 标记内容边界
-   * 当遇到 tool_call 或 <think> 标签时调用此方法
-   * 将当前累积的流式文本存为一个"内容块"，用于后续的块级重复比较
+   * 当遇到 tool_call、<think> 开始或 </think> 结束时调用
    *
-   * @param type 边界类型（仅用于日志，不影响逻辑）
+   * - 'tool_call': 工具调用边界，保存之前的输出内容为一个块
+   * - 'think_start': <think> 开始，保存之前的输出内容为一个块
+   * - 'think_end': </think> 结束，不保存内容（think 内容丢弃），只更新索引
    */
-  markBoundary(type: 'tool_call' | 'think' = 'tool_call'): void {
-    // 只提取上次边界到现在的增量 token
+  markBoundary(type: 'tool_call' | 'think_start' | 'think_end' = 'tool_call'): void {
+    if (type === 'think_end') {
+      // think 内容不保存为内容块，只更新边界位置
+      this.lastBoundaryTokenIndex = this.streamTokens.length;
+      return;
+    }
+
+    // 提取上次边界到现在的增量 token
     const deltaTokens = this.streamTokens.slice(this.lastBoundaryTokenIndex);
     const deltaText = deltaTokens.join('').trim();
 
-    // 去除 think 标签内容后提取纯输出内容
+    // 去除可能残留的 think 标签内容
     const cleanText = deltaText
       .replace(/<think>[\s\S]*?<\/think>/g, '')
+      .replace(/<think>[\s\S]*/g, '')  // 去除未关闭的 think 标签
+      .replace(/[\s\S]*<\/think>/g, '') // 去除只有关闭标签的情况
       .trim();
 
     if (cleanText.length >= this.MIN_BLOCK_LENGTH) {
       this.contentBlocks.push(cleanText);
 
-      // 只保留最近的块，避免内存泄漏
       if (this.contentBlocks.length > 10) {
         this.contentBlocks = this.contentBlocks.slice(-10);
       }
@@ -687,6 +714,7 @@ export class RepetitionDetectionService {
   resetStreamTokens(): void {
     this.streamTokens = [];
     this.lastBoundaryTokenIndex = 0;
+    this.insideThink = false;
   }
 
   /**
@@ -698,6 +726,7 @@ export class RepetitionDetectionService {
     this.resetStreamTokens();
     this.contentBlocks = [];
     this.lastBoundaryTokenIndex = 0;
+    this.insideThink = false;
   }
 
   /**
