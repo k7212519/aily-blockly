@@ -1406,6 +1406,11 @@ Do not create non-existent boards and libraries.
         textarea.focus();
         textarea.setSelectionRange(textarea.value.length, textarea.value.length);
       }
+
+      // autoSend：自动发送（延迟确保输入框已更新）
+      if (options?.autoSend) {
+        this.send('user', this.inputValue, true);
+      }
     }, 100);
   }
 
@@ -2083,6 +2088,11 @@ ${JSON.stringify(errData)}
           if (data.type === 'ModelClientStreamingChunkEvent') {
             // 处理流式数据
             if (data.content) {
+              // 检测 <think> 标签作为内容边界
+              if (data.content.includes('<think>')) {
+                this.repetitionDetectionService.markBoundary('think');
+              }
+
               // 检测流式文本重复
               const streamRepetitionCheck = this.repetitionDetectionService.checkStreamRepetition(data.content);
               if (streamRepetitionCheck.isRepetitive) {
@@ -2156,6 +2166,9 @@ ${JSON.stringify(errData)}
 `, messageSource);
             this.isWaiting = false;
           } else if (data.type === 'tool_call_request') {
+            // 标记内容边界：工具调用前的文本块存为一个完整块
+            this.repetitionDetectionService.markBoundary('tool_call');
+
             let toolArgs;
 
             if (typeof data.tool_args === 'string') {
