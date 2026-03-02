@@ -36,7 +36,7 @@ import { CommonModule } from '@angular/common';
     .ac-error-title { flex: 1; font-size: 13px; color: #ff7875; font-weight: 500; }
     .ac-error[data-sev="warning"] .ac-error-title { color: #ffd666; }
     .ac-error-time { font-size: 11px; color: #666; flex-shrink: 0; }
-    .ac-error-msg { padding: 6px 0 0 0; margin: 0; font-size: 12px; color: #888; line-height: 1.6; width: 100%; }
+    .ac-error-msg { padding: 6px 0 0 0; margin: 0; font-size: 12px; color: #888; line-height: 1.6; width: 100%; white-space: pre-wrap; }
   `],
 })
 export class XAilyErrorViewerComponent {
