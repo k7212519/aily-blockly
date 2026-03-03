@@ -92,6 +92,8 @@ export const API = {
   get closeSession() { return `${getServerUrl()}/api/v1/close_session`; },
   get streamConnect() { return `${getServerUrl()}/api/v1/stream`; },
   get sendMessage() { return `${getServerUrl()}/api/v1/send_message`; },
+  /** 无状态聊天请求：每次请求携带完整 messages[]，返回 SSE 流 */
+  get chatRequest() { return `${getServerUrl()}/api/v1/chat`; },
   get getHistory() { return `${getServerUrl()}/api/v1/conversation_history`; },
   get stopSession() { return `${getServerUrl()}/api/v1/stop_session`; },
   get cancelTask() { return `${getServerUrl()}/api/v1/cancel_task`; },

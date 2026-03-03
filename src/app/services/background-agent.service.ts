@@ -1,13 +1,14 @@
 /**
  * BackgroundAgentService - 后台 Agent 服务
  *
- * 对接服务端 SubAgent 直连模式：
+ * 对接服务端 SubAgent 直连模式（已改为 Copilot 式无状态 Request-per-Turn）：
  * - 通过 start_session({ agent: "schematicAgent" }) 创建独立会话
  * - 独立管理 sessionId，不影响 ChatService 的用户对话
- * - 本地执行工具，回传结果给服务端
+ * - 本地执行工具，工具结果通过 messages[] 注入下一轮请求（无需回传等待）
  * - 通过 IPC 推送进度到连线图子窗口
  *
  * @see autogen-subagent-direct-connect.md
+ * @see STATELESS_CHAT_API.md
  */
 
 import { Injectable, OnDestroy } from '@angular/core';
@@ -17,6 +18,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { API } from '../configs/api.config';
 import { AuthService } from './auth.service';
 import { ProjectService } from './project.service';
+import { AilyChatConfigService } from '../tools/aily-chat/services/aily-chat-config.service';
 import { ConnectionGraphService } from './connection-graph.service';
 import { ElectronService } from './electron.service';
 import { TOOLS, ToolUseResult } from '../tools/aily-chat/tools/tools';
@@ -108,6 +110,20 @@ export class BackgroundAgentService implements OnDestroy {
   private aborted = false;
   private streamReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 
+  // ===== 无状态模式状态 =====
+  /** 客户端维护的完整对话历史 */
+  private conversationMessages: any[] = [];
+  /** 当前轮次收集的工具调用元信息 */
+  private currentTurnToolCalls: any[] = [];
+  /** 当前轮次收集的工具执行结果 */
+  private pendingToolResults: any[] = [];
+  /** 当前轮次的助手文本累积 */
+  private currentTurnAssistantContent = '';
+  /** 工具调用循环计数器 */
+  private toolCallingIteration = 0;
+  /** 当前任务可用的工具列表（缓存） */
+  private currentTools: any[] = [];
+
   // ===== 依赖 =====
   private fetchToolService: FetchToolService;
 
@@ -117,6 +133,7 @@ export class BackgroundAgentService implements OnDestroy {
     private projectService: ProjectService,
     private connectionGraphService: ConnectionGraphService,
     private electronService: ElectronService,
+    private ailyChatConfigService: AilyChatConfigService,
   ) {
     this.fetchToolService = new FetchToolService(this.http);
     this.setupIpcListeners();
@@ -159,22 +176,29 @@ export class BackgroundAgentService implements OnDestroy {
     this.status = 'running';
     this.aborted = false;
 
+    // 重置无状态模式状态
+    this.conversationMessages = [];
+    this.currentTurnToolCalls = [];
+    this.pendingToolResults = [];
+    this.currentTurnAssistantContent = '';
+    this.toolCallingIteration = 0;
+
     try {
       // 1. 创建独立会话
       this.sessionId = uuidv4();
-      const tools = this.getSchematicTools();
-      await this.startSession(tools);
+      this.currentTools = this.getSchematicTools();
+      await this.startSession(this.currentTools);
       console.log('[BackgroundAgent] 会话已创建:', this.sessionId);
 
       // 2. 构建带项目上下文的提示词
       const prompt = await this.buildGenerationPrompt();
 
-      // 3. 发送消息
-      await this.sendMessage(prompt, 'user');
-      console.log('[BackgroundAgent] 提示词已发送');
+      // 3. 将用户消息加入对话历史
+      this.conversationMessages.push({ role: 'user', content: prompt });
+      console.log('[BackgroundAgent] 提示词已准备，启动工具调用循环');
 
-      // 4. 连接流并处理
-      await this.processStream();
+      // 4. 启动无状态工具调用循环
+      await this.runToolCallingLoop();
 
       // 5. 完成
       if (!this.aborted) {
@@ -253,26 +277,107 @@ export class BackgroundAgentService implements OnDestroy {
     }
   }
 
+  // =========================================================================
+  // 无状态模式：工具调用循环（Copilot 式 Request-per-Turn）
+  // =========================================================================
+
   /**
-   * 发送消息
-   * POST /api/v1/send_message/{sessionId}
+   * 工具调用循环主入口。
+   * 循环：发送 chatRequest → 处理 SSE(文本+工具调用) → 执行工具 → 注入结果到对话历史 → 重复
+   * 直到没有工具调用或达到循环上限。
    */
-  private async sendMessage(content: string, source: string = 'user'): Promise<void> {
-    await this.http.post(`${API.sendMessage}/${this.sessionId}`, { content, source }).toPromise();
+  private async runToolCallingLoop(): Promise<void> {
+    while (!this.aborted) {
+      // 检查循环次数限制（读取用户在设置面板中配置的 maxCount）
+      const toolCallLimit = this.ailyChatConfigService.maxCount || 30;
+      if (this.toolCallingIteration >= toolCallLimit) {
+        console.warn(`[BackgroundAgent] 工具调用循环已达上限 (${toolCallLimit})`);
+        break;
+      }
+
+      // 重置当前轮次收集器
+      this.currentTurnToolCalls = [];
+      this.pendingToolResults = [];
+      this.currentTurnAssistantContent = '';
+
+      console.log(`[BackgroundAgent] 第 ${this.toolCallingIteration + 1} 轮请求, messages: ${this.conversationMessages.length} 条`);
+
+      // 发送 chatRequest 并处理 SSE 流
+      await this.processChatTurn();
+
+      // 如果被取消，直接退出
+      if (this.aborted) break;
+
+      // 如果没有工具调用，循环结束（纯文本回复）
+      if (this.pendingToolResults.length === 0) {
+        // 将最终的 assistant 消息加入对话历史
+        if (this.currentTurnAssistantContent) {
+          this.conversationMessages.push({
+            role: 'assistant',
+            content: this.currentTurnAssistantContent
+          });
+        }
+        break;
+      }
+
+      // 有工具调用 → 将 assistant 消息(含 tool_calls) + 工具结果加入对话历史
+      const assistantMessage: any = {
+        role: 'assistant',
+        content: this.currentTurnAssistantContent || ''
+      };
+      if (this.currentTurnToolCalls.length > 0) {
+        assistantMessage.tool_calls = this.currentTurnToolCalls.map(tc => ({
+          id: tc.tool_id,
+          type: 'function',
+          function: {
+            name: tc.tool_name,
+            arguments: typeof tc.tool_args === 'string' ? tc.tool_args : JSON.stringify(tc.tool_args)
+          }
+        }));
+      }
+      this.conversationMessages.push(assistantMessage);
+
+      for (const result of this.pendingToolResults) {
+        this.conversationMessages.push({
+          role: 'tool',
+          tool_call_id: result.tool_id,
+          name: result.tool_name,
+          content: typeof result.content === 'string' ? result.content : JSON.stringify(result.content)
+        });
+      }
+
+      this.toolCallingIteration++;
+      console.log(`[BackgroundAgent] ${this.pendingToolResults.length} 个工具结果已加入对话历史，继续下一轮`);
+    }
   }
 
   /**
-   * 流式连接并处理事件
-   * GET /api/v1/stream/{sessionId}（HTTP Streaming + NDJSON）
+   * 发送一轮无状态聊天请求（POST /chat/{sessionId}），处理 SSE 流。
+   * SSE 流中遇到 tool_call_request 时立即执行工具，结果收集到 pendingToolResults。
+   * 流结束后返回，由 runToolCallingLoop 判断是否继续循环。
    */
-  private async processStream(): Promise<void> {
+  private async processChatTurn(): Promise<void> {
     const token = await this.authService.getToken2();
-    const headers: HeadersInit = {};
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json'
+    };
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API.streamConnect}/${this.sessionId}`, { headers });
+    const payload = {
+      session_id: this.sessionId,
+      messages: this.conversationMessages,
+      tools: this.currentTools,
+      mode: 'agent',
+      agent: 'schematicAgent',
+    };
+
+    const response = await fetch(`${API.chatRequest}/${this.sessionId}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
@@ -326,6 +431,8 @@ export class BackgroundAgentService implements OnDestroy {
     switch (event.type) {
       case 'ModelClientStreamingChunkEvent': {
         const content = event.content || '';
+        // 累积助手文本内容（无状态模式用于构建 assistant 消息）
+        this.currentTurnAssistantContent += content;
         // 检测 <think> 标签
         if (content.includes('<think>') || content.includes('</think>')) {
           this.emitProgress('thinking', '正在分析项目...');
@@ -334,19 +441,36 @@ export class BackgroundAgentService implements OnDestroy {
       }
 
       case 'tool_call_request': {
+        // 服务端内部工具（internal: true）——仅记录进度，不在本地执行
+        if (event.internal === true) {
+          console.log(`[BackgroundAgent] 服务端内部工具: ${event.tool_name}，仅展示`);
+          this.emitProgress('tool_call', `服务端执行: ${event.tool_name}...`, event.tool_name);
+          break;
+        }
         await this.handleToolCallRequest(event);
         break;
       }
 
       case 'ToolCallExecutionEvent': {
-        // 服务端通知工具执行情况（可选处理）
+        // 服务端工具执行完成通知（传统格式）
+        break;
+      }
+
+      case 'tool_call_execution': {
+        // 服务端内部工具执行结果通知（无状态模式新事件）
+        const execResult = event.is_error ? `执行失败: ${event.result || ''}` : '执行完成';
+        this.emitProgress('tool_result', execResult, event.tool_name);
         break;
       }
 
       case 'TaskCompleted': {
         const reason = event.stop_reason || event.data?.stop_reason;
-        if (reason === 'error') {
+        // 无状态模式下 TaskCompleted 仅表示当前轮次 SSE 结束，非 TERMINATE 的 stop_reason 是预期行为
+        // 只有真正的 error 且没有待处理工具结果时才报错
+        if (reason === 'error' && this.pendingToolResults.length === 0) {
           this.emitProgress('error', '任务异常结束');
+        } else {
+          console.log(`[BackgroundAgent] TaskCompleted, stop_reason: ${reason}`);
         }
         break;
       }
@@ -363,12 +487,19 @@ export class BackgroundAgentService implements OnDestroy {
   // =========================================================================
 
   /**
-   * 处理 tool_call_request：本地执行工具 → 回传结果
+   * 处理 tool_call_request：本地执行工具 → 收集结果（不回传，由循环在下一轮携带）
    */
   private async handleToolCallRequest(event: any): Promise<void> {
     const toolName = event.tool_name;
     const toolId = event.tool_id;
     let toolArgs: any;
+
+    // 记录工具调用元信息（用于构建 assistant 消息的 tool_calls 字段）
+    this.currentTurnToolCalls.push({
+      tool_id: toolId,
+      tool_name: toolName,
+      tool_args: event.tool_args
+    });
 
     // 解析参数
     try {
@@ -376,7 +507,12 @@ export class BackgroundAgentService implements OnDestroy {
         ? JSON.parse(event.tool_args)
         : event.tool_args || {};
     } catch {
-      await this.sendToolResult(toolId, { is_error: true, content: '参数解析失败' });
+      this.pendingToolResults.push({
+        tool_id: toolId,
+        tool_name: toolName,
+        content: '参数解析失败',
+        is_error: true
+      });
       return;
     }
 
@@ -392,11 +528,16 @@ export class BackgroundAgentService implements OnDestroy {
       result = { is_error: true, content: `工具执行异常: ${error.message}` };
     }
 
-    // 推送工具结果
+    // 推送工具结果进度
     this.emitProgress('tool_result', result.is_error ? `${displayName}失败` : `${displayName}完成`, toolName);
 
-    // 回传结果给服务端
-    await this.sendToolResult(toolId, result);
+    // 收集工具结果（不回传，由 runToolCallingLoop 在下一轮请求中携带）
+    this.pendingToolResults.push({
+      tool_id: toolId,
+      tool_name: toolName,
+      content: typeof result.content === 'string' ? result.content : JSON.stringify(result.content),
+      is_error: result.is_error || false
+    });
   }
 
   /**
@@ -459,10 +600,10 @@ export class BackgroundAgentService implements OnDestroy {
     }
   }
 
-  /**
-   * 回传工具执行结果给服务端
-   * POST /api/v1/send_message/{sessionId} (source: "tool")
-   */
+  // sendToolResult 和 sendMessage 已废弃（无状态模式下工具结果通过 messages[] 携带）
+  // 保留方法签名以防需要回退
+
+  /** @deprecated 无状态模式下不再使用 */
   private async sendToolResult(toolId: string, result: ToolUseResult): Promise<void> {
     const content = JSON.stringify({
       type: 'tool',
@@ -476,6 +617,11 @@ export class BackgroundAgentService implements OnDestroy {
     } catch (error) {
       console.error('[BackgroundAgent] 回传工具结果失败:', error);
     }
+  }
+
+  /** @deprecated 无状态模式下不再使用 */
+  private async sendMessage(content: string, source: string = 'user'): Promise<void> {
+    await this.http.post(`${API.sendMessage}/${this.sessionId}`, { content, source }).toPromise();
   }
 
   // =========================================================================

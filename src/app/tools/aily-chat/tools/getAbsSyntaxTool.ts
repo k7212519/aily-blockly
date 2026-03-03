@@ -135,7 +135,7 @@ arduino_loop()
 - 4-space indent for statement body
 - Named inputs only for statement inputs: \`@IF0:\`, \`@DO0:\`, \`@ELSE:\`
 - Value blocks: ALL params in parentheses (no named inputs)
-- **Parameter order follows block.json args0** (not always fields-first)
+- **Parameter order follows block.json args** (not always fields-first)
 `;
 
 /**
