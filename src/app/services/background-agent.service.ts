@@ -23,6 +23,7 @@ import { ConnectionGraphService } from './connection-graph.service';
 import { ElectronService } from './electron.service';
 import { TOOLS, ToolUseResult } from '../tools/aily-chat/tools/tools';
 import { createSecurityContext } from '../tools/aily-chat/services/security.service';
+import { ContextBudgetService } from '../tools/aily-chat/services/context-budget.service';
 
 // 工具函数导入 — 连线图专属
 import {
@@ -134,6 +135,7 @@ export class BackgroundAgentService implements OnDestroy {
     private connectionGraphService: ConnectionGraphService,
     private electronService: ElectronService,
     private ailyChatConfigService: AilyChatConfigService,
+    private contextBudgetService: ContextBudgetService,
   ) {
     this.fetchToolService = new FetchToolService(this.http);
     this.setupIpcListeners();
@@ -182,6 +184,7 @@ export class BackgroundAgentService implements OnDestroy {
     this.pendingToolResults = [];
     this.currentTurnAssistantContent = '';
     this.toolCallingIteration = 0;
+    this.contextBudgetService.reset();
 
     try {
       // 1. 创建独立会话
@@ -301,6 +304,19 @@ export class BackgroundAgentService implements OnDestroy {
       this.currentTurnAssistantContent = '';
 
       console.log(`[BackgroundAgent] 第 ${this.toolCallingIteration + 1} 轮请求, messages: ${this.conversationMessages.length} 条`);
+
+      // 上下文预算检查与压缩
+      this.contextBudgetService.updateBudget(this.conversationMessages);
+      try {
+        this.conversationMessages = await this.contextBudgetService.compressIfNeeded(
+          this.conversationMessages,
+          this.sessionId || '',
+          undefined,
+          undefined
+        );
+      } catch (error) {
+        console.warn('[BackgroundAgent] 上下文压缩失败:', error);
+      }
 
       // 发送 chatRequest 并处理 SSE 流
       await this.processChatTurn();

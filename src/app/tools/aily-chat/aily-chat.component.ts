@@ -144,6 +144,7 @@ import { AILY_CHAT_ONBOARDING_CONFIG } from '../../configs/onboarding.config';
 import { AbsAutoSyncService } from './services/abs-auto-sync.service';
 import { absVersionControlHandler } from './tools/absVersionControlTool';
 import { RepetitionDetectionService } from './services/repetition-detection.service';
+import { ContextBudgetService, ContextBudgetSnapshot } from './services/context-budget.service';
 
 // import { reloadAbiJsonTool, reloadAbiJsonToolSimple } from './tools';
 
@@ -228,6 +229,16 @@ export class AilyChatComponent implements OnDestroy {
   private sseStreamCompleted = false;
   /** 无状态模式：缓存的 statelessMode 标志（供工具完成回调使用） */
   private currentStatelessMode = false;
+
+  // ==================== 上下文预算（供 UI 消费） ====================
+  /** 上下文预算状态 Observable（供模板绑定） */
+  public get contextBudget$() {
+    return this.contextBudgetService?.budget$;
+  }
+  /** 便捷获取当前上下文预算快照 */
+  public get contextBudgetSnapshot(): ContextBudgetSnapshot | null {
+    return this.contextBudgetService?.getSnapshot() ?? null;
+  }
 
   private textMessageSubscription: Subscription;
   private loginStatusSubscription: Subscription;
@@ -1162,7 +1173,8 @@ Do not create non-existent boards and libraries.
     private onboardingService: OnboardingService,
     private absAutoSyncService: AbsAutoSyncService,
     private connectionGraphService: ConnectionGraphService,
-    private repetitionDetectionService: RepetitionDetectionService
+    private repetitionDetectionService: RepetitionDetectionService,
+    private contextBudgetService: ContextBudgetService
   ) {
     // securityContext 改为 getter，每次使用时动态获取当前项目路径
   }
@@ -1719,6 +1731,8 @@ Do not create non-existent boards and libraries.
       this.currentTurnAssistantContent = '';
       this.currentTurnToolCalls = [];
       this.toolCallingIteration = 0;
+      // 重置上下文预算
+      this.contextBudgetService.reset();
     }
 
     // 清空会话期间的额外允许路径
@@ -1935,10 +1949,17 @@ ${JSON.stringify(errData)}
     }
 
     if (this.isCompleted) {
-      // console.log('上次会话已完成，需要重新启动会话');
-      // 重置取消标志，开始新会话
+      // 重置取消标志
       this.isCancelled = false;
-      await this.resetChat();
+
+      if (this.useStatelessMode) {
+        // 无状态模式：保留 conversationMessages 对话历史，只重置完成标志
+        // 不调用 resetChat()（它会触发 startSession 清空历史）
+        this.isCompleted = false;
+      } else {
+        // 传统模式：重新启动会话
+        await this.resetChat();
+      }
     }
 
     // 发送消息时重新启用自动滚动
@@ -1975,6 +1996,8 @@ ${JSON.stringify(errData)}
         this.isWaiting = true;
         this.currentMessageSource = 'mainAgent';
         this.toolCallingIteration = 0;
+        // 更新上下文预算（新消息加入后）
+        this.contextBudgetService.updateBudget(this.conversationMessages);
         if (clear) {
           this.inputValue = '';
         }
@@ -2151,7 +2174,7 @@ ${JSON.stringify(errData)}
    *
    * 核心优势：服务端不需要等待工具执行结果，彻底消除工具调用超时问题。
    */
-  private startChatTurn(): void {
+  private async startChatTurn(): Promise<void> {
     if (this.isCancelled) {
       this.isWaiting = false;
       return;
@@ -2167,6 +2190,24 @@ ${JSON.stringify(errData)}
       return;
     }
 
+    // ==================== 上下文预算检查与压缩 ====================
+    // 更新模型上下文窗口信息
+    this.contextBudgetService.updateModelContextSize(this.currentModel?.model || null);
+    // 更新当前 token 使用量
+    this.contextBudgetService.updateBudget(this.conversationMessages);
+
+    // 按分层策略压缩：全量保留 → 工具结果截断 → LLM 摘要
+    try {
+      this.conversationMessages = await this.contextBudgetService.compressIfNeeded(
+        this.conversationMessages,
+        this.sessionId,
+        this.getCurrentLLMConfig(),
+        this.currentModel?.model || undefined
+      );
+    } catch (error) {
+      console.warn('[无状态模式] 上下文压缩失败，使用原始历史:', error);
+    }
+
     // 重置当前轮次的收集器
     this.pendingToolResults = [];
     this.currentTurnAssistantContent = '';
@@ -2175,7 +2216,8 @@ ${JSON.stringify(errData)}
     this.sseStreamCompleted = false;
     this.currentStatelessMode = true;
 
-    console.log(`[无状态模式] 启动第 ${this.toolCallingIteration + 1} 轮聊天请求, messages: ${this.conversationMessages.length} 条`);
+    const budget = this.contextBudgetService.getSnapshot();
+    console.log(`[无状态模式] 启动第 ${this.toolCallingIteration + 1} 轮聊天请求, messages: ${this.conversationMessages.length} 条, tokens: ~${budget.currentTokens}/${budget.maxContextTokens} (${budget.usagePercent}%)`);
 
     // 使用修改后的 streamConnect，传入 stateless 标志
     this.streamConnect(true);
@@ -2216,6 +2258,9 @@ ${JSON.stringify(errData)}
 
     this.toolCallingIteration++;
 
+    // 更新上下文预算
+    this.contextBudgetService.updateBudget(this.conversationMessages);
+
     console.log(`[无状态模式] 工具调用完成，${this.pendingToolResults.length} 个结果已加入对话历史，启动第 ${this.toolCallingIteration + 1} 轮`);
 
     // 开始下一轮
@@ -2253,6 +2298,8 @@ ${JSON.stringify(errData)}
           content: this.currentTurnAssistantContent
         });
       }
+      // 更新上下文预算（轮次结束时的最终状态）
+      this.contextBudgetService.updateBudget(this.conversationMessages);
       // 设置完成状态（与传统模式 complete 回调的后续逻辑一致）
       if (this.list.length > 0 && this.list[this.list.length - 1].role === 'aily') {
         this.list[this.list.length - 1].state = 'done';
