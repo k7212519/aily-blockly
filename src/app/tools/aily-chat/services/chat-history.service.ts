@@ -323,6 +323,63 @@ export class ChatHistoryService implements OnDestroy {
   }
 
   // =========================================================================
+  // 公共 API - 会话 ID 迁移
+  // =========================================================================
+
+  /**
+   * 将旧 sessionId 的索引条目、缓存、数据文件迁移到新 sessionId。
+   * 用于历史会话恢复后重新注册服务端会话时，sessionId 会变化。
+   */
+  migrateSessionId(oldId: string, newId: string): void {
+    if (!oldId || !newId || oldId === newId) return;
+    this.ensureIndexLoaded();
+
+    // 1. 更新索引条目
+    const entry = this.index.find(e => e.sessionId === oldId);
+    if (entry) {
+      entry.sessionId = newId;
+      entry.updatedAt = Date.now();
+      this.indexDirty = true;
+    }
+
+    // 2. 迁移内存缓存
+    const cached = this.sessionCache.get(oldId);
+    if (cached) {
+      cached.metadata.sessionId = newId;
+      this.sessionCache.set(newId, cached);
+      this.sessionCache.delete(oldId);
+    }
+
+    // 3. 迁移 dirty 标记
+    if (this.dirtySessionIds.has(oldId)) {
+      this.dirtySessionIds.delete(oldId);
+      this.dirtySessionIds.add(newId);
+    }
+
+    // 4. 磁盘文件迁移：用新 ID 重写数据，删除旧文件
+    try {
+      if (this.hasFs()) {
+        const data = cached || this.readSessionData(oldId, entry?.projectPath ?? null);
+        if (data) {
+          data.metadata.sessionId = newId;
+          this.writeSessionData(newId, data);
+        }
+        // 删除旧 ID 的数据文件
+        if (entry) {
+          this.deleteSessionFile(oldId, entry.projectPath);
+        }
+        this.deleteSessionFile(oldId, null);
+      }
+    } catch (err) {
+      console.warn('[ChatHistory] 迁移数据文件失败（不影响流程）:', err);
+    }
+
+    // 5. 立即写入索引
+    this.writeIndex();
+    console.log(`[ChatHistory] 会话 ID 已迁移: ${oldId} → ${newId}`);
+  }
+
+  // =========================================================================
   // 公共 API - 删除
   // =========================================================================
 

@@ -233,6 +233,8 @@ export class AilyChatComponent implements OnDestroy {
   private sseStreamCompleted = false;
   /** 无状态模式：缓存的 statelessMode 标志（供工具完成回调使用） */
   private currentStatelessMode = false;
+  /** 服务端会话是否有效（从历史记录加载的 sessionId 服务端可能不存在） */
+  private serverSessionActive = false;
 
   // ==================== 上下文预算（供 UI 消费） ====================
   /** 上下文预算状态 Observable（供模板绑定） */
@@ -1876,6 +1878,9 @@ Do not create non-existent boards and libraries.
             }
             this.isSessionStarting = false;
 
+            // ★ 服务端会话已建立
+            this.serverSessionActive = true;
+
             // ★ 会话启动后立即更新上下文预算（显示 System + Tools 基础开销）
             this.contextBudgetService.updateBudget(this.conversationMessages, this.getCurrentTools());
 
@@ -1915,6 +1920,49 @@ ${JSON.stringify(errData)}
         }
       });
     });
+  }
+
+  /**
+   * 确保服务端会话有效（从历史记录恢复时，服务端可能已不存在对应 session）
+   *
+   * 保留客户端对话上下文（conversationMessages），仅重新注册服务端会话。
+   * 如果服务端返回了新的 sessionId，自动迁移历史索引。
+   */
+  private async ensureServerSession(): Promise<void> {
+    // 保存客户端状态（startSession 会清空这些）
+    const savedMessages = [...this.conversationMessages];
+    const savedIteration = this.toolCallingIteration;
+    const savedTitle = this.chatService.currentSessionTitle;
+    const savedPath = this.chatService.currentSessionPath;
+    const savedList = [...this.list];
+    const oldSessionId = this.sessionId;
+
+    console.log(`[AilyChat] 服务端会话可能已失效 (${oldSessionId})，正在重新注册...`);
+
+    try {
+      await this.startSession();
+    } catch (err) {
+      console.warn('[AilyChat] 重新注册服务端会话失败:', err);
+      // 恢复状态，让后续流程正常报错
+      this.conversationMessages = savedMessages;
+      this.toolCallingIteration = savedIteration;
+      this.list = savedList;
+      throw err;
+    }
+
+    // 恢复客户端对话上下文
+    this.conversationMessages = savedMessages;
+    this.toolCallingIteration = savedIteration;
+    this.chatService.currentSessionTitle = savedTitle;
+    this.chatService.currentSessionPath = savedPath;
+    this.list = savedList;
+
+    // 如果 sessionId 发生变化，迁移历史索引
+    const newSessionId = this.sessionId;
+    if (oldSessionId && newSessionId && oldSessionId !== newSessionId) {
+      this.chatHistoryService.migrateSessionId(oldSessionId, newSessionId);
+      console.log(`[AilyChat] 服务端会话已重新注册: ${oldSessionId} → ${newSessionId}`);
+    }
   }
 
   closeSession(): void {
@@ -1996,6 +2044,11 @@ ${JSON.stringify(errData)}
         // 无状态模式：保留 conversationMessages 对话历史，只重置完成标志
         // 不调用 resetChat()（它会触发 startSession 清空历史）
         this.isCompleted = false;
+
+        // ★ 如果服务端会话不存在（从历史加载的 sessionId），先重新注册
+        if (!this.serverSessionActive) {
+          await this.ensureServerSession();
+        }
       } else {
         // 传统模式：重新启动会话
         await this.resetChat();
@@ -5369,6 +5422,8 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
       this.chatService.currentSessionPath = entry?.projectPath || this.projectService.currentProjectPath || this.projectService.projectRootPath;
       this.getHistory();
       this.isCompleted = true;
+      // ★ 从历史加载的 sessionId 服务端可能已不存在，标记需要重新注册
+      this.serverSessionActive = false;
       this.closeMenu();
     }
   }
