@@ -15,14 +15,14 @@
     }
   </div>
   <div class="content" [class.thinking]="content==='[thinking...]'">
-    @if(content==='[thinking...]'){
+    <!-- @if(content==='[thinking...]'){
       <div class="thinking">
         <span class="thinking-text">Thinking</span>
         <span class="wave-dots">
           <span class="dot"></span><span class="dot"></span><span class="dot"></span>
         </span>
       </div>
-    }
+    } -->
     @if (streamContent()) {
       <x-markdown
         [content]="streamContent()"
