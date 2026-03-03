@@ -79,6 +79,12 @@ export interface AilyChatConfig {
     apiKeys?: ApiKeyConfig[];
     /** 模型配置列表 */
     models?: ModelConfigOption[];
+    /** 自定义上下文窗口大小（tokens，0 表示自动检测） */
+    contextWindowSize?: number;
+    /** 工具结果压缩阈值比例 (0-1，占上下文窗口的百分比，默认 0.5) */
+    compressionThresholdRatio?: number;
+    /** LLM 摘要阈值比例 (0-1，占上下文窗口的百分比，默认 0.75) */
+    summarizationThresholdRatio?: number;
 }
 
 /**
@@ -115,7 +121,10 @@ const DEFAULT_CONFIG: AilyChatConfig = {
         library: true
     },
     apiKeys: DEFAULT_API_KEYS,
-    models: DEFAULT_MODELS
+    models: DEFAULT_MODELS,
+    contextWindowSize: 0,
+    compressionThresholdRatio: 0.5,
+    summarizationThresholdRatio: 0.75
 };
 
 /**
@@ -277,6 +286,41 @@ export class AilyChatConfigService {
 
     set maxCount(value: number) {
         this.config.maxCount = value;
+    }
+
+    // ==================== 上下文预算配置 ====================
+
+    /**
+     * 获取自定义上下文窗口大小（0 表示自动检测）
+     */
+    get contextWindowSize(): number {
+        return this.config.contextWindowSize ?? 0;
+    }
+
+    set contextWindowSize(value: number) {
+        this.config.contextWindowSize = value;
+    }
+
+    /**
+     * 获取工具结果压缩阈值比例
+     */
+    get compressionThresholdRatio(): number {
+        return this.config.compressionThresholdRatio ?? 0.5;
+    }
+
+    set compressionThresholdRatio(value: number) {
+        this.config.compressionThresholdRatio = Math.max(0, Math.min(1, value));
+    }
+
+    /**
+     * 获取 LLM 摘要阈值比例
+     */
+    get summarizationThresholdRatio(): number {
+        return this.config.summarizationThresholdRatio ?? 0.75;
+    }
+
+    set summarizationThresholdRatio(value: number) {
+        this.config.summarizationThresholdRatio = Math.max(0, Math.min(1, value));
     }
 
     /**

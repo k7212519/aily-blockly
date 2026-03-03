@@ -32,11 +32,9 @@ export class ChatService {
 
   currentMode = 'agent'; // 默认为代理模式
   currentModel: ModelConfig | null = null; // 当前模型，在构造函数中初始化
-  historyList = [];
-  historyChatMap = new Map<string, any>();
 
-  currentSessionId = this.historyList.length > 0 ? this.historyList[0].sessionId : '';
-  currentSessionTitle = this.historyList.length > 0 ? this.historyList[0].name : '';
+  currentSessionId = '';
+  currentSessionTitle = '';
 
   // 记录当前会话创建时的项目路径，用于确保历史记录保存到正确位置
   currentSessionPath = '';
@@ -117,103 +115,6 @@ export class ChatService {
     this.currentModel = model;
     this.configService.data.aiChatModel = model;
     this.configService.save();
-  }
-
-  // 打开.history
-  openHistoryFile(prjPath: string) {
-    // 打开项目下的.chat_history/.chat文件
-    this.ensureChatHistoryFolder(prjPath);
-    const historyPath = this.getChatHistoryFolderPath(prjPath) + '/.chat';
-    if (window['fs'].existsSync(historyPath)) {
-      this.historyList = JSON.parse(window['fs'].readFileSync(historyPath, 'utf-8'));
-    } else {
-      // 如果历史文件不存在，清空历史列表
-      this.historyList = [];
-    }
-  }
-
-  // 保存.history
-  saveHistoryFile(prjPath: string) {
-    // 保存项目下的.chat_history/.chat文件
-    this.ensureChatHistoryFolder(prjPath);
-    const historyPath = this.getChatHistoryFolderPath(prjPath) + '/.chat';
-    window['fs'].writeFileSync(historyPath, JSON.stringify(this.historyList, null, 2), 'utf-8');
-  }
-
-  /**
-   * 获取 .chat_history 文件夹路径
-   * @param prjPath 项目路径
-   * @returns .chat_history 文件夹的完整路径
-   */
-  private getChatHistoryFolderPath(prjPath: string): string {
-    return prjPath + '/.chat_history';
-  }
-
-  /**
-   * 获取会话历史记录文件路径
-   * @param prjPath 项目路径
-   * @param sessionId 会话ID
-   * @returns 会话历史记录文件的完整路径
-   */
-  private getSessionHistoryFilePath(prjPath: string, sessionId: string): string {
-    return this.getChatHistoryFolderPath(prjPath) + '/' + sessionId + '.json';
-  }
-
-  /**
-   * 确保 .chat_history 文件夹存在
-   * @param prjPath 项目路径
-   */
-  private ensureChatHistoryFolder(prjPath: string): void {
-    const folderPath = this.getChatHistoryFolderPath(prjPath);
-    if (!window['fs'].existsSync(folderPath)) {
-      window['fs'].mkdirSync(folderPath, { recursive: true });
-    }
-  }
-
-  /**
-   * 保存会话聊天记录到 .chat_history 文件夹
-   * @param prjPath 项目路径
-   * @param sessionId 会话ID
-   * @param chatList 聊天记录列表
-   */
-  saveSessionChatHistory(prjPath: string, sessionId: string, chatList: any[]): void {
-    if (!sessionId || !chatList || chatList.length === 0) {
-      return;
-    }
-
-    this.ensureChatHistoryFolder(prjPath);
-    const filePath = this.getSessionHistoryFilePath(prjPath, sessionId);
-
-    try {
-      window['fs'].writeFileSync(filePath, JSON.stringify(chatList, null, 2), 'utf-8');
-    } catch (error) {
-      console.warn('保存会话聊天记录失败:', error);
-    }
-  }
-
-  /**
-   * 从 .chat_history 文件夹加载会话聊天记录
-   * @param prjPath 项目路径
-   * @param sessionId 会话ID
-   * @returns 聊天记录列表，如果不存在则返回 null
-   */
-  loadSessionChatHistory(prjPath: string, sessionId: string): any[] | null {
-    if (!sessionId) {
-      return null;
-    }
-
-    const filePath = this.getSessionHistoryFilePath(prjPath, sessionId);
-
-    try {
-      if (window['fs'].existsSync(filePath)) {
-        const content = window['fs'].readFileSync(filePath, 'utf-8');
-        return JSON.parse(content);
-      }
-    } catch (error) {
-      console.warn('加载会话聊天记录失败:', error);
-    }
-
-    return null;
   }
 
 
@@ -604,6 +505,142 @@ export class ChatService {
     return this.http.post(`${API.sendMessage}/${sessionId}`, { content, source });
   }
 
+  /**
+   * 无状态聊天请求（Copilot 式 Request-per-Turn）
+   * 每次请求携带完整对话历史（含工具结果），返回 SSE 流。
+   * 服务端不需要等待工具执行结果，工具调用由前端控制循环。
+   *
+   * @param sessionId  会话ID
+   * @param messages   完整对话历史 [{role,content,tool_calls?,tool_call_id?,name?}]
+   * @param tools      可用工具列表
+   * @param mode       模式 'agent' | 'ask'
+   * @param llmConfig  自定义 LLM 配置（可选）
+   * @param selectModel 选择的模型名称（可选）
+   * @param maxCount   最大消息轮数（可选）
+   */
+  chatRequest(
+    sessionId: string,
+    messages: any[],
+    tools: any[] | null = null,
+    mode: string = 'agent',
+    llmConfig?: any,
+    selectModel?: string,
+    maxCount?: number
+  ): Observable<any> {
+    return new Observable(observer => {
+      let aborted = false;
+      let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+
+      const payload: any = {
+        session_id: sessionId,
+        messages,
+        tools: tools || [],
+        mode
+      };
+
+      if (maxCount !== undefined && maxCount > 0) {
+        payload.max_count = maxCount;
+      }
+      if (llmConfig) {
+        payload.llm_config = llmConfig;
+      }
+      if (selectModel) {
+        payload.select_model = selectModel;
+      }
+
+      this.authService.getToken2().then(token => {
+        if (aborted) return;
+
+        const headers: HeadersInit = {
+          'Content-Type': 'application/json'
+        };
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        fetch(`${API.chatRequest}/${sessionId}`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload)
+        })
+          .then(async response => {
+            if (aborted) return;
+
+            if (!response.ok) {
+              observer.error(new Error(`HTTP error! Status: ${response.status}`));
+              return;
+            }
+
+            reader = response.body!.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            try {
+              while (!aborted) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                  if (aborted) break;
+                  if (!line.trim()) continue;
+                  try {
+                    const msg = JSON.parse(line);
+                    observer.next(msg);
+
+                    if (msg.type === 'TaskCompleted') {
+                      observer.complete();
+                      return;
+                    }
+                  } catch (error) {
+                    console.warn('解析JSON失败:', error, line);
+                  }
+                }
+              }
+
+              // 处理缓冲区中剩余的内容
+              if (!aborted && buffer.trim()) {
+                try {
+                  const msg = JSON.parse(buffer);
+                  observer.next(msg);
+                } catch (error) {
+                  console.warn('解析最后的JSON失败:', error, buffer);
+                }
+              }
+
+              if (!aborted) {
+                observer.complete();
+              }
+            } catch (error) {
+              if (!aborted) {
+                observer.error(error);
+              }
+            }
+          })
+          .catch(error => {
+            if (!aborted) {
+              observer.error(error);
+            }
+          });
+      }).catch(error => {
+        if (!aborted) {
+          observer.error(error);
+        }
+      });
+
+      // 返回清理函数，在取消订阅时调用
+      return () => {
+        aborted = true;
+        if (reader) {
+          reader.cancel().catch(() => {});
+        }
+      };
+    });
+  }
+
   getHistory(sessionId: string) {
     return this.http.get(`${API.getHistory}/${sessionId}`);
   }
@@ -616,7 +653,13 @@ export class ChatService {
     return this.http.post(`${API.cancelTask}/${sessionId}`,{});
   }
 
-  generateTitle(sessionId: string, content: string) {
+  /**
+   * 生成会话标题
+   * @param sessionId 会话ID
+   * @param content 用户消息内容
+   * @param onTitleReady 标题生成成功时的回调（可选）
+   */
+  generateTitle(sessionId: string, content: string, onTitleReady?: (title: string) => void) {
     if (this.titleIsGenerating) {
       console.warn('标题生成中，忽略重复请求');
       return;
@@ -625,13 +668,20 @@ export class ChatService {
     this.http.post(`${API.generateTitle}`, { content }).subscribe(
       (res) => {
         if ((res as any).status === 'success' && sessionId === this.currentSessionId) {
+          let title: string;
           try {
-            this.currentSessionTitle = JSON.parse((res as any).data).title;
+            title = JSON.parse((res as any).data).title;
           } catch (error) {
-            this.currentSessionTitle = (res as any).data;
+            title = (res as any).data;
           }
 
+          this.currentSessionTitle = title;
           console.log("currentSessionTitle:", this.currentSessionTitle);
+
+          // 调用回调，通知标题已就绪
+          if (onTitleReady && title) {
+            onTitleReady(title);
+          }
         }
 
         this.titleIsGenerating = false;

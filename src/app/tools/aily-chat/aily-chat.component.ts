@@ -1,8 +1,10 @@
-import { Component, ElementRef, ViewChild, OnDestroy } from '@angular/core';
+import { Component, ElementRef, ViewChild, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { NzInputModule } from 'ng-zorro-antd/input';
 import { FormsModule } from '@angular/forms';
 import { XDialogComponent } from './components/x-dialog/x-dialog.component';
 import { DialogComponent } from './components/dialog/dialog.component';
+import { ChatRenameDialogComponent } from './components/chat-rename-dialog/chat-rename-dialog.component';
+import { ChatDeleteDialogComponent } from './components/chat-delete-dialog/chat-delete-dialog.component';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { ToolContainerComponent } from '../../components/tool-container/tool-container.component';
 import { UiService } from '../../services/ui.service';
@@ -144,6 +146,9 @@ import { AILY_CHAT_ONBOARDING_CONFIG } from '../../configs/onboarding.config';
 import { AbsAutoSyncService } from './services/abs-auto-sync.service';
 import { absVersionControlHandler } from './tools/absVersionControlTool';
 import { RepetitionDetectionService } from './services/repetition-detection.service';
+import { ContextBudgetService, ContextBudgetSnapshot } from './services/context-budget.service';
+import { SubagentSessionService } from './services/subagent-session.service';
+import { ChatHistoryService, SessionIndexEntry } from './services/chat-history.service';
 
 // import { reloadAbiJsonTool, reloadAbiJsonToolSimple } from './tools';
 
@@ -208,6 +213,36 @@ export class AilyChatComponent implements OnDestroy {
   private isSessionStarting = false; // 防止重复启动会话的标志位
   private hasInitializedForThisLogin = false; // 标记是否已为当前登录状态初始化过
   private isCancelled = false; // 标记任务是否被用户取消，防止取消后工具结果触发重连
+
+  // ==================== 无状态模式（Copilot 式 Request-per-Turn）====================
+  /** 是否使用无状态模式（每次请求携带完整对话历史，无需持久SSE连接） */
+  private useStatelessMode = true;
+  /** 客户端维护的完整对话历史 [{role, content, tool_calls?, tool_call_id?, name?}] */
+  private conversationMessages: any[] = [];
+  /** 当前轮次收集的工具执行结果（无状态模式：SSE结束后统一加入对话历史） */
+  private pendingToolResults: any[] = [];
+  /** 当前轮次的助手文本内容累积（用于构建 assistant 消息） */
+  private currentTurnAssistantContent = '';
+  /** 当前轮次收集的工具调用元信息（用于构建 assistant 消息的 tool_calls 字段） */
+  private currentTurnToolCalls: any[] = [];
+  /** 工具调用循环计数器 */
+  private toolCallingIteration = 0;
+  /** 无状态模式：正在执行中的工具数量（用于解决 async next 回调与 complete 回调的竞态） */
+  private activeToolExecutions = 0;
+  /** 无状态模式：SSE 流已结束标记（等待工具执行完成后再进入下一轮） */
+  private sseStreamCompleted = false;
+  /** 无状态模式：缓存的 statelessMode 标志（供工具完成回调使用） */
+  private currentStatelessMode = false;
+
+  // ==================== 上下文预算（供 UI 消费） ====================
+  /** 上下文预算状态 Observable（供模板绑定） */
+  public get contextBudget$() {
+    return this.contextBudgetService?.budget$;
+  }
+  /** 便捷获取当前上下文预算快照 */
+  public get contextBudgetSnapshot(): ContextBudgetSnapshot | null {
+    return this.contextBudgetService?.getSnapshot() ?? null;
+  }
 
   private textMessageSubscription: Subscription;
   private loginStatusSubscription: Subscription;
@@ -282,7 +317,9 @@ export class AilyChatComponent implements OnDestroy {
             '",\n  "text": "' + this.makeJsonSafe(toolCallInfo.text) +
             '",\n  "id": "' + toolCallInfo.id + '"\n}\n```';
           this.list[i].content = this.list[i].content.replace(new RegExp(pattern, 'g'), newBlock);
-          this.chatService.historyChatMap.set(this.sessionId, this.list);
+          if (this.sessionId) {
+            this.chatHistoryService.markDirty(this.sessionId);
+          }
           return;
         }
       }
@@ -1110,10 +1147,14 @@ Do not create non-existent boards and libraries.
     });
   }
 
-  // generate title
+  // generate title — 标题生成完成后立即更新索引并刷新 UI
   generateTitle(content: string) {
     if (this.sessionTitle) return;
-    this.chatService.generateTitle(this.sessionId, content);
+    this.chatService.generateTitle(this.sessionId, content, (title: string) => {
+      // 标题就绪回调：立即更新全局索引 + 刷新历史列表
+      this.chatHistoryService.updateTitle(this.sessionId, title);
+      this.refreshHistoryList();
+    });
   }
 
   isLoggedIn = false;
@@ -1142,7 +1183,11 @@ Do not create non-existent boards and libraries.
     private onboardingService: OnboardingService,
     private absAutoSyncService: AbsAutoSyncService,
     private connectionGraphService: ConnectionGraphService,
-    private repetitionDetectionService: RepetitionDetectionService
+    private repetitionDetectionService: RepetitionDetectionService,
+    private contextBudgetService: ContextBudgetService,
+    private subagentSessionService: SubagentSessionService,
+    private chatHistoryService: ChatHistoryService,
+    private cdr: ChangeDetectorRef,
   ) {
     // securityContext 改为 getter，每次使用时动态获取当前项目路径
   }
@@ -1224,9 +1269,7 @@ Do not create non-existent boards and libraries.
         this.prjRootPath = this.projectService.projectRootPath;
 
         // 根据新的项目路径重新加载聊天历史
-        const targetPath = newPath || this.projectService.projectRootPath;
-        this.chatService.openHistoryFile(targetPath);
-        this.HistoryList = [...this.chatService.historyList].reverse();
+        this.refreshHistoryList();
 
         // 初始化 ABS 自动同步服务
         if (newPath && newPath !== this.projectService.projectRootPath) {
@@ -1456,8 +1499,8 @@ Do not create non-existent boards and libraries.
   }
 
   ngAfterViewInit(): void {
-    this.chatService.openHistoryFile(this.projectService.currentProjectPath || this.projectService.projectRootPath);
-    this.HistoryList = [...this.chatService.historyList].reverse();
+    // 初始化历史管理
+    this.refreshHistoryList();
     this.scrollToBottom();
 
     // this.mcpService.init().then(() => {
@@ -1509,42 +1552,13 @@ Do not create non-existent boards and libraries.
   /**
    * 清理最后一条 AI 消息中的流式残留内容
    *
-   * 由于流式传输的延迟，agent 输出的终止标记（如 TERMINATE、[to_user]）
-   * 和未完成的特殊代码块可能残留在消息中。此方法在对话终止时统一清理。
+   * 注意：原有的「未闭合 ``` 修复」逻辑已移除。
+   * 该逻辑会把整条 aily 消息（含 aily-state 块）中的所有 ``` 一起计数，
+   * 导致在 AI 文本有未闭合 ``` 时误删 aily-state 块的关闭符，造成状态块截断。
+   * TERMINATE 残留文字已由 appendMessage 的 terminateTemp 机制处理，此处无需重复清理。
    */
   private cleanupLastAiMessage(): void {
-    if (this.list.length === 0) return;
-    const lastMsg = this.list[this.list.length - 1];
-    if (lastMsg.role !== 'aily' || !lastMsg.content) return;
-
-    let content = lastMsg.content as string;
-    const originalLength = content.length;
-
-    // 1. 移除终止标记及其前后空白（完整或部分）
-    //    匹配 TERMINATE 的完整或部分出现（流式可能只传了前几个字符）
-    // content = content.replace(/\s*\[?TERMINATE\]?\s*$/i, '');
-    // content = content.replace(/\s*\[to_user\]\s*$/i, '');
-    // // 部分终止标记（如 "TERMI", "TERMINA" 等出现在末尾）
-    // const terminatePartials = ['TERMINAT', 'TERMINA', 'TERMIN', 'TERMI', 'TERM'];
-    // for (const partial of terminatePartials) {
-    //   if (content.trimEnd().endsWith(partial)) {
-    //     content = content.substring(0, content.lastIndexOf(partial)).trimEnd();
-    //     break;
-    //   }
-    // }
-
-    // 2. 检查三个连续 ``` 的组数，若为单数则移除最后一个 ``` 及其后面的内容（未闭合的代码块）
-    const tripleBacktickGroups = content.match(/```/g);
-    const groupCount = tripleBacktickGroups ? tripleBacktickGroups.length : 0;
-    if (groupCount % 2 === 1) {
-      const lastIndex = content.lastIndexOf('```');
-      content = content.substring(0, lastIndex).trimEnd();
-    }
-
-    // 只在内容实际发生变化时更新
-    if (content.length !== originalLength) {
-      lastMsg.content = content;
-    }
+    // no-op: cleanup logic removed to prevent aily-state block corruption
   }
 
   /**
@@ -1583,7 +1597,10 @@ Do not create non-existent boards and libraries.
         "source": msgSource
       });
     }
-    this.chatService.historyChatMap.set(this.sessionId, this.list);
+    // 标记脏数据，由 30s 兜底定时器保存（不在每次流式 token 时写磁盘）
+    if (this.sessionId) {
+      this.chatHistoryService.markDirty(this.sessionId);
+    }
   }
 
   terminateTemp = '';
@@ -1627,8 +1644,8 @@ Do not create non-existent boards and libraries.
   }
 
   /**
-   * 保存当前会话数据到文件
-   * 在创建新对话、关闭对话、组件销毁时调用
+   * 保存当前会话数据到文件（使用新 ChatHistoryService）
+   * 在创建新对话、关闭对话、组件销毁、每轮对话结束时调用
    */
   private saveCurrentSession(): void {
     if (!this.sessionId || this.list.length === 0) {
@@ -1636,33 +1653,59 @@ Do not create non-existent boards and libraries.
     }
 
     try {
-      // 使用会话创建时记录的路径，确保历史记录保存到发起会话的位置
-      // 如果没有记录的路径，才使用当前项目路径作为后备
-      const prjPath = this.chatService.currentSessionPath || this.projectService.currentProjectPath || this.projectService.projectRootPath;
+      // 确定项目路径：优先使用会话创建时的路径，其次当前项目路径，最后全局兜底（null）
+      const prjPath = this.chatService.currentSessionPath
+        || this.projectService.currentProjectPath
+        || this.projectService.projectRootPath
+        || null;
 
-      if (!prjPath) {
-        console.warn('无法获取项目路径，跳过保存会话');
-        return;
-      }
+      // 获取上下文预算快照
+      const budgetSnapshot = this.contextBudgetService?.getSnapshot();
 
-      // 确保会话在历史列表中
-      let historyData = this.chatService.historyList.find(h => h.sessionId === this.sessionId);
-      if (!historyData) {
-        const title = this.sessionTitle || 'q' + Date.now();
-        this.chatService.historyList.push({ sessionId: this.sessionId, name: title });
-        this.HistoryList = [...this.chatService.historyList].reverse();
-      }
+      this.chatHistoryService.saveSession(
+        this.sessionId,
+        this.list,
+        this.conversationMessages || [],
+        {
+          sessionId: this.sessionId,
+          title: this.sessionTitle || '',
+          projectPath: prjPath,
+          mode: this.currentMode,
+          model: this.currentModel?.model || null,
+          contextBudget: budgetSnapshot ? {
+            currentTokens: budgetSnapshot.currentTokens,
+            maxContextTokens: budgetSnapshot.maxContextTokens,
+            usagePercent: budgetSnapshot.usagePercent,
+          } : undefined,
+          toolCallingIteration: this.toolCallingIteration || 0,
+        }
+      );
 
-      // 保存历史列表索引文件
-      this.chatService.saveHistoryFile(prjPath);
-
-      // 保存聊天记录到 .chat_history 文件夹
-      this.chatService.saveSessionChatHistory(prjPath, this.sessionId, this.list);
-
-      // console.log('会话已保存:', this.sessionId, '路径:', prjPath);
+      // 刷新UI历史列表
+      this.refreshHistoryList();
     } catch (error) {
       console.warn('保存会话失败:', error);
     }
+  }
+
+  /**
+   * 刷新历史列表UI
+   */
+  private refreshHistoryList(): void {
+    const historyActions = [
+      { icon: 'fa-light fa-pen', action: 'rename-history', title: '重命名' },
+      { icon: 'fa-light fa-trash', action: 'delete-history', title: '删除' },
+    ];
+
+    const entries = this.chatHistoryService.getHistoryList('current-project',
+      this.projectService.currentProjectPath || this.projectService.projectRootPath
+    );
+
+    this.HistoryList = entries.map(e => ({
+      sessionId: e.sessionId,
+      name: e.title || 'q' + e.createdAt,
+      actions: historyActions,
+    }));
   }
 
   debug = false; // TODO 用于测试本地流式数据，生产不要提交true！！！
@@ -1675,15 +1718,35 @@ Do not create non-existent boards and libraries.
       return;
     }
 
+    console.log('尝试启动会话, 当前状态:', {
+      sessionId: this.sessionId,
+      isSessionStarting: this.isSessionStarting,
+      hasInitializedForThisLogin: this.hasInitializedForThisLogin,
+      isLoggedIn: this.isLoggedIn
+    });
+
     // 如果会话正在启动中，直接返回
     if (this.isSessionStarting) {
-      // console.log('startSession 被跳过: 会话正在启动中');
+      console.log('startSession 被跳过: 会话正在启动中');
       return Promise.resolve();
     }
 
     this.isSessionStarting = true;
     // 重置取消标志，确保新会话正常工作
     this.isCancelled = false;
+
+    // 无状态模式：重置对话上下文
+    if (this.useStatelessMode) {
+      this.conversationMessages = [];
+      this.pendingToolResults = [];
+      this.currentTurnAssistantContent = '';
+      this.currentTurnToolCalls = [];
+      this.toolCallingIteration = 0;
+      // 重置上下文预算
+      this.contextBudgetService.reset();
+      // 清理所有 subagent 会话
+      this.subagentSessionService.cleanupAll();
+    }
 
     // 清空会话期间的额外允许路径
     this.sessionAllowedPaths = [];
@@ -1783,7 +1846,10 @@ Do not create non-existent boards and libraries.
               this.chatService.currentSessionPath = this.projectService.currentProjectPath || this.projectService.projectRootPath;
             }
             // console.log('会话启动成功, sessionId:', res.data);
-            this.streamConnect();
+            // 无状态模式下不建立持久SSE连接，流在首次用户消息时启动
+            if (!this.useStatelessMode) {
+              this.streamConnect();
+            }
             this.isSessionStarting = false;
 
             if (this.list.length === 0) {
@@ -1896,10 +1962,17 @@ ${JSON.stringify(errData)}
     }
 
     if (this.isCompleted) {
-      // console.log('上次会话已完成，需要重新启动会话');
-      // 重置取消标志，开始新会话
+      // 重置取消标志
       this.isCancelled = false;
-      await this.resetChat();
+
+      if (this.useStatelessMode) {
+        // 无状态模式：保留 conversationMessages 对话历史，只重置完成标志
+        // 不调用 resetChat()（它会触发 startSession 清空历史）
+        this.isCompleted = false;
+      } else {
+        // 传统模式：重新启动会话
+        await this.resetChat();
+      }
     }
 
     // 发送消息时重新启用自动滚动
@@ -1929,7 +2002,24 @@ ${JSON.stringify(errData)}
 
       this.appendMessage('user', text);
       this.appendMessage('aily', '[thinking...]');
+
+      // ==================== 无状态模式：用户消息直接启动工具调用循环 ====================
+      if (this.useStatelessMode) {
+        this.conversationMessages.push({ role: 'user', content: text });
+        this.isWaiting = true;
+        this.currentMessageSource = 'mainAgent';
+        this.toolCallingIteration = 0;
+        // 更新上下文预算（新消息加入后）
+        this.contextBudgetService.updateBudget(this.conversationMessages);
+        if (clear) {
+          this.inputValue = '';
+        }
+        this.startChatTurn();
+        return;
+      }
     } else if (sender === 'tool') {
+      // 传统模式：工具结果通过此路径发送
+      // 无状态模式下此路径不再使用（工具结果通过 pendingToolResults 收集，在循环中自动处理）
       if (!this.isWaiting) {
         return;
       }
@@ -2012,6 +2102,9 @@ ${JSON.stringify(errData)}
     // 标记任务已取消，防止后续工具结果触发重连
     this.isCancelled = true;
 
+    // 取消所有正在执行的 subagent 调用
+    this.subagentSessionService.cleanupAll();
+
     // 设置最后一条AI消息状态为done（如果存在）
     if (this.list.length > 0 && this.list[this.list.length - 1].role === 'aily') {
       this.list[this.list.length - 1].state = 'done';
@@ -2028,7 +2121,214 @@ ${JSON.stringify(errData)}
     });
   }
 
-  streamConnect(): void {
+  // ==================== 无状态模式：工具调用循环 ====================
+
+  /**
+   * 获取当前可用的工具列表（与 startSession 中构建逻辑一致）
+   */
+  private getCurrentTools(): any[] {
+    const mainAgentConfig = this.ailyChatConfigService.getAgentToolsConfig('mainAgent');
+    const schematicAgentConfig = this.ailyChatConfigService.getAgentToolsConfig('schematicAgent');
+    const enabledToolNames = [
+      ...(mainAgentConfig?.enabledTools || []),
+      ...(schematicAgentConfig?.enabledTools || [])
+    ];
+    const disabledToolNames = [
+      ...(mainAgentConfig?.disabledTools || []),
+      ...(schematicAgentConfig?.disabledTools || [])
+    ];
+    const hasEnabledToolsConfig = enabledToolNames.length > 0;
+
+    let tools = hasEnabledToolsConfig
+      ? this.tools.filter(tool =>
+          enabledToolNames.includes(tool.name) ||
+          (!disabledToolNames.includes(tool.name) && !enabledToolNames.includes(tool.name))
+        )
+      : [...this.tools];
+
+    let mcpTools = this.mcpService.tools.map(tool => {
+      if (!tool.name.startsWith('mcp_')) {
+        tool.name = 'mcp_' + tool.name;
+      }
+      return tool;
+    });
+    if (mcpTools && mcpTools.length > 0) {
+      tools = tools.concat(mcpTools);
+    }
+    return tools;
+  }
+
+  /**
+   * 获取当前LLM配置
+   */
+  private getCurrentLLMConfig(): any {
+    if (this.currentModel && this.currentModel.baseUrl && this.currentModel.apiKey) {
+      return {
+        apiKey: this.currentModel.apiKey,
+        baseUrl: this.currentModel.baseUrl,
+      };
+    } else if (this.ailyChatConfigService.useCustomApiKey) {
+      return {
+        apiKey: this.ailyChatConfigService.apiKey,
+        baseUrl: this.ailyChatConfigService.baseUrl,
+      };
+    }
+    return null;
+  }
+
+  /**
+   * 启动一轮无状态聊天请求（Copilot 式 Request-per-Turn）。
+   *
+   * 流程：
+   * 1. 发送 chatRequest (HTTP POST + SSE)，携带完整 conversationMessages
+   * 2. SSE 流中接收文本 + tool_call_request 事件
+   * 3. tool_call_request 在 SSE 期间执行，结果收集到 pendingToolResults
+   * 4. SSE 结束后，若有待处理的工具结果：
+   *    - 将 assistant 消息 + tool results 加入 conversationMessages
+   *    - 递归调用 startChatTurn() 进入下一轮
+   * 5. 若无工具调用，正常结束
+   *
+   * 核心优势：服务端不需要等待工具执行结果，彻底消除工具调用超时问题。
+   */
+  private async startChatTurn(): Promise<void> {
+    if (this.isCancelled) {
+      this.isWaiting = false;
+      return;
+    }
+
+    // 检查工具调用循环次数限制（读取用户在设置面板中配置的 maxCount）
+    const toolCallLimit = this.ailyChatConfigService.maxCount || 50;
+    if (this.toolCallingIteration >= toolCallLimit) {
+      console.warn(`[无状态模式] 工具调用循环已达上限 (${toolCallLimit})，强制结束`);
+      this.appendMessage('aily', `\n\n> ⚠️ 工具调用轮次已达上限（${toolCallLimit}），请重新发送消息继续。\n\n`);
+      this.isWaiting = false;
+      this.isCompleted = true;
+      return;
+    }
+
+    // ==================== 上下文预算检查与压缩 ====================
+    // 更新模型上下文窗口信息
+    this.contextBudgetService.updateModelContextSize(this.currentModel?.model || null);
+    // 更新当前 token 使用量
+    this.contextBudgetService.updateBudget(this.conversationMessages);
+
+    // 按分层策略压缩：全量保留 → 工具结果截断 → LLM 摘要
+    try {
+      this.conversationMessages = await this.contextBudgetService.compressIfNeeded(
+        this.conversationMessages,
+        this.sessionId,
+        this.getCurrentLLMConfig(),
+        this.currentModel?.model || undefined
+      );
+    } catch (error) {
+      console.warn('[无状态模式] 上下文压缩失败，使用原始历史:', error);
+    }
+
+    // 重置当前轮次的收集器
+    this.pendingToolResults = [];
+    this.currentTurnAssistantContent = '';
+    this.currentTurnToolCalls = [];
+    this.activeToolExecutions = 0;
+    this.sseStreamCompleted = false;
+    this.currentStatelessMode = true;
+
+    const budget = this.contextBudgetService.getSnapshot();
+    console.log(`[无状态模式] 启动第 ${this.toolCallingIteration + 1} 轮聊天请求, messages: ${this.conversationMessages.length} 条, tokens: ~${budget.currentTokens}/${budget.maxContextTokens} (${budget.usagePercent}%)`);
+
+    // 使用修改后的 streamConnect，传入 stateless 标志
+    this.streamConnect(true);
+  }
+
+  /**
+   * 无状态模式：将当前轮次的工具结果加入对话历史，并启动下一轮请求
+   */
+  private continueToolCallingLoop(): void {
+    // 构建 assistant 消息（包含文本 + tool_calls）
+    const assistantMessage: any = {
+      role: 'assistant',
+      content: this.currentTurnAssistantContent || ''
+    };
+
+    if (this.currentTurnToolCalls.length > 0) {
+      assistantMessage.tool_calls = this.currentTurnToolCalls.map(tc => ({
+        id: tc.tool_id,
+        type: 'function',
+        function: {
+          name: tc.tool_name,
+          arguments: typeof tc.tool_args === 'string' ? tc.tool_args : JSON.stringify(tc.tool_args)
+        }
+      }));
+    }
+
+    this.conversationMessages.push(assistantMessage);
+
+    // 将工具结果加入对话历史
+    for (const result of this.pendingToolResults) {
+      this.conversationMessages.push({
+        role: 'tool',
+        tool_call_id: result.tool_id,
+        name: result.tool_name,
+        content: result.content
+      });
+    }
+
+    this.toolCallingIteration++;
+
+    // 更新上下文预算
+    this.contextBudgetService.updateBudget(this.conversationMessages);
+
+    console.log(`[无状态模式] 工具调用完成，${this.pendingToolResults.length} 个结果已加入对话历史，启动第 ${this.toolCallingIteration + 1} 轮`);
+
+    // 开始下一轮
+    this.startChatTurn();
+  }
+
+  /**
+   * 无状态模式：单个工具执行完成时的回调
+   * 递减 activeToolExecutions 计数器，当所有工具完成且 SSE 流已结束时，触发下一轮循环
+   */
+  private onToolExecutionComplete(): void {
+    this.activeToolExecutions--;
+    console.log(`[无状态模式] 工具执行完成，剩余 ${this.activeToolExecutions} 个在执行中`);
+
+    // 只有当 SSE 流已结束 且 所有工具都执行完毕时，才进入下一轮
+    if (this.activeToolExecutions === 0 && this.sseStreamCompleted) {
+      console.log(`[无状态模式] 所有工具执行完成，SSE 流已结束，检查是否继续循环`);
+      this.finalizeStatelessTurn();
+    }
+  }
+
+  /**
+   * 无状态模式：当前轮次的 SSE 流结束且所有工具执行完毕后的最终处理
+   * 决策：有工具结果 → 继续循环；无工具结果 → 正常结束
+   */
+  private finalizeStatelessTurn(): void {
+    if (this.pendingToolResults.length > 0 && !this.isCancelled) {
+      console.log(`[无状态模式] ${this.pendingToolResults.length} 个工具结果待处理，继续循环`);
+      this.continueToolCallingLoop();
+    } else {
+      // 无工具调用，正常结束
+      if (this.currentTurnAssistantContent) {
+        this.conversationMessages.push({
+          role: 'assistant',
+          content: this.currentTurnAssistantContent
+        });
+      }
+      // 更新上下文预算（轮次结束时的最终状态）
+      this.contextBudgetService.updateBudget(this.conversationMessages);
+      // 设置完成状态（与传统模式 complete 回调的后续逻辑一致）
+      if (this.list.length > 0 && this.list[this.list.length - 1].role === 'aily') {
+        this.list[this.list.length - 1].state = 'done';
+      }
+      this.isWaiting = false;
+      this.isCompleted = true;
+
+      // ★ 关键修复：无状态模式轮次结束时立即保存历史
+      this.saveCurrentSession();
+    }
+  }
+
+  streamConnect(statelessMode: boolean = false): void {
     // console.log("stream connect sessionId: ", this.sessionId);
     let newConnect = true;
     let newProject = false;
@@ -2047,7 +2347,22 @@ ${JSON.stringify(errData)}
     this.pendingUserInput = false;
     this.streamCompleted = false;
 
-    this.messageSubscription = (this.debug ? this.chatService.debugStream(this.sessionId) : this.chatService.streamConnect(this.sessionId)).subscribe({
+    // 根据模式选择数据源：
+    // - 无状态模式：发送 chatRequest (HTTP POST + SSE)，携带完整对话历史
+    // - 传统模式：使用持久化 SSE 长连接（streamConnect）
+    const source$ = statelessMode
+      ? this.chatService.chatRequest(
+          this.sessionId,
+          this.conversationMessages,
+          this.getCurrentTools(),
+          this.currentMode,
+          this.getCurrentLLMConfig(),
+          this.currentModel?.model || undefined,
+          this.ailyChatConfigService.maxCount
+        )
+      : (this.debug ? this.chatService.debugStream(this.sessionId) : this.chatService.streamConnect(this.sessionId));
+
+    this.messageSubscription = source$.subscribe({
       next: async (data: any) => {
         // 记录流式数据到文件（Unicode 转中文）
         // try {
@@ -2060,6 +2375,14 @@ ${JSON.stringify(errData)}
         //   window['fs'].appendFileSync(logPath, logEntry, 'utf8');
         // } catch (logErr) {
         //   console.warn('写入日志文件失败:', logErr);
+        // }
+
+        // [无状态调试] 记录所有收到的事件类型
+        // if (statelessMode) {
+        //   console.log(`[无状态调试] 事件: ${data.type}, isWaiting: ${this.isWaiting}, isCancelled: ${this.isCancelled}`, 
+        //     data.type === 'ModelClientStreamingChunkEvent' ? `content: "${(data.content || '').substring(0, 30)}"` : 
+        //     data.type === 'tool_call_request' ? `tool: ${data.tool_name}, internal: ${data.internal}` :
+        //     data.type === 'TaskCompleted' ? `stop_reason: ${data.stop_reason}` : '');
         // }
 
         // console.log("当前是否处于等待状态： ", this.isWaiting)
@@ -2091,6 +2414,7 @@ ${JSON.stringify(errData)}
           if (data.type === 'ModelClientStreamingChunkEvent') {
             // 处理流式数据
             if (data.content) {
+              // console.log(`[无状态调试] 收到流式文本: "${data.content.substring(0, 50)}..." source: ${messageSource}`);
               // 检测 <think> 标签作为内容边界
               if (data.content.includes('<think>')) {
                 this.repetitionDetectionService.markBoundary('think_start');
@@ -2110,25 +2434,36 @@ ${JSON.stringify(errData)}
                 return;
               }
               this.appendMessage('aily', data.content, messageSource);
+
+              // 无状态模式：累积助手文本内容（用于构建 assistant 消息）
+              if (statelessMode) {
+                this.currentTurnAssistantContent += data.content;
+              }
             }
           } else if (data.type === 'TextMessage') {
             // 每条完整的对话信息
           } else if (data.type === 'ToolCallExecutionEvent') {
-            // 处理工具执行完成事件
+            // 处理工具执行完成事件（传统模式格式）
             if (data.content && Array.isArray(data.content)) {
               for (const result of data.content) {
                 if (result.call_id && result?.name !== "ask_approval") {
-                  // 根据工具名称和结果状态确定显示文本
                   const resultState = result?.is_error ? ToolCallState.ERROR : ToolCallState.DONE;
                   const resultText = this.toolCallStates[result.call_id];
                   if (resultText) {
-                    // console.log("完成工具调用: ", result.call_id, result.name, resultState, resultText);
                     this.completeToolCall(result.call_id, result.name || 'unknown', resultState, resultText);
                   }
                 } else {
                   this.appendMessage('aily', "\n\n", messageSource);
                 }
               }
+            }
+          } else if (data.type === 'tool_call_execution') {
+            // 服务端内部工具执行结果通知（无状态模式新事件）
+            // 仅用于 UI 展示，不需要前端进一步处理
+            if (data.tool_id) {
+              const execResultText = data.is_error ? `执行失败: ${data.result || '未知错误'}` : '执行完成';
+              const execState = data.is_error ? ToolCallState.ERROR : ToolCallState.DONE;
+              this.completeToolCall(data.tool_id, data.tool_name || 'unknown', execState, execResultText);
             }
           } else if (data.type.startsWith('context_compression_')) {
             // 上下文压缩触发消息
@@ -2176,6 +2511,66 @@ ${JSON.stringify(errData)}
             // 标记内容边界：工具调用前的文本块存为一个完整块
             this.repetitionDetectionService.markBoundary('tool_call');
 
+            // ==================== 无状态模式：区分内部工具和前端工具 ====================
+            // data.internal === true → 服务端已执行的内部工具，前端仅展示状态
+            // data.internal === false 或不存在 → 前端工具，需要本地执行
+            if (statelessMode && data.internal === true) {
+              console.log(`[无状态模式] 服务端内部工具调用: ${data.tool_name}，仅展示`);
+              const internalToolId = `${data.tool_id}`;
+              this.startToolCall(internalToolId, data.tool_name, `服务端执行: ${data.tool_name}...`);
+              // 不执行、不计数、不加入 currentTurnToolCalls 或 pendingToolResults
+              // 后续会收到 tool_call_execution 事件来更新完成状态
+              return;
+            }
+
+            // ==================== Subagent 工具调用：前端直连 subagent 执行 ====================
+            // data.tool_type === 'subagent' → 需要前端直连对应 subagent 执行
+            if (statelessMode && SubagentSessionService.isSubagentToolCall(data)) {
+              console.log(`[无状态模式] Subagent 工具调用: ${data.tool_name}, agent: ${data.agent_name}`);
+
+              // 记录工具调用元信息（用于构建 assistant 消息的 tool_calls 字段）
+              this.currentTurnToolCalls.push({
+                tool_id: data.tool_id,
+                tool_name: data.tool_name,
+                tool_args: data.tool_args
+              });
+
+              // UI：展示工具调用进行中状态
+              const subagentDisplayName = data.agent_name || data.tool_name;
+              this.startToolCall(data.tool_id, data.tool_name, `正在执行 ${subagentDisplayName}...`);
+
+              // 标记工具执行开始（用于解决 async/complete 竞态）
+              this.activeToolExecutions++;
+
+              // 异步执行 subagent（不阻塞 SSE 流处理）
+              this.subagentSessionService.executeSubagentToolCall(data as any).then(
+                (result: string) => {
+                  // 成功：收集工具结果
+                  this.completeToolCall(data.tool_id, data.tool_name, ToolCallState.DONE, `${subagentDisplayName} 完成`);
+                  this.pendingToolResults.push({
+                    tool_id: data.tool_id,
+                    tool_name: data.tool_name,
+                    content: result,
+                    is_error: false
+                  });
+                  this.onToolExecutionComplete();
+                },
+                (error: any) => {
+                  // 失败：将错误信息作为 tool content 回传，mainAgent 会据此调整策略
+                  const errMsg = error?.message || `${subagentDisplayName} 执行失败`;
+                  this.completeToolCall(data.tool_id, data.tool_name, ToolCallState.ERROR, errMsg);
+                  this.pendingToolResults.push({
+                    tool_id: data.tool_id,
+                    tool_name: data.tool_name,
+                    content: errMsg,
+                    is_error: true
+                  });
+                  this.onToolExecutionComplete();
+                }
+              );
+              return;
+            }
+
             let toolArgs;
 
             if (typeof data.tool_args === 'string') {
@@ -2202,12 +2597,22 @@ ${JSON.stringify(errData)}
                   toolArgs = new Function('return ' + data.tool_args)();
                 } catch (e2) {
                   console.warn('所有解析方法都失败:', e2);
-                  this.send("tool", JSON.stringify({
+                  const parseErrorResult = JSON.stringify({
                     "type": "tool_result",
                     "tool_id": data.tool_id,
                     "content": `参数解析失败: ${e.message}`,
                     "is_error": true
-                  }, null, 2), false);
+                  }, null, 2);
+                  if (statelessMode) {
+                    this.pendingToolResults.push({
+                      tool_id: data.tool_id,
+                      tool_name: data.tool_name,
+                      content: `参数解析失败: ${e.message}`,
+                      is_error: true
+                    });
+                  } else {
+                    this.send("tool", parseErrorResult, false);
+                  }
                   return;
                 }
               }
@@ -2223,23 +2628,43 @@ ${JSON.stringify(errData)}
             // 生成随机ID用于状态跟踪
             const toolCallId = `${data.tool_id}`;
 
+            // 无状态模式：仅记录前端工具调用元信息（用于构建 assistant 消息的 tool_calls 字段）
+            // 注意：internal === true 的已在上方 return，此处只有前端工具
+            if (statelessMode) {
+              this.currentTurnToolCalls.push({
+                tool_id: data.tool_id,
+                tool_name: data.tool_name,
+                tool_args: data.tool_args
+              });
+            }
+
             let toolResult = null;
             let resultState = "done";
             let resultText = '';
 
-            // console.log("工具调用请求: ", data.tool_name, toolArgs);
+            console.log("工具调用请求: ", data.tool_name, toolArgs);
 
             // 检测重复工具调用
             const toolRepetitionCheck = this.repetitionDetectionService.checkToolCallRepetition(data.tool_name, toolArgs);
             if (toolRepetitionCheck.isRepetitive) {
               console.warn('[重复检测] 工具调用重复:', toolRepetitionCheck.pattern);
               // 返回错误让 Agent 反思
-              this.send("tool", JSON.stringify({
-                "type": "tool_result",
-                "tool_id": data.tool_id,
-                "content": `检测到重复调用模式 (${toolRepetitionCheck.pattern})。${toolRepetitionCheck.suggestion || '请重新思考解决方案。'}`,
-                "is_error": true
-              }, null, 2), false);
+              const repetitionErrorContent = `检测到重复调用模式 (${toolRepetitionCheck.pattern})。${toolRepetitionCheck.suggestion || '请重新思考解决方案。'}`;
+              if (statelessMode) {
+                this.pendingToolResults.push({
+                  tool_id: data.tool_id,
+                  tool_name: data.tool_name,
+                  content: repetitionErrorContent,
+                  is_error: true
+                });
+              } else {
+                this.send("tool", JSON.stringify({
+                  "type": "tool_result",
+                  "tool_id": data.tool_id,
+                  "content": repetitionErrorContent,
+                  "is_error": true
+                }, null, 2), false);
+              }
               return;
             }
 
@@ -2266,6 +2691,11 @@ ${JSON.stringify(errData)}
             const isBlockTool = blockTools.includes(data.tool_name);
             if (isBlockTool) {
               this.aiWriting = true;
+            }
+
+            // 无状态模式：标记工具执行开始（用于解决 async/complete 竞态）
+            if (statelessMode) {
+              this.activeToolExecutions++;
             }
 
             try {
@@ -4019,15 +4449,29 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
               this.completeToolCall(data.tool_id, data.tool_name, finalState, resultText);
             }
 
-            // console.log(`工具调用结果: `, toolResult, resultText);
+            console.log(`工具调用结果: `, toolResult, resultText);
 
-            this.send("tool", JSON.stringify({
-              "type": "tool",
-              "tool_id": data.tool_id,
-              "content": toolContent,
-              "resultText": this.makeJsonSafe(resultText),
-              "is_error": toolResult?.is_error ?? false
-            }, null, 2), false);
+            if (statelessMode) {
+              // 无状态模式：收集工具结果，SSE 流结束后统一加入对话历史并启动下一轮
+              this.pendingToolResults.push({
+                tool_id: data.tool_id,
+                tool_name: data.tool_name,
+                content: toolContent,
+                resultText: this.makeJsonSafe(resultText),
+                is_error: toolResult?.is_error ?? false
+              });
+              // 标记此工具执行完成，检查是否可以进入下一轮
+              this.onToolExecutionComplete();
+            } else {
+              // 传统模式：立即通过 sendMessage 将工具结果推送给服务端
+              this.send("tool", JSON.stringify({
+                "type": "tool",
+                "tool_id": data.tool_id,
+                "content": toolContent,
+                "resultText": this.makeJsonSafe(resultText),
+                "is_error": toolResult?.is_error ?? false
+              }, null, 2), false);
+            }
           } else if (data.type === 'user_input_required') {
             // 处理用户输入请求 - 需要与 StreamComplete 配合，两者都到齐后再设置 done
             // 避免后续流式内容（如 aily-button）因提前设置 done 而未渲染
@@ -4045,27 +4489,38 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
             }
           } else if (data.type === 'TaskCompleted') {
             const stopReason = data.stop_reason || 'unknown';
-            // 判断停止原因
-            // 1. Text 'TERMINATE' mentioned - 正常结束，由 complete 回调处理状态
-            // 2. Maximum number of messages - 需要显示继续对话提示
-            // 3. 其他异常 - 需要显示重试提示
 
-            // 先清理流式残留内容（TERMINATE 文字、未闭合的代码块等）
-            this.cleanupLastAiMessage();
+            // 无状态模式：TaskCompleted 仅表示当前轮次的 SSE 流结束
+            // TERMINATE / COMPLETED 都是正常完成，其他 stop_reason 也不影响（循环由 complete 回调管理）
+            if (statelessMode) {
+              console.log(`[无状态模式] TaskCompleted, stop_reason: ${stopReason}`);
+              // TERMINATE 或 COMPLETED 都视为正常结束，清理残留内容
+              if (stopReason.includes('TERMINATE') || stopReason.includes('COMPLETED')) {
+                this.cleanupLastAiMessage();
+              }
+              // 跳过传统模式的 TaskCompleted 处理（不显示错误/重试按钮）
+            } else {
+              // ========== 传统模式：判断停止原因 ==========
+              // 1. Text 'TERMINATE' mentioned - 正常结束，由 complete 回调处理状态
+              // 2. Maximum number of messages - 需要显示继续对话提示
+              // 3. 其他异常 - 需要显示重试提示
 
-            if (stopReason.includes('TERMINATE')) {
-              // 正常结束，状态由 complete 回调统一处理
-              // pass
-            } else if (stopReason.includes('Maximum number of messages')) {
-              // 解析最大消息数
-              const maxMessagesMatch = stopReason.match(/(\d+)\s*reached/);
-              const maxMessages = maxMessagesMatch ? parseInt(maxMessagesMatch[1], 10) : 10;
+              // 先清理流式残留内容（TERMINATE 文字、未闭合的代码块等）
+              this.cleanupLastAiMessage();
 
-              // 保存当前停止原因用于继续对话
-              this.lastStopReason = stopReason;
+              if (stopReason.includes('TERMINATE') || stopReason.includes('COMPLETED')) {
+                // 正常结束，状态由 complete 回调统一处理
+                // pass
+              } else if (stopReason.includes('Maximum number of messages')) {
+                // 解析最大消息数
+                const maxMessagesMatch = stopReason.match(/(\d+)\s*reached/);
+                const maxMessages = maxMessagesMatch ? parseInt(maxMessagesMatch[1], 10) : 10;
 
-              // 显示提示信息，询问是否继续
-              this.appendMessage('aily', `
+                // 保存当前停止原因用于继续对话
+                this.lastStopReason = stopReason;
+
+                // 显示提示信息，询问是否继续
+                this.appendMessage('aily', `
 
 \`\`\`aily-task-action
 {
@@ -4077,13 +4532,13 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
   }
 }
 \`\`\`\n\n
-              `);
-            } else {
-              // 保存当前停止原因用于重试
-              this.lastStopReason = stopReason;
+                `);
+              } else {
+                // 保存当前停止原因用于重试
+                this.lastStopReason = stopReason;
 
-              // 显示报错，并提供重试按钮
-              this.appendMessage('aily', `
+                // 显示报错，并提供重试按钮
+                this.appendMessage('aily', `
 \`\`\`aily-error
 {
   "message": "任务执行过程中遇到问题，请重试或开始新会话。"
@@ -4095,7 +4550,8 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
 \`\`\`
 
 `);
-            }
+              }
+            } // end of else (传统模式 TaskCompleted 处理)
 
           }
           this.scrollToBottom();
@@ -4125,41 +4581,27 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
         this.pendingUserInput = false;
         this.streamCompleted = false;
 
+        // ==================== 无状态模式：等待工具执行完成后继续循环 ====================
+        if (statelessMode && !this.isCancelled) {
+          this.sseStreamCompleted = true;
+          if (this.activeToolExecutions > 0) {
+            // 还有工具正在执行中，等待 onToolExecutionComplete 回调来继续循环
+            console.log(`[无状态模式] SSE 流结束，但还有 ${this.activeToolExecutions} 个工具正在执行，等待完成...`);
+            return;
+          }
+          // 所有工具已执行完毕，立即处理
+          this.finalizeStatelessTurn();
+          return;
+        }
+
         if (this.list.length > 0 && this.list[this.list.length - 1].role === 'aily') {
           this.list[this.list.length - 1].state = 'done';
         }
         this.isWaiting = false;
         this.isCompleted = true;
 
-        // 更新历史列表元数据（用于显示），但不立即落盘
-        // 落盘操作在 newChat、closeSession、ngOnDestroy 时触发
-        try {
-          let historyData = this.chatService.historyList.find(h => h.sessionId === this.sessionId);
-          if (!historyData && this.sessionId) {
-            // 如果已经有标题,直接使用
-            if (this.sessionTitle && this.sessionTitle.trim() !== '') {
-              this.chatService.historyList.push({ sessionId: this.sessionId, name: this.sessionTitle });
-              this.HistoryList = [...this.chatService.historyList].reverse();
-            } else {
-              // 没有标题则等待标题生成后更新
-              const checkTitle = () => {
-                if (this.chatService.titleIsGenerating) {
-                  setTimeout(checkTitle, 1000);
-                  return;
-                }
-                const title = this.sessionTitle || 'q' + Date.now();
-                // 再次检查是否已存在
-                if (!this.chatService.historyList.find(h => h.sessionId === this.sessionId)) {
-                  this.chatService.historyList.push({ sessionId: this.sessionId, name: title });
-                  this.HistoryList = [...this.chatService.historyList].reverse();
-                }
-              };
-              setTimeout(checkTitle, 3000);
-            }
-          }
-        } catch (error) {
-          console.warn("Error updating history list:", error);
-        }
+        // ★ 关键修复：传统模式对话结束时立即保存历史（替代旧的 3s 轮询 + 仅更新内存逻辑）
+        this.saveCurrentSession();
       },
       error: (err) => {
         console.warn('流连接出错:', err);
@@ -4192,56 +4634,49 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
     if (!this.sessionId) return;
 
     this.list = [];
-    // console.log('获取历史消息，sessionId:', this.sessionId);
 
-    // 优先从内存缓存中获取
-    if (this.chatService.historyChatMap.get(this.sessionId)) {
-      const cachedHistory = this.chatService.historyChatMap.get(this.sessionId);
-      // 处理历史消息，标记其中的交互组件为历史模式
-      this.list = cachedHistory.map(item => {
+    // ★ 关键：切换会话时必须先重置对话上下文，防止上一个会话的数据残留
+    this.conversationMessages = [];
+    this.toolCallingIteration = 0;
+    this.contextBudgetService?.reset();
+
+    const currentPrjPath = this.projectService.currentProjectPath || this.projectService.projectRootPath;
+
+    // ===== 1. 优先从 ChatHistoryService 加载（支持恢复完整对话上下文） =====
+    const sessionData = this.chatHistoryService.loadSession(this.sessionId, currentPrjPath);
+    if (sessionData && sessionData.chatList && sessionData.chatList.length > 0) {
+      // 恢复 UI 列表
+      this.list = sessionData.chatList.map(item => {
         if (item.content && typeof item.content === 'string') {
-          return {
-            ...item,
-            content: this.markContentAsHistory(item.content)
-          };
+          return { ...item, content: this.markContentAsHistory(item.content) };
         }
         return item;
       });
-      this.scrollToBottom('auto');
-      return;
-    }
 
-    // 其次从本地 .chat_history 文件夹加载
-    const prjPath = this.projectService.currentProjectPath || this.projectService.projectRootPath;
-    const localChatHistory = this.chatService.loadSessionChatHistory(prjPath, this.sessionId);
-    if (localChatHistory && localChatHistory.length > 0) {
-      // 处理历史消息，标记其中的交互组件为历史模式
-      this.list = localChatHistory.map(item => {
-        if (item.content && typeof item.content === 'string') {
-          return {
-            ...item,
-            content: this.markContentAsHistory(item.content)
-          };
+      // ★ 恢复标题（防止进入历史会话后发消息再次触发标题生成）
+      if (sessionData.metadata?.title) {
+        this.chatService.currentSessionTitle = sessionData.metadata.title;
+      } else {
+        // 数据文件中没有标题，从全局索引获取（兜底旧数据）
+        const indexEntry = this.chatHistoryService.findEntry(this.sessionId);
+        if (indexEntry?.title) {
+          this.chatService.currentSessionTitle = indexEntry.title;
         }
-        return item;
-      });
-      // 同时更新内存缓存
-      this.chatService.historyChatMap.set(this.sessionId, this.list);
+      }
+
+      // ★ 恢复对话上下文 conversationMessages（核心：支持继续对话）
+      if (sessionData.conversationMessages && sessionData.conversationMessages.length > 0) {
+        this.conversationMessages = sessionData.conversationMessages;
+        this.toolCallingIteration = sessionData.metadata?.toolCallingIteration || 0;
+        this.contextBudgetService?.updateBudget(this.conversationMessages);
+        console.log(`[AilyChat] 已恢复对话上下文: ${this.conversationMessages.length} 条消息`);
+      } else {
+        console.log(`[AilyChat] 旧格式历史数据，无法恢复对话上下文（仅显示聊天记录）`);
+      }
+
       this.scrollToBottom('auto');
       return;
     }
-
-    // // 最后从服务端获取
-    // this.chatService.getHistory(this.sessionId).subscribe((res: any) => {
-    //   // console.log('get history', res);
-    //   if (res.status === 'success') {
-    //     // 先解析工具调用状态信息
-    //     this.parseHistory(res.data);
-    //     this.scrollToBottom('auto');
-    //   } else {
-    //     this.appendMessage('error', res.message);
-    //   }
-    // });
   }
 
   bottomHeight = 180;
@@ -4869,9 +5304,10 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
   modelListPosition = { x: 0, y: 0 };
 
   openHistoryChat(e) {
+    // 每次展开时刷新列表，确保删除/重命名后数据始终是最新的
+    this.refreshHistoryList();
     // 设置菜单的位置
     this.historyListPosition = { x: window.innerWidth - 302, y: 72 };
-    // console.log(this.historyListPosition);
 
     this.showHistoryList = !this.showHistoryList;
   }
@@ -4883,15 +5319,76 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
   }
 
   menuClick(e) {
-    // console.log('选择了历史会话:', e);
-    // console.log("CurrentSessionId: ", this.chatService.currentSessionId)
     if (this.chatService.currentSessionId !== e.sessionId) {
+      // 切换前先保存当前会话
+      this.saveCurrentSession();
+
       this.chatService.currentSessionId = e.sessionId;
-      // 历史会话来自当前路径的历史列表，所以记录当前路径
-      this.chatService.currentSessionPath = this.projectService.currentProjectPath || this.projectService.projectRootPath;
+      // 从新索引中获取会话的项目路径；降级使用当前路径
+      const entry = this.chatHistoryService.findEntry(e.sessionId);
+      this.chatService.currentSessionPath = entry?.projectPath || this.projectService.currentProjectPath || this.projectService.projectRootPath;
       this.getHistory();
       this.isCompleted = true;
       this.closeMenu();
+    }
+  }
+
+  /**
+   * 历史记录列表的行内操作（重命名 / 删除）
+   */
+  historyActionClick(e: { action: string; data: any }) {
+    const { action, data } = e;
+    const sessionId = data?.sessionId;
+    if (!sessionId) return;
+
+    if (action === 'rename-history') {
+      const modalRef = this.modal.create({
+        nzTitle: null,
+        nzFooter: null,
+        nzClosable: false,
+        nzBodyStyle: { padding: '0' },
+        nzWidth: 340,
+        nzContent: ChatRenameDialogComponent,
+        nzData: { currentName: data?.name || '' },
+      });
+      modalRef.afterClose.subscribe((result: { result: string } | null) => {
+        if (!result?.result) return;
+        this.chatHistoryService.updateTitle(sessionId, result.result);
+        if (sessionId === this.sessionId) {
+          this.chatService.currentSessionTitle = result.result;
+        }
+        this.refreshHistoryList();
+        this.cdr.detectChanges();
+      });
+    } else if (action === 'delete-history') {
+      const name = data?.name || sessionId;
+      const modalRef = this.modal.create({
+        nzTitle: null,
+        nzFooter: null,
+        nzClosable: false,
+        nzBodyStyle: { padding: '0' },
+        nzWidth: 340,
+        nzContent: ChatDeleteDialogComponent,
+        nzData: { name },
+      });
+      modalRef.afterClose.subscribe((result: { confirmed: boolean } | null) => {
+        if (!result?.confirmed) return;
+        const isDeletingCurrent = sessionId === this.sessionId;
+        this.chatHistoryService.deleteSession(sessionId);
+        this.refreshHistoryList();
+        this.cdr.detectChanges();
+        if (isDeletingCurrent) {
+          const remaining = this.HistoryList[0];
+          if (remaining?.sessionId) {
+            this.chatService.currentSessionId = remaining.sessionId;
+            const entry = this.chatHistoryService.findEntry(remaining.sessionId);
+            this.chatService.currentSessionPath = entry?.projectPath || this.projectService.currentProjectPath || this.projectService.projectRootPath;
+            this.getHistory();
+          } else {
+            this.newChat();
+          }
+        }
+      });
     }
   }
 
@@ -5084,8 +5581,9 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
   ngOnDestroy() {
     // console.log('AilyChatComponent 正在销毁...');
 
-    // 组件销毁前，保存当前会话数据
+    // 组件销毁前，保存当前会话数据 + 强制刷写所有脏数据
     this.saveCurrentSession();
+    this.chatHistoryService.flushAll();
 
     // 清理消息订阅
     if (this.messageSubscription) {
