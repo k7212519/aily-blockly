@@ -108,8 +108,17 @@ export class RepetitionDetectionService {
 
   // ==================== Think 状态跟踪 ====================
 
-  /** 当前是否在 <think> 标签内部（思考内容不参与重复检测） */
+  /** 当前是否在 <think> 标签内部 */
   private insideThink = false;
+
+  /** Think 内部独立的 token 缓冲区（不污染主缓冲区） */
+  private thinkTokens: string[] = [];
+
+  /** Think 缓冲区最大长度 */
+  private readonly MAX_THINK_TOKENS = 300;
+
+  /** Think 内检测间隔（每 N 个 token 检测一次） */
+  private readonly THINK_CHECK_INTERVAL = 8;
 
   constructor() {}
 
@@ -249,13 +258,15 @@ export class RepetitionDetectionService {
     // 检测 think 标签边界
     if (token.includes('<think>')) {
       this.insideThink = true;
+      this.thinkTokens = []; // 进入新 think 块时重置缓冲区
     }
     if (token.includes('</think>')) {
       this.insideThink = false;
-      return { isRepetitive: false }; // 刚出 think，跳过本次检测
+      this.thinkTokens = [];
+      return { isRepetitive: false };
     }
 
-    // think 内容不加入检测缓冲区（但仍计入 streamTokens 以保持索引一致性）
+    // 统一加入 streamTokens（保持索引一致性）
     this.streamTokens.push(token);
 
     // 保持 token 数量在限制内
@@ -265,8 +276,35 @@ export class RepetitionDetectionService {
       this.lastBoundaryTokenIndex = Math.max(0, this.lastBoundaryTokenIndex - trimCount);
     }
 
-    // think 内容不参与重复检测（思考过程天然含重复模式）
+    // ===== Think 内部：只启用 Layer 1 和 Layer 2 =====
     if (this.insideThink) {
+      this.thinkTokens.push(token);
+
+      // 限制 think 缓冲区大小
+      if (this.thinkTokens.length > this.MAX_THINK_TOKENS) {
+        this.thinkTokens = this.thinkTokens.slice(-this.MAX_THINK_TOKENS);
+      }
+
+      // 按间隔检测
+      if (this.thinkTokens.length % this.THINK_CHECK_INTERVAL !== 0) {
+        return { isRepetitive: false };
+      }
+      if (this.thinkTokens.length < this.MIN_TOKENS_FOR_DETECTION) {
+        return { isRepetitive: false };
+      }
+
+      // Think Layer 1: 短语连续重复（“让我思考让我思考让我思考...”）
+      const thinkPhraseResult = this.checkPhraseRepetitionOn(this.thinkTokens);
+      if (thinkPhraseResult.isRepetitive) {
+        return thinkPhraseResult;
+      }
+
+      // Think Layer 2: 句子级连续重复
+      const thinkSentenceResult = this.checkConsecutiveSentenceRepetitionOn(this.thinkTokens);
+      if (thinkSentenceResult.isRepetitive) {
+        return thinkSentenceResult;
+      }
+
       return { isRepetitive: false };
     }
 
@@ -323,7 +361,15 @@ export class RepetitionDetectionService {
    * 用于检测 "ABCABCABC" 这种纯粹的连续重复
    */
   private checkPhraseRepetition(): RepetitionCheckResult {
-    const text = this.streamTokens.join('');
+    return this.checkPhraseRepetitionOn(this.streamTokens);
+  }
+
+  /**
+   * 在指定 token 数组上检测短语连续重复
+   * 供主缓冲区和 think 缓冲区复用
+   */
+  private checkPhraseRepetitionOn(tokens: string[]): RepetitionCheckResult {
+    const text = tokens.join('');
 
     if (text.length < 30) {
       return { isRepetitive: false };
@@ -438,7 +484,15 @@ export class RepetitionDetectionService {
    * 例如："请问有什么帮助？请问有什么帮助？请问有什么帮助？" → 3 次连续
    */
   private checkConsecutiveSentenceRepetition(): RepetitionCheckResult {
-    const text = this.streamTokens.join('');
+    return this.checkConsecutiveSentenceRepetitionOn(this.streamTokens);
+  }
+
+  /**
+   * 在指定 token 数组上检测句子级连续重复
+   * 供主缓冲区和 think 缓冲区复用
+   */
+  private checkConsecutiveSentenceRepetitionOn(tokens: string[]): RepetitionCheckResult {
+    const text = tokens.join('');
 
     if (text.length < 50) {
       return { isRepetitive: false };
@@ -713,6 +767,7 @@ export class RepetitionDetectionService {
    */
   resetStreamTokens(): void {
     this.streamTokens = [];
+    this.thinkTokens = [];
     this.lastBoundaryTokenIndex = 0;
     this.insideThink = false;
   }
@@ -725,6 +780,7 @@ export class RepetitionDetectionService {
     this.resetToolCallHistory();
     this.resetStreamTokens();
     this.contentBlocks = [];
+    this.thinkTokens = [];
     this.lastBoundaryTokenIndex = 0;
     this.insideThink = false;
   }
