@@ -269,9 +269,11 @@ export class ChatHistoryService implements OnDestroy {
   /**
    * 加载会话的完整数据
    * 查找顺序：内存缓存 → 磁盘文件
+   * @param sessionId 会话ID
+   * @param projectPathHint 可选的项目路径提示（当索引中找不到时，用于搜索旧格式文件）
    * @returns SessionData 或 null（文件不存在/损坏）
    */
-  loadSession(sessionId: string): SessionData | null {
+  loadSession(sessionId: string, projectPathHint?: string | null): SessionData | null {
     // 1. 内存缓存
     const cached = this.sessionCache.get(sessionId);
     if (cached) {
@@ -282,11 +284,21 @@ export class ChatHistoryService implements OnDestroy {
     this.ensureIndexLoaded();
     const entry = this.index.find(e => e.sessionId === sessionId);
 
-    // 3. 尝试从磁盘读取
-    const data = this.readSessionData(sessionId, entry?.projectPath || null);
+    // 3. 尝试从磁盘读取（索引路径优先，其次 projectPathHint）
+    const primaryPath = entry?.projectPath || null;
+    const data = this.readSessionData(sessionId, primaryPath);
     if (data) {
       this.sessionCache.set(sessionId, data);
       return data;
+    }
+
+    // 4. 如果索引路径找不到，尝试 projectPathHint（兼容旧数据未迁移的情况）
+    if (projectPathHint && !this.isSamePath(projectPathHint, primaryPath)) {
+      const fallbackData = this.readSessionData(sessionId, projectPathHint);
+      if (fallbackData) {
+        this.sessionCache.set(sessionId, fallbackData);
+        return fallbackData;
+      }
     }
 
     return null;

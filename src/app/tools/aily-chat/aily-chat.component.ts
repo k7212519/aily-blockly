@@ -1716,7 +1716,7 @@ Do not create non-existent boards and libraries.
         }
       );
 
-      // 同时保持旧格式写入（过渡期间向后兼容）
+      // 同时保持旧格式索引写入（过渡期间向后兼容，仅写 .chat 索引文件，不写 session 数据文件以避免覆盖新格式）
       if (prjPath) {
         let historyData = this.chatService.historyList.find(h => h.sessionId === this.sessionId);
         if (!historyData) {
@@ -1724,7 +1724,6 @@ Do not create non-existent boards and libraries.
           this.chatService.historyList.push({ sessionId: this.sessionId, name: title });
         }
         this.chatService.saveHistoryFile(prjPath);
-        this.chatService.saveSessionChatHistory(prjPath, this.sessionId, this.list);
       }
 
       // 刷新UI历史列表
@@ -4682,8 +4681,15 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
 
     this.list = [];
 
+    // ★ 关键：切换会话时必须先重置对话上下文，防止上一个会话的数据残留
+    this.conversationMessages = [];
+    this.toolCallingIteration = 0;
+    this.contextBudgetService?.reset();
+
+    const currentPrjPath = this.projectService.currentProjectPath || this.projectService.projectRootPath;
+
     // ===== 1. 优先从 ChatHistoryService 加载（支持恢复完整对话上下文） =====
-    const sessionData = this.chatHistoryService.loadSession(this.sessionId);
+    const sessionData = this.chatHistoryService.loadSession(this.sessionId, currentPrjPath);
     if (sessionData && sessionData.chatList && sessionData.chatList.length > 0) {
       // 恢复 UI 列表
       this.list = sessionData.chatList.map(item => {
@@ -4696,10 +4702,11 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
       // ★ 恢复对话上下文 conversationMessages（核心：支持继续对话）
       if (sessionData.conversationMessages && sessionData.conversationMessages.length > 0) {
         this.conversationMessages = sessionData.conversationMessages;
-        // 恢复工具迭代计数
         this.toolCallingIteration = sessionData.metadata?.toolCallingIteration || 0;
-        // 更新上下文预算
         this.contextBudgetService?.updateBudget(this.conversationMessages);
+        console.log(`[AilyChat] 已恢复对话上下文: ${this.conversationMessages.length} 条消息`);
+      } else {
+        console.log(`[AilyChat] 旧格式历史数据，无法恢复对话上下文（仅显示聊天记录）`);
       }
 
       // 同时更新旧缓存（兼容其他引用 historyChatMap 的地方）
@@ -4722,8 +4729,7 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
     }
 
     // ===== 3. 降级：从旧格式文件加载 =====
-    const prjPath = this.projectService.currentProjectPath || this.projectService.projectRootPath;
-    const localChatHistory = this.chatService.loadSessionChatHistory(prjPath, this.sessionId);
+    const localChatHistory = this.chatService.loadSessionChatHistory(currentPrjPath, this.sessionId);
     if (localChatHistory && localChatHistory.length > 0) {
       this.list = localChatHistory.map(item => {
         if (item.content && typeof item.content === 'string') {

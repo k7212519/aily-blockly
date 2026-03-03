@@ -149,7 +149,7 @@
             @if(contextBudgetSnapshot && contextBudgetSnapshot.maxContextTokens > 0) {
             <div class="token-budget-indicator ccenter"
               nz-tooltip nzTooltipPlacement="top"
-              [nzTooltipTitle]="'~' + (contextBudgetSnapshot.currentTokens | number) + ' / ' + (contextBudgetSnapshot.maxContextTokens | number) + ' tokens (' + (contextBudgetSnapshot.usagePercent | number:'1.0-0') + '%)'">
+              [nzTooltipTitle]="((contextBudgetSnapshot.currentTokens / 1000) | number:'1.1-1') + 'K / ' + ((contextBudgetSnapshot.maxContextTokens / 1000) | number:'1.1-1') + 'K tokens · ' + (contextBudgetSnapshot.usagePercent | number:'1.0-0') + '%'">
               <svg viewBox="0 0 24 24" class="token-ring">
                 <!-- 背景环 -->
                 <circle cx="12" cy="12" r="9" fill="none" stroke="#3f3f3f" stroke-width="2.5"/>
