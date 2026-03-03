@@ -1605,6 +1605,9 @@ Do not create non-existent boards and libraries.
 
   terminateTemp = '';
 
+  /** 当前是否在 <think> 标签内（think 内不匹配 aily-button） */
+  private insideThink = false;
+
   appendMessage(role, text, source?: string) {
     // console.log("添加消息: ", role, text, "source:", source);
 
@@ -1641,6 +1644,26 @@ Do not create non-existent boards and libraries.
 
     this.setLastMsgContent(role, text, source);
     this.terminateTemp = '';
+  }
+
+  /**
+   * 检测 last message 中是否包含完整的 ```aily-button...``` 块，若有且块在 </think> 之后（非 think 内）则截断其后的多余内容
+   * @returns true 表示检测到完整块（已截断多余内容）并应中断 SSE
+   */
+  private checkAndTruncateAilyButtonBlock(): boolean {
+    if (this.list.length === 0 || this.list[this.list.length - 1].role !== 'aily') return false;
+    const content = this.list[this.list.length - 1].content;
+    const lastThinkEnd = content.lastIndexOf('</think>');
+    if (lastThinkEnd < 0 && content.includes('<think>')) return false;
+    const searchStart = lastThinkEnd >= 0 ? lastThinkEnd : 0;
+    const afterThink = content.substring(searchStart);
+    const match = afterThink.match(/```aily-button[\s\S]*?```/);
+    if (!match) return false;
+    const blockEnd = searchStart + match.index! + match[0].length;
+    if (blockEnd < content.length) {
+      this.list[this.list.length - 1].content = content.substring(0, blockEnd);
+    }
+    return true;
   }
 
   /**
@@ -1753,6 +1776,7 @@ Do not create non-existent boards and libraries.
 
     // 重置重复检测状态
     this.repetitionDetectionService.resetAll();
+    this.insideThink = false;
 
     if (!this.mcpInitialized) {
       this.mcpInitialized = true;
@@ -1989,6 +2013,7 @@ ${JSON.stringify(errData)}
 
       // 重置流式文本检测状态（新消息开始）
       this.repetitionDetectionService.resetStreamTokens();
+      this.insideThink = false;
 
       // 将用户输入的文本包裹在<user-query>标签中
       text = `<user-query>${text}</user-query>`;
@@ -2417,10 +2442,12 @@ ${JSON.stringify(errData)}
               // console.log(`[无状态调试] 收到流式文本: "${data.content.substring(0, 50)}..." source: ${messageSource}`);
               // 检测 <think> 标签作为内容边界
               if (data.content.includes('<think>')) {
+                this.insideThink = true;
                 this.repetitionDetectionService.markBoundary('think_start');
               }
               // 检测 </think> 结束标签，丢弃 think 内容块
               if (data.content.includes('</think>')) {
+                this.insideThink = false;
                 this.repetitionDetectionService.markBoundary('think_end');
               }
 
@@ -2438,6 +2465,14 @@ ${JSON.stringify(errData)}
               // 无状态模式：累积助手文本内容（用于构建 assistant 消息）
               if (statelessMode) {
                 this.currentTurnAssistantContent += data.content;
+              }
+
+              // 检测 aily-button 块：think 标签内不匹配；通过 last message content 正则匹配，截断 ```aily-button内容``` 后的多余内容并中断 SSE
+              if (!this.insideThink && this.checkAndTruncateAilyButtonBlock()) {
+                if (statelessMode) {
+                  this.currentTurnAssistantContent = this.list[this.list.length - 1]?.content || this.currentTurnAssistantContent;
+                }
+                this.stop();
               }
             }
           } else if (data.type === 'TextMessage') {
