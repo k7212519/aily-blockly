@@ -5162,7 +5162,21 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
     // 新会话时重新启用自动滚动
     this.autoScrollEnabled = true;
     this.isCompleted = false;
-    this.isCancelled = false; // 重置取消标志
+
+    // ★ 先设置 isCancelled = true，阻止旧 SSE complete 回调中的 finalizeStatelessTurn
+    //   （防止在 stopAndCloseSession 到 startSession 之间的窗口期，
+    //    旧流结束触发 updateBudget 导致显示上一会话的 token 用量）
+    this.isCancelled = true;
+
+    // ★ 立即取消旧的 messageSubscription，切断旧 SSE 流的所有回调
+    if (this.messageSubscription) {
+      this.messageSubscription.unsubscribe();
+      this.messageSubscription = null;
+    }
+
+    // ★ 重置无状态模式关键变量，防止延迟的工具回调触发 finalizeStatelessTurn
+    this.activeToolExecutions = 0;
+    this.sseStreamCompleted = false;
 
     try {
       // 先停止并关闭当前会话（跳过保存，因为上面已保存）
@@ -5180,7 +5194,7 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
       // 等待一小段时间确保所有异步操作完成
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // 启动新会话
+      // 启动新会话（startSession 内部会重置 isCancelled = false）
       await this.startSession();
 
     } catch (error) {
