@@ -1945,7 +1945,7 @@ Do not create non-existent boards and libraries.
               this.message.error(res.message);
             } else {
               let errData = { "message": res.message || '启动会话失败，请稍后重试。' }
-              this.appendMessage('error', `
+              this.appendMessage('aily', `
 \`\`\`aily-error
 ${JSON.stringify(errData)}
 \`\`\`\n\n`)
@@ -1962,7 +1962,7 @@ ${JSON.stringify(errData)}
             status: err.status,
             message: err.message
           }
-          this.appendMessage('error', `
+          this.appendMessage('aily', `
 \`\`\`aily-error
 ${JSON.stringify(errData)}
 \`\`\`\n\n`)
@@ -2211,7 +2211,7 @@ ${JSON.stringify(errData)}
             errorMessage = error.message;
           }
 
-          this.appendMessage('error', `
+          this.appendMessage('aily', `
 \`\`\`aily-error
 {
   "message": "${errorMessage}",
@@ -2677,7 +2677,7 @@ ${JSON.stringify(errData)}
             if (this.list.length > 0 && this.list[this.list.length - 1].role === 'aily') {
               this.list[this.list.length - 1].state = 'done';
             }
-            this.appendMessage('error', `
+            this.appendMessage('aily', `
 \`\`\`aily-error
 {
   "message": "${this.makeJsonSafe(data.message || '未知错误')}"
@@ -4770,7 +4770,7 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
           this.scrollToBottom();
         } catch (e) {
           // console.log('处理流数据时出错:', e);
-          this.appendMessage('error', `
+          this.appendMessage('aily', `
 \`\`\`aily-error
 {
   "message": "服务异常，请稍后重试。"
@@ -4825,7 +4825,7 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
 
         // 只有在活跃对话中才显示错误提示和重试按钮
         if (this.isWaiting) {
-          this.appendMessage('error', `
+          this.appendMessage('aily', `
 \`\`\`aily-error
 {
   "message": "网络连接已断开，请检查网络后重试。"
