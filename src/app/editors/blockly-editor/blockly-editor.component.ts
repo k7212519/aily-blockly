@@ -105,6 +105,8 @@ export class BlocklyEditorComponent {
   }
 
   async loadProject(projectPath) {
+    // 处理 temp 下的 package.json：有则覆盖主项目，无则从主项目复制到 temp
+    await this.projectService.syncPackageJsonWithTemp(projectPath);
     // 加载项目package.json
     const packageJson = JSON.parse(this.electronService.readFile(`${projectPath}/package.json`));
     // 加载项目开发框架
