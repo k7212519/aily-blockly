@@ -2528,7 +2528,7 @@ ${JSON.stringify(errData)}
         // console.log("Recv: ", data);
 
         // 更新当前消息来源
-        const messageSource = data.source || 'mainAgent';
+        const messageSource = this.currentMessageSource || 'mainAgent';
         
         // 检测 source 变更，如果变更则将上一条消息的 doing 状态设为 done
         if (messageSource !== this.currentMessageSource) {
@@ -2538,7 +2538,7 @@ ${JSON.stringify(errData)}
             this.list[this.list.length - 1].state = 'done';
           }
           // 注意：不在 source 变更时重置流式检测状态，以便检测跨工具调用的重复内容
-          // console.log(`Source changed: ${this.currentMessageSource} -> ${messageSource}`);
+          console.log(`Source changed: ${this.currentMessageSource} -> ${messageSource}`);
         }
         this.currentMessageSource = messageSource;
 

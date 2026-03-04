@@ -127,6 +127,12 @@ export class BackgroundAgentService implements OnDestroy {
 
   // ===== 依赖 =====
   private fetchToolService: FetchToolService;
+  /**
+   * BackgroundAgent 专用的 ContextBudgetService 实例（非全局单例）。
+   * 避免与 mainAgent（AilyChatComponent）共享同一个 BehaviorSubject，
+   * 防止 BackgroundAgent 的 updateBudget/reset 覆盖聊天界面的上下文用量显示。
+   */
+  private contextBudgetService: ContextBudgetService;
 
   constructor(
     private http: HttpClient,
@@ -135,9 +141,10 @@ export class BackgroundAgentService implements OnDestroy {
     private connectionGraphService: ConnectionGraphService,
     private electronService: ElectronService,
     private ailyChatConfigService: AilyChatConfigService,
-    private contextBudgetService: ContextBudgetService,
   ) {
     this.fetchToolService = new FetchToolService(this.http);
+    // 创建独立的 ContextBudgetService 实例，不污染全局单例
+    this.contextBudgetService = new ContextBudgetService(null as any, this.ailyChatConfigService);
     this.setupIpcListeners();
     console.log('[BackgroundAgent] 服务初始化');
   }
