@@ -311,6 +311,7 @@
         "MODE_AGENT_FULL": "代理模式",
         "MODE_QA_FULL": "問答模式",
         "STOP_CURRENT_SESSION_FIRST": "請先停止當前會話，再新建",
+        "NO_HISTORY_SESSION": "沒有歷史會話記錄",
         "ONBOARDING": {
             "STEP1_TITLE": "輸入框",
             "STEP1_DESC": "在這裡輸入你想問的問題或需要AI幫助完成的任務，按 Enter 發送，Ctrl+Enter 換行",
