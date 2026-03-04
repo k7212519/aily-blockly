@@ -5859,13 +5859,44 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
 
     // 保存模型到配置
     this.chatService.saveChatModel(model);
+
+    // ★ 切换模型时保留对话上下文（与 ensureServerSession 同策略）
+    const savedMessages = [...this.conversationMessages];
+    const savedIteration = this.toolCallingIteration;
+    const savedTitle = this.chatService.currentSessionTitle;
+    const savedPath = this.chatService.currentSessionPath;
+    const savedList = [...this.list];
+    const oldSessionId = this.sessionId;
+
     // 切换模型需要创建新会话
     await this.stopAndCloseSession();
-    this.startSession().then((res) => {
-      // console.log('新会话已启动，当前模型:', this.currentModel);
-    }).catch((err) => {
+
+    try {
+      await this.startSession();
+    } catch (err) {
       console.error('切换模型失败:', err);
-    });
+      // 恢复状态
+      this.conversationMessages = savedMessages;
+      this.toolCallingIteration = savedIteration;
+      this.list = savedList;
+      return;
+    }
+
+    // ★ 恢复客户端对话上下文
+    this.conversationMessages = savedMessages;
+    this.toolCallingIteration = savedIteration;
+    this.chatService.currentSessionTitle = savedTitle;
+    this.chatService.currentSessionPath = savedPath;
+    this.list = savedList;
+
+    // ★ 如果 sessionId 发生变化，迁移历史索引
+    const newSessionId = this.sessionId;
+    if (oldSessionId && newSessionId && oldSessionId !== newSessionId) {
+      this.chatHistoryService.migrateSessionId(oldSessionId, newSessionId);
+    }
+
+    // ★ 重新计算上下文预算
+    this.contextBudgetService?.updateBudget(this.conversationMessages, this.getCurrentTools());
   }
 
   /**
@@ -5879,13 +5910,45 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
 
     // 保存模式到配置
     this.chatService.saveChatMode(mode as 'agent' | 'ask');
-    // console.log('切换AI模式为:', this.currentMode);
+
+    // ★ 切换模式时保留对话上下文（与 ensureServerSession 同策略）
+    const savedMessages = [...this.conversationMessages];
+    const savedIteration = this.toolCallingIteration;
+    const savedTitle = this.chatService.currentSessionTitle;
+    const savedPath = this.chatService.currentSessionPath;
+    const savedList = [...this.list];
+    const oldSessionId = this.sessionId;
+
     await this.stopAndCloseSession();
-    this.startSession().then((res) => {
-      // console.log('新会话已启动，当前模式:', this.currentMode);
-    }).catch((err) => {
-      this.switchToMode('chat');
-    });
+
+    try {
+      await this.startSession();
+    } catch (err) {
+      console.error('切换模式失败:', err);
+      // 恢复状态
+      this.conversationMessages = savedMessages;
+      this.toolCallingIteration = savedIteration;
+      this.list = savedList;
+      // 回退模式
+      this.chatService.saveChatMode('agent');
+      return;
+    }
+
+    // ★ 恢复客户端对话上下文
+    this.conversationMessages = savedMessages;
+    this.toolCallingIteration = savedIteration;
+    this.chatService.currentSessionTitle = savedTitle;
+    this.chatService.currentSessionPath = savedPath;
+    this.list = savedList;
+
+    // ★ 如果 sessionId 发生变化，迁移历史索引
+    const newSessionId = this.sessionId;
+    if (oldSessionId && newSessionId && oldSessionId !== newSessionId) {
+      this.chatHistoryService.migrateSessionId(oldSessionId, newSessionId);
+    }
+
+    // ★ 重新计算上下文预算
+    this.contextBudgetService?.updateBudget(this.conversationMessages, this.getCurrentTools());
   }
 
   // ==================== 新手引导相关方法 ====================
