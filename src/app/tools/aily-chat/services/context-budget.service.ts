@@ -2,32 +2,49 @@ import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { ChatService } from './chat.service';
 import { AilyChatConfigService } from './aily-chat-config.service';
+import { TiktokenService } from './tiktoken.service';
 
 // ==================== Token 计数工具 ====================
 
 /**
- * 轻量级 Token 估算器
- * 使用 OpenAI 的经验法则：英文约 4 字符 ≈ 1 token，中文约 1.5 字符 ≈ 1 token
- * 实际生产中可替换为 tiktoken 等精确分词器
+ * 模块级 TiktokenService 引用
+ * 由 ContextBudgetService 构造时注入，供独立导出的函数使用
+ */
+let _tiktokenService: TiktokenService | null = null;
+
+/** @internal 设置 TiktokenService 实例（由 ContextBudgetService 调用） */
+export function _setTiktokenService(service: TiktokenService): void {
+  _tiktokenService = service;
+}
+
+/**
+ * 精确 Token 计数器
+ *
+ * 优先使用 tiktoken (o200k_base) 精确计数，
+ * tiktoken 未就绪时回退到启发式估算（误差约 ±15%）。
  */
 export function estimateTokenCount(text: string): number {
   if (!text) return 0;
+  if (_tiktokenService) {
+    return _tiktokenService.countTokens(text);
+  }
+  // fallback：启发式估算
+  return _estimateTokensFallback(text);
+}
 
+/** 启发式 fallback（tiktoken 未就绪时使用） */
+function _estimateTokensFallback(text: string): number {
   let tokenCount = 0;
   for (let i = 0; i < text.length; i++) {
     const code = text.charCodeAt(i);
     if (code > 0x4E00 && code < 0x9FFF) {
-      // CJK 统一汉字：约 1.5 字符 ≈ 1 token → 每个汉字约 0.67 token
       tokenCount += 0.67;
     } else if (code > 0x7F) {
-      // 其他非 ASCII 字符
       tokenCount += 0.5;
     } else {
-      // ASCII 字符：约 4 字符 ≈ 1 token → 每个字符约 0.25 token
       tokenCount += 0.25;
     }
   }
-
   return Math.ceil(tokenCount);
 }
 
@@ -297,8 +314,11 @@ export class ContextBudgetService {
 
   constructor(
     private chatService: ChatService,
-    private ailyChatConfigService: AilyChatConfigService
+    private ailyChatConfigService: AilyChatConfigService,
+    private tiktokenService: TiktokenService
   ) {
+    // 注入 TiktokenService 供模块级函数使用
+    _setTiktokenService(this.tiktokenService);
     // 初始化系统提示词 token 估算
     this._cachedSystemTokens = ContextBudgetService.ESTIMATED_SYSTEM_PROMPT_TOKENS;
   }
