@@ -153,7 +153,7 @@
               <ng-template #tokenBudgetTooltip>
                 <div style="font-size:11px;line-height:1.6;white-space:nowrap">
                   <div style="font-weight:600;margin-bottom:2px">Context Window</div>
-                  <div style="border-top:1px solid rgba(255,255,255,0.15);margin-top:3px;padding-top:3px">{{ (contextBudgetSnapshot.currentTokens / 1000) | number:'1.1-1' }}K / {{ (contextBudgetSnapshot.maxContextTokens / 1000) | number:'1.1-1' }}K tokens · {{ contextBudgetSnapshot.usagePercent | number:'1.0-0' }}%</div>
+                  <div style="border-bottom:1px solid rgba(255,255,255,0.15);margin-bottom:3px">{{ (contextBudgetSnapshot.currentTokens / 1000) | number:'1.1-1' }}K / {{ (contextBudgetSnapshot.maxContextTokens / 1000) | number:'1.1-1' }}K tokens · {{ contextBudgetSnapshot.usagePercent | number:'1.0-0' }}%</div>
                   <div><span style="color:#98c379">■</span> System: {{ (contextBudgetSnapshot.systemTokens / 1000) | number:'1.1-1' }}K <span style="opacity:0.6">({{ contextBudgetSnapshot.systemPercent | number:'1.1-1' }}%)</span></div>
                   <div><span style="color:#61afef">■</span> Tools: {{ (contextBudgetSnapshot.toolsTokens / 1000) | number:'1.1-1' }}K <span style="opacity:0.6">({{ contextBudgetSnapshot.toolsPercent | number:'1.1-1' }}%)</span></div>
                   <div><span style="color:#c678dd">■</span> Messages: {{ (contextBudgetSnapshot.messagesTokens / 1000) | number:'1.1-1' }}K <span style="opacity:0.6">({{ contextBudgetSnapshot.messagesPercent | number:'1.1-1' }}%)</span></div>
