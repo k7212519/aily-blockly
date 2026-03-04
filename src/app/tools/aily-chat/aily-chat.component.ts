@@ -1743,8 +1743,11 @@ Do not create non-existent boards and libraries.
 
   // ==================== 工具结果清理与截断 ====================
 
-  /** 单条工具结果的最大字符数（约 2000 tokens） */
+  /** 单条工具结果的默认最大字符数（约 2000 tokens） */
   private static readonly TOOL_RESULT_MAX_CHARS = 8000;
+
+  /** fetch/web_search 等已内置截断的工具，使用更大的限制（避免双重截断破坏分页提示） */
+  private static readonly SELF_TRUNCATING_TOOLS = new Set(['fetch', 'web_search', 'read_file', 'grep']);
 
   /**
    * 清理工具结果 content，移除仅在当前执行上下文有用、不应存入对话历史的元素：
@@ -1780,11 +1783,19 @@ Do not create non-existent boards and libraries.
    * 原理：错误信息和关键结果通常在输出的尾部（如报错堆栈、最终状态），
    * 因此尾部分配更多空间（60%），头部保留 40%。
    *
+   * 对于已内置截断逻辑的工具（如 fetch、web_search），跳过此截断以避免破坏其分页提示。
+   *
    * @param content 工具结果文本
+   * @param toolName 工具名称，用于判断是否跳过截断
    * @param maxChars 最大字符数，默认 TOOL_RESULT_MAX_CHARS
    * @returns 截断后的文本（若未超限则原样返回）
    */
-  private truncateToolResult(content: string, maxChars?: number): string {
+  private truncateToolResult(content: string, toolName?: string, maxChars?: number): string {
+    // 已内置截断的工具：不再二次截断，避免破坏分页提示和内容结构
+    if (toolName && AilyChatComponent.SELF_TRUNCATING_TOOLS.has(toolName)) {
+      return content;
+    }
+
     const limit = maxChars ?? AilyChatComponent.TOOL_RESULT_MAX_CHARS;
     if (!content || content.length <= limit) return content;
 
@@ -2361,7 +2372,7 @@ ${JSON.stringify(errData)}
       if (this.pendingToolResults.length > 0) {
         for (const result of this.pendingToolResults) {
           const sanitized = this.sanitizeToolContent(result.content);
-          const truncated = this.truncateToolResult(sanitized);
+          const truncated = this.truncateToolResult(sanitized, result.tool_name);
           this.conversationMessages.push({
             role: 'tool',
             tool_call_id: result.tool_id,
@@ -2540,7 +2551,7 @@ ${JSON.stringify(errData)}
     // 将工具结果加入对话历史（清理 + 截断，参考 Copilot 的工具结果处理策略）
     for (const result of this.pendingToolResults) {
       const sanitized = this.sanitizeToolContent(result.content);
-      const truncated = this.truncateToolResult(sanitized);
+      const truncated = this.truncateToolResult(sanitized, result.tool_name);
       this.conversationMessages.push({
         role: 'tool',
         tool_call_id: result.tool_id,
