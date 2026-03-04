@@ -91,10 +91,7 @@ export interface FetchToolArgs {
   headers?: { [key: string]: string };
   body?: any;
   timeout?: number | string;
-  maxSize?: number | string; // 最大文件大小（字节）
-  responseType?: 'text' | 'json' | 'blob' | 'arraybuffer';
   startIndex?: number | string;  // 分页起始字符索引（0-based）
-  endIndex?: number | string;    // 分页结束字符索引（不含）
 }
 
 export interface FetchToolResult {
@@ -123,13 +120,10 @@ export class FetchToolService {
         headers = {},
         body,
         timeout: timeoutMs = 30000,
-        maxSize = DEFAULT_MAX_SIZE, // 默认5MB
-        responseType = 'text'
       } = args;
 
       // 确保超时值是数字类型
       const timeoutNumber = typeof timeoutMs === 'string' ? parseInt(timeoutMs, 10) : timeoutMs;
-      const maxSizeNumber = typeof maxSize === 'string' ? parseInt(maxSize, 10) : maxSize;
 
       // 1. 验证 URL
       if (!url || !this.isValidUrl(url)) {
@@ -172,25 +166,25 @@ export class FetchToolService {
 
         // 6. HEAD 预检（仅 GET 请求，检查 Content-Type 和 Content-Length）
         if (method === 'GET') {
-          const preCheckResult = await this.headPreCheck(url, headers, maxSizeNumber, timeoutNumber);
+          const preCheckResult = await this.headPreCheck(url, headers, DEFAULT_MAX_SIZE, timeoutNumber);
           if (preCheckResult) return preCheckResult;
         }
 
         // 7. 设置请求头
         const httpHeaders = new HttpHeaders(headers);
-        const response = await this.executeRequest(method, url, httpHeaders, body, responseType, timeoutNumber);
+        const response = await this.executeRequest(method, url, httpHeaders, body, 'text', timeoutNumber);
 
         // 8. 检查响应大小
         const contentLengthHeader = response.headers.get('content-length');
-        if (contentLengthHeader && parseInt(contentLengthHeader) > maxSizeNumber) {
+        if (contentLengthHeader && parseInt(contentLengthHeader) > DEFAULT_MAX_SIZE) {
           return {
-            content: `资源大小 (${this.formatFileSize(parseInt(contentLengthHeader))}) 超过限制 (${this.formatFileSize(maxSizeNumber)})。请提供更具体的资源地址或使用 web_search 工具搜索相关信息。`,
+            content: `资源大小 (${this.formatFileSize(parseInt(contentLengthHeader))}) 超过限制 (${this.formatFileSize(DEFAULT_MAX_SIZE)})。请提供更具体的资源地址或使用 web_search 工具搜索相关信息。`,
             is_error: true
           };
         }
 
         // 9. 提取响应内容
-        const extracted = await this.extractContent(response, responseType, maxSizeNumber);
+        const extracted = await this.extractContent(response, 'text', DEFAULT_MAX_SIZE);
         if (extracted.error) {
           return { content: extracted.error, is_error: true };
         }
@@ -198,7 +192,7 @@ export class FetchToolService {
 
         // 10. HTML → Markdown 转换（去除 script/style/nav 等无用标签，转为干净文本）
         contentType = response.headers.get('content-type') || '';
-        if (contentType.includes('text/html') && responseType === 'text') {
+        if (contentType.includes('text/html')) {
           content = this.htmlToMarkdown(content);
         }
 
@@ -222,11 +216,10 @@ export class FetchToolService {
       // 11. 分页取段 / 内容截断
       const totalLength = content.length;
       const startIdx = args.startIndex != null ? (typeof args.startIndex === 'string' ? parseInt(args.startIndex, 10) : args.startIndex) : 0;
-      const endIdx = args.endIndex != null ? (typeof args.endIndex === 'string' ? parseInt(args.endIndex, 10) : args.endIndex) : undefined;
 
-      if (startIdx > 0 || endIdx != null) {
-        // 明确指定了分页范围
-        const sliceEnd = endIdx != null ? Math.min(endIdx, totalLength) : Math.min(startIdx + MAX_CONTENT_LENGTH_FOR_LLM, totalLength);
+      if (startIdx > 0) {
+        // 从指定位置继续读取
+        const sliceEnd = Math.min(startIdx + MAX_CONTENT_LENGTH_FOR_LLM, totalLength);
         content = content.substring(startIdx, sliceEnd);
         const remaining = totalLength - sliceEnd;
         if (remaining > 0) {
