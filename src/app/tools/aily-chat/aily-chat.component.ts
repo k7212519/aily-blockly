@@ -5494,9 +5494,12 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
   openHistoryChat(e) {
     // 每次展开时刷新列表，确保删除/重命名后数据始终是最新的
     this.refreshHistoryList();
+    if (!this.HistoryList?.length) {
+      this.message.info(this.translate.instant('AILY_CHAT.NO_HISTORY_SESSION') || '没有历史会话记录');
+      return;
+    }
     // 设置菜单的位置
     this.historyListPosition = { x: window.innerWidth - 302, y: 72 };
-
     this.showHistoryList = !this.showHistoryList;
   }
 

@@ -360,6 +360,7 @@
         "MODE_AGENT_FULL": "Agent Mode",
         "MODE_QA_FULL": "Q&A Mode",
         "STOP_CURRENT_SESSION_FIRST": "Please stop the current session before creating a new one",
+        "NO_HISTORY_SESSION": "No history session records",
         "ONBOARDING": {
             "STEP1_TITLE": "Input Box",
             "STEP1_DESC": "Type your questions or tasks here for AI assistance. Press Enter to send, Ctrl+Enter for new line",

@@ -360,6 +360,7 @@
         "MODE_AGENT_FULL": "代理模式",
         "MODE_QA_FULL": "问答模式",
         "STOP_CURRENT_SESSION_FIRST": "请先停止当前会话，再新建",
+        "NO_HISTORY_SESSION": "没有历史会话记录",
         "ONBOARDING": {
             "STEP1_TITLE": "输入框",
             "STEP1_DESC": "在这里输入你想问的问题或需要AI帮助完成的任务，按 Enter 发送，Ctrl+Enter 换行",

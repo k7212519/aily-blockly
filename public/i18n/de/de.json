@@ -311,6 +311,7 @@
         "MODE_AGENT_FULL": "Agent-Modus",
         "MODE_QA_FULL": "F&A-Modus",
         "STOP_CURRENT_SESSION_FIRST": "Bitte stoppen Sie zuerst die aktuelle Sitzung, bevor Sie eine neue erstellen",
+        "NO_HISTORY_SESSION": "Keine historischen Sitzungsaufzeichnungen",
         "ONBOARDING": {
             "STEP1_TITLE": "Eingabefeld",
             "STEP1_DESC": "Geben Sie hier Ihre Fragen oder Aufgaben ein, bei denen die KI helfen soll. Enter zum Senden, Ctrl+Enter für neue Zeile",

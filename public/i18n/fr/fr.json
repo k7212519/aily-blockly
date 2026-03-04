@@ -311,6 +311,7 @@
         "MODE_AGENT_FULL": "Mode Agent",
         "MODE_QA_FULL": "Mode Q&R",
         "STOP_CURRENT_SESSION_FIRST": "Veuillez d'abord arrêter la session en cours avant d'en créer une nouvelle",
+        "NO_HISTORY_SESSION": "Aucun enregistrement de session historique",
         "ONBOARDING": {
             "STEP1_TITLE": "Zone de saisie",
             "STEP1_DESC": "Tapez ici vos questions ou tâches pour l'assistance IA. Appuyez sur Entrée pour envoyer, Ctrl+Entrée pour nouvelle ligne",

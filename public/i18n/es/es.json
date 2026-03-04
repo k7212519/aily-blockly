@@ -311,6 +311,7 @@
         "MODE_AGENT_FULL": "Modo Agente",
         "MODE_QA_FULL": "Modo P&R",
         "STOP_CURRENT_SESSION_FIRST": "Por favor, detenga la sesión actual antes de crear una nueva",
+        "NO_HISTORY_SESSION": "No hay registros de sesiones históricas",
         "ONBOARDING": {
             "STEP1_TITLE": "Cuadro de entrada",
             "STEP1_DESC": "Escriba aquí sus preguntas o tareas para la asistencia de IA. Presione Enter para enviar, Ctrl+Enter para nueva línea",
