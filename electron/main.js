@@ -1351,6 +1351,34 @@ if (shouldUseMultiInstance()) {
 }
 
 app.on("ready", async () => {
+  // 检查是否是协议启动
+  const protocolUrl = process.argv.find(arg => arg.startsWith(`${PROTOCOL}://`));
+
+  // 判断是否是纯转发型协议（不需要创建窗口的协议路径）
+  if (protocolUrl) {
+    try {
+      const urlObj = new URL(protocolUrl);
+      let fullPath = urlObj.pathname;
+      if (urlObj.hostname && urlObj.hostname !== '') {
+        fullPath = '/' + urlObj.hostname + urlObj.pathname;
+      }
+
+      // OAuth 回调：无需创建窗口，直接转发给已运行的实例后退出
+      if (fullPath === '/auth/callback') {
+        console.log('检测到 OAuth 回调协议启动，跳过窗口创建，直接转发处理');
+        handleProtocol(protocolUrl);
+        // handleProtocol 内部对找到目标实例的情况会调用 app.quit()
+        // 兜底：若未找到目标实例（主窗口已关闭等异常情况），延迟退出
+        setTimeout(() => {
+          app.quit();
+        }, 500);
+        return;
+      }
+    } catch (e) {
+      console.error('应用启动时解析协议 URL 失败:', e);
+    }
+  }
+
   try {
     loadEnv();
     // 异步检测最优服务器，不阻塞窗口创建
@@ -1359,8 +1387,6 @@ app.on("ready", async () => {
     console.error("loadEnv error: ", error);
   }
 
-  // 检查是否是协议启动
-  const protocolUrl = process.argv.find(arg => arg.startsWith(`${PROTOCOL}://`));
   if (protocolUrl) {
     console.log('应用启动时检测到协议参数:', protocolUrl);
     // 延迟处理协议，确保窗口创建完成
