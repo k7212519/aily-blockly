@@ -843,7 +843,9 @@ Query and return specific content (for detailed info)
     {
         name: "fetch",
         description: `获取网页内容和API数据。支持HTTP/HTTPS请求。
-注意：非必要时请避免使用此工具。如需搜索信息请优先使用 web_search 工具。`,
+- 内容超过 80000 字符时自动截断，截断时会提示剩余字符数
+- 支持分页读取：当内容被截断时，可用 startIndex 从截断位置继续读取
+如需搜索信息请优先使用 web_search 工具。`,
         input_schema: {
             type: 'object',
             properties: {
@@ -869,16 +871,9 @@ Query and return specific content (for detailed info)
                     description: '请求超时时间（毫秒）',
                     default: 30000
                 },
-                maxSize: {
+                startIndex: {
                     type: 'number',
-                    description: '最大文件大小（字节），默认5MB',
-                    default: 5242880
-                },
-                responseType: {
-                    type: 'string',
-                    description: '响应类型',
-                    enum: ['text', 'json', 'blob', 'arraybuffer'],
-                    default: 'text'
+                    description: '分页读取的起始字符索引（0-based）。当上次调用的响应提示内容被截断时，使用此参数从截断位置继续读取'
                 }
             },
             required: ['url']
