@@ -128,7 +128,7 @@ export class FloatSiderComponent implements OnInit, OnDestroy {
     this.uiService.openHistory();
   }
 
-  showCircuit() {
+  async showCircuit() {
     // this.message.warning(this.translate.instant('COMING SOON'));
     // return;
     if (!this.electronService.isElectron || !this.boardPackagePath) {
@@ -139,30 +139,23 @@ export class FloatSiderComponent implements OnInit, OnDestroy {
     const windowUrl = 'https://tool.aily.pro/connection-graph?type=json&theme=dark';
     // const windowUrl = 'http://localhost:4201/connection-graph?type=json&theme=dark';
 
-    // 构建连线图 payload
+    // 构建连线图 payload 并打开子窗口
     const payload = this.connectionGraphService.buildPayload(this.boardPackagePath);
-    console.log('[showCircuit] payload:', payload ? JSON.stringify(payload).slice(0, 500) + '...' : 'null');
+    this.uiService.openWindow({
+      path: `iframe?url=${encodeURIComponent(windowUrl)}`,
+      data: payload,
+      width: 900,
+      height: 700,
+    });
 
-    if (payload) {
-      // 场景1: 有连线数据 → 直接展示 + 显示操作按钮
-      this.uiService.openWindow({
-        path: `iframe?url=${encodeURIComponent(windowUrl)}`,
-        data: payload,
-        width: 900,
-        height: 700,
-      });
-    } else {
-      // 场景2: 无连线数据 → 打开窗口 + 启动后台 Agent 自动生成
-      this.uiService.openWindow({
-        path: `iframe?url=${encodeURIComponent(windowUrl)}&mode=generating`,
-        data: null,
-        width: 900,
-        height: 700,
-      });
-      // 延迟确保子窗口已打开并注册 IPC 监听，再启动生成
-      setTimeout(() => {
+    // 延迟确保子窗口已打开并注册 IPC 监听，再获取子窗口的 payload
+    setTimeout(async () => {
+      if (!this.electronService.isElectron || !window['ipcRenderer']) return;
+      const childPayload = await window['ipcRenderer'].invoke('get-connection-graph-payload');
+      if (childPayload == null) {
+        window['ipcRenderer'].send('schematic-start-generating');
         this.backgroundAgent.generateSchematic();
-      }, 800);
-    }
+      }
+    }, 800);
   }
 }

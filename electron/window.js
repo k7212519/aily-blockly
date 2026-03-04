@@ -407,6 +407,45 @@ function registerWindowHandlers(mainWindow) {
         console.log('[IPC] schematic-sync-to-code-request, 转发给主窗口');
         mainWindow.webContents.send('schematic-sync-to-code-request');
     });
+
+    // 主窗口通知子窗口切换到生成模式（当 getPayload 为 null 时）
+    ipcMain.on('schematic-start-generating', () => {
+        const connectionGraphWindow = Array.from(openWindows.entries()).find(([url]) => url.includes('connection-graph'));
+        if (connectionGraphWindow) {
+            const [, subWindow] = connectionGraphWindow;
+            if (subWindow && !subWindow.isDestroyed() && subWindow.webContents && !subWindow.webContents.isDestroyed()) {
+                subWindow.webContents.send('schematic-start-generating');
+            }
+        }
+    });
+
+    // 主窗口请求子窗口的 getPayload（用于连线图窗口）
+    ipcMain.handle('get-connection-graph-payload', async () => {
+        const messageId = Date.now().toString() + Math.random().toString(36).substr(2, 5);
+        const connectionGraphWindow = Array.from(openWindows.entries()).find(([url]) => url.includes('connection-graph'));
+        if (!connectionGraphWindow) {
+            return null;
+        }
+        const [, subWindow] = connectionGraphWindow;
+        if (!subWindow || subWindow.isDestroyed() || !subWindow.webContents || subWindow.webContents.isDestroyed()) {
+            return null;
+        }
+        return new Promise((resolve) => {
+            const timeout = setTimeout(() => {
+                ipcMain.removeListener('get-connection-graph-payload-response', responseHandler);
+                resolve(null);
+            }, 5000);
+            const responseHandler = (event, { messageId: respId, payload }) => {
+                if (respId === messageId) {
+                    clearTimeout(timeout);
+                    ipcMain.removeListener('get-connection-graph-payload-response', responseHandler);
+                    resolve(payload);
+                }
+            };
+            ipcMain.on('get-connection-graph-payload-response', responseHandler);
+            subWindow.webContents.send('get-connection-graph-payload-request', messageId);
+        });
+    });
 }
 
 

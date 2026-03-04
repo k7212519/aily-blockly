@@ -4,7 +4,9 @@ import { NZ_MODAL_DATA } from 'ng-zorro-antd/modal';
 import { ActivatedRoute } from '@angular/router';
 import { ElectronService } from '../../services/electron.service';
 import { ConnectionGraphService } from '../../services/connection-graph.service';
+import { NoticeService } from '../../services/notice.service';
 import { SubWindowComponent } from '../../components/sub-window/sub-window.component';
+import { NotificationComponent } from '../../components/notification/notification.component';
 import { CommonModule } from '@angular/common';
 import { WindowMessenger, connect, Connection } from 'penpal';
 import { ProgressEvent } from '../../services/background-agent.service';
@@ -20,7 +22,7 @@ export interface IframeModalData {
 
 @Component({
   selector: 'app-iframe',
-  imports: [SubWindowComponent, CommonModule],
+  imports: [SubWindowComponent, NotificationComponent, CommonModule],
   templateUrl: './iframe.component.html',
   styleUrl: './iframe.component.scss'
 })
@@ -54,14 +56,12 @@ export class IframeComponent implements OnInit, OnDestroy {
   isConnectionGraphWindow = false;
   /** 是否正在生成中 */
   isGenerating = false;
-  /** 当前通知文本 */
-  noticeText = '';
-  /** 当前通知状态: doing / done / error */
-  noticeState: 'doing' | 'done' | 'error' | '' = '';
   /** 进度 IPC 监听清理函数 */
   private progressIpcCleanup: (() => void) | null = null;
-  /** 自动隐藏通知的定时器 */
-  private noticeTimer: any = null;
+  /** getPayload 请求 IPC 监听清理函数 */
+  private getPayloadIpcCleanup: (() => void) | null = null;
+  /** schematic-start-generating IPC 监听清理函数 */
+  private schematicStartGeneratingIpcCleanup: (() => void) | null = null;
 
   constructor(
     @Optional() @Inject(NZ_MODAL_DATA) public data: IframeModalData | null,
@@ -69,6 +69,7 @@ export class IframeComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private electronService: ElectronService,
     private connectionGraphService: ConnectionGraphService,
+    private noticeService: NoticeService,
     private ngZone: NgZone,
   ) {
     // 如果是从 modal 打开，使用 modal data
@@ -90,7 +91,7 @@ export class IframeComponent implements OnInit, OnDestroy {
     }
   }
 
-  ngOnInit() {
+  async ngOnInit() {
     // 延迟显示无数据状态（如果加载失败）
     setTimeout(() => {
       if (this.isLoading) {
@@ -98,6 +99,8 @@ export class IframeComponent implements OnInit, OnDestroy {
         this.showEmptyState = true;
       }
     }, 10000); // 10秒超时
+
+    await new Promise(resolve => setTimeout(resolve, 100));
 
     // 如果不是 modal 模式，从 URL 查询参数读取
     if (!this.data) {
@@ -114,6 +117,11 @@ export class IframeComponent implements OnInit, OnDestroy {
           // 检测是否为连线图窗口
           if (url.includes('connection-graph')) {
             this.isConnectionGraphWindow = true;
+            // 监听主窗口获取 payload 的 IPC 请求
+            if (this.electronService.isElectron && window['ipcRenderer']) {
+              this.startGetPayloadIpcListener();
+              this.startSchematicStartGeneratingListener();
+            }
           }
         }
 
@@ -121,7 +129,7 @@ export class IframeComponent implements OnInit, OnDestroy {
         const mode = params['mode'];
         if (mode === 'generating') {
           this.isGenerating = true;
-          this.safeUpdateNotice('正在准备生成连线图...', 'doing');
+          this.noticeService.update({title: 'AI生成中', text: '正在准备生成连线图...', state: 'doing', showProgress: false });
           this.startProgressIpcListener();
         }
 
@@ -146,6 +154,7 @@ export class IframeComponent implements OnInit, OnDestroy {
           this.handleInitData(initData);
         });
       }
+
     }
   }
 
@@ -307,7 +316,54 @@ export class IframeComponent implements OnInit, OnDestroy {
     return this.remoteApi[method](...args);
   }
 
+  /**
+   * 开始监听 getPayload 请求 IPC
+   */
+  private startGetPayloadIpcListener(): void {
+    if (!this.electronService.isElectron || !window['ipcRenderer']) return;
+
+    const handler = (_event: any, messageId: string) => {
+      const payload = this.getPayload();
+      window['ipcRenderer'].send('get-connection-graph-payload-response', { messageId, payload });
+    };
+
+    window['ipcRenderer'].on('get-connection-graph-payload-request', handler);
+
+    this.getPayloadIpcCleanup = () => {
+      window['ipcRenderer'].removeListener('get-connection-graph-payload-request', handler);
+    };
+  }
+
+  /**
+   * 监听主窗口通知切换到生成模式
+   */
+  private startSchematicStartGeneratingListener(): void {
+    if (!this.electronService.isElectron || !window['ipcRenderer']) return;
+
+    const handler = () => {
+      this.ngZone.run(() => {
+        this.isGenerating = true;
+        this.noticeService.update({ title: 'AI生成中', text: '正在准备生成连线图...', state: 'doing', showProgress: false });
+        this.startProgressIpcListener();
+      });
+    };
+
+    window['ipcRenderer'].on('schematic-start-generating', handler);
+
+    this.schematicStartGeneratingIpcCleanup = () => {
+      window['ipcRenderer'].removeListener('schematic-start-generating', handler);
+    };
+  }
+
   ngOnDestroy(): void {
+    if (this.getPayloadIpcCleanup) {
+      this.getPayloadIpcCleanup();
+      this.getPayloadIpcCleanup = null;
+    }
+    if (this.schematicStartGeneratingIpcCleanup) {
+      this.schematicStartGeneratingIpcCleanup();
+      this.schematicStartGeneratingIpcCleanup = null;
+    }
     // 清除 ConnectionGraphService 中的 iframe API 引用
     this.connectionGraphService.clearIframeApi();
     if (this.penpalConnection) {
@@ -381,13 +437,7 @@ export class IframeComponent implements OnInit, OnDestroy {
       await this.pushDataToRemote();
       console.log('[IframeComponent] 连线图已自动更新');
       
-      // 显示更新提示，3秒后自动隐藏
-      this.hasUpdate = true;
-      setTimeout(() => {
-        this.ngZone.run(() => {
-          this.hasUpdate = false;
-        });
-      }, 3000);
+      this.noticeService.update({title: 'AI生成中', text: '连线图已自动更新', state: 'done', setTimeout: 3000 });
     } catch (error) {
       console.error('[IframeComponent] 处理连线图更新失败:', error);
     }
@@ -443,52 +493,26 @@ export class IframeComponent implements OnInit, OnDestroy {
 
     switch (event.type) {
       case 'thinking':
-        this.safeUpdateNotice(event.content || '正在分析项目...', 'doing');
+        this.noticeService.update({title: 'AI生成中', text: event.content || '正在分析项目...', state: 'doing', showProgress: false });
         break;
       case 'tool_call':
-        this.safeUpdateNotice(event.content || '正在执行工具...', 'doing');
+        this.noticeService.update({title: 'AI生成中', text: event.content || '正在执行工具...', state: 'doing', showProgress: false });
         break;
       case 'tool_result':
-        this.safeUpdateNotice(event.content || '工具执行完成', 'doing');
+        this.noticeService.update({title: 'AI生成中', text: event.content || '工具执行完成', state: 'doing', showProgress: false });
         break;
       case 'complete':
         this.isGenerating = false;
-        this.safeUpdateNotice('连线图生成完成', 'done', 3000);
+        this.noticeService.update({title: 'AI生成完成', text: '连线图生成完成', state: 'done', setTimeout: 3000 });
         break;
       case 'error':
         this.isGenerating = false;
-        this.safeUpdateNotice(event.content || '生成失败', 'error', 5000);
+        this.noticeService.update({title: 'AI生成失败', text: event.content || '生成失败', state: 'error', setTimeout: 5000 });
         break;
       default:
         if (event.content) {
-          this.safeUpdateNotice(event.content, 'doing');
+          this.noticeService.update({title: 'AI生成中', text: event.content, state: 'doing', showProgress: false });
         }
-    }
-  }
-
-  /**
-   * 安全更新通知栏
-   * @param text 通知文本
-   * @param state 通知状态
-   * @param autoHideMs 自动隐藏毫秒数，0 表示不自动隐藏
-   */
-  private safeUpdateNotice(text: string, state: 'doing' | 'done' | 'error', autoHideMs = 0): void {
-    this.noticeText = text;
-    this.noticeState = state;
-
-    // 清除之前的自动隐藏定时器
-    if (this.noticeTimer) {
-      clearTimeout(this.noticeTimer);
-      this.noticeTimer = null;
-    }
-
-    if (autoHideMs > 0) {
-      this.noticeTimer = setTimeout(() => {
-        this.ngZone.run(() => {
-          this.noticeText = '';
-          this.noticeState = '';
-        });
-      }, autoHideMs);
     }
   }
 
@@ -497,12 +521,17 @@ export class IframeComponent implements OnInit, OnDestroy {
    */
   onRegenerate(): void {
     this.isGenerating = true;
-    this.safeUpdateNotice('正在重新生成连线图...', 'doing');
+    this.noticeService.update({title: 'AI生成中', text: '正在重新生成连线图...', state: 'doing', showProgress: false });
 
     // 开始监听进度（如果之前已停止）
     if (!this.progressIpcCleanup) {
       this.startProgressIpcListener();
     }
+
+    // 调用 iframe 通讯方法清理缓存
+    this.callRemote('clearCache').catch(() => {
+      // 子页面未暴露 clearCache 时静默忽略
+    });
 
     // 发送 IPC 到主窗口触发 BackgroundAgentService 重新生成
     if (this.electronService.isElectron && window['ipcRenderer']) {
@@ -517,5 +546,12 @@ export class IframeComponent implements OnInit, OnDestroy {
     if (this.electronService.isElectron && window['ipcRenderer']) {
       window['ipcRenderer'].send('schematic-sync-to-code-request');
     }
+  }
+
+  /**
+   * 获取当前 payload（供主窗口 IPC 调用）
+   */
+  getPayload(): unknown {
+    return this.iframeData ?? null;
   }
 }

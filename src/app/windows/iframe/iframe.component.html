@@ -1,3 +1,4 @@
+<app-notification></app-notification>
 <app-sub-window [title]="windowTitle" [winBtns]="['minimize', 'maximize', 'close']">
   <div class="content-wrapper">
     <div class="content-inner">
@@ -16,29 +17,13 @@
         [style.display]="isLoading || showEmptyState ? 'none' : 'block'"></iframe>
       }
 
-      <!-- 生成进度通知栏 -->
-      @if(noticeState) {
-      <div class="generation-notice" [class.notice-doing]="noticeState === 'doing'" [class.notice-done]="noticeState === 'done'" [class.notice-error]="noticeState === 'error'">
-        @if(noticeState === 'doing') {
-        <span class="notice-spinner"></span>
-        }
-        @if(noticeState === 'done') {
-        <span class="notice-icon">✓</span>
-        }
-        @if(noticeState === 'error') {
-        <span class="notice-icon notice-icon-error">✕</span>
-        }
-        <span class="notice-text">{{ noticeText }}</span>
-      </div>
-      }
-
       <!-- 自动更新提示 -->
-      @if(hasUpdate) {
+      <!-- @if(hasUpdate) {
       <div class="update-banner" (click)="dismissUpdate()">
         <span class="update-icon">✅</span>
         <span class="update-text">连线图已自动更新</span>
       </div>
-      }
+      } -->
     </div>
 
     <!-- 操作按钮栏 (连线图窗口 且 非生成中) -->
