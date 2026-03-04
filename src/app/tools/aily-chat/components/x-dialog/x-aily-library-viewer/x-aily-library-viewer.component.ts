@@ -77,4 +77,8 @@ export class XAilyLibraryViewerComponent implements OnInit, OnDestroy, OnChanges
       this.cdr.markForCheck();
     }
   }
+
+  logDetail() {
+    console.log('状态详情:', this.libraryInfo);
+  }
 }
