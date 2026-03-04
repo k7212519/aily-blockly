@@ -22,6 +22,36 @@ import { Subject, Observable } from 'rxjs';
 import { v4 as uuidv4 } from 'uuid';
 import { API } from '../../../configs/api.config';
 import { AuthService } from '../../../services/auth.service';
+import { ProjectService } from '../../../services/project.service';
+import { ConnectionGraphService } from '../../../services/connection-graph.service';
+import { AilyChatConfigService } from './aily-chat-config.service';
+import { TOOLS, ToolUseResult } from '../tools/tools';
+import { createSecurityContext } from './security.service';
+
+import {
+  generateConnectionGraphTool,
+  getPinmapSummaryTool,
+  validateConnectionGraphTool,
+  getSensorPinmapCatalogTool,
+  generatePinmapTool,
+  savePinmapTool,
+  getCurrentSchematicTool,
+  applySchematicTool
+} from '../tools/connectionGraphTool';
+import { getContextTool } from '../tools/getContextTool';
+import { getProjectInfoTool } from '../tools/getProjectInfoTool';
+import { readFileTool } from '../tools/readFileTool';
+import { createFileTool } from '../tools/createFileTool';
+import { editFileTool } from '../tools/editFileTool';
+import { deleteFileTool } from '../tools/deleteFileTool';
+import { deleteFolderTool } from '../tools/deleteFolderTool';
+import { createFolderTool } from '../tools/createFolderTool';
+import { listDirectoryTool } from '../tools/listDirectoryTool';
+import { getDirectoryTreeTool } from '../tools/getDirectoryTreeTool';
+import { grepTool } from '../tools/grepTool';
+import globTool from '../tools/globTool';
+import { getBoardParametersTool } from '../tools/getBoardParametersTool';
+import { fetchTool, FetchToolService } from '../tools/fetchTool';
 
 // ===== 类型定义 =====
 
@@ -37,12 +67,18 @@ export interface SubagentToolCallRequest {
 
 /** Subagent 执行进度事件 */
 export interface SubagentProgressEvent {
-  type: 'started' | 'streaming' | 'tool_call' | 'completed' | 'error';
+  type: 'started' | 'streaming' | 'tool_call' | 'tool_call_start' | 'tool_call_end' | 'completed' | 'error';
   agentName: string;
   toolId: string;
   content: string;
   /** 流式文本累积（type=streaming 时持续更新） */
   accumulatedText?: string;
+  /** subagent 内部工具调用名（type=tool_call_start/tool_call_end 时） */
+  innerToolName?: string;
+  /** subagent 内部工具调用 ID（type=tool_call_start/tool_call_end 时） */
+  innerToolId?: string;
+  /** 工具调用是否失败（type=tool_call_end 时） */
+  isError?: boolean;
   timestamp: number;
 }
 
@@ -56,6 +92,15 @@ interface SubagentSession {
   running: boolean;
   /** 创建时间 */
   createdAt: number;
+}
+
+/** Subagent 单轮 chatRequest 的状态收集器（局部变量，支持并发） */
+interface SubagentTurnState {
+  toolCalls: any[];
+  pendingToolResults: any[];
+  assistantContent: string;
+  taskCompleted: boolean;
+  stopReason: string;
 }
 
 @Injectable({
@@ -72,12 +117,18 @@ export class SubagentSessionService implements OnDestroy {
   private activeReaders = new Map<string, ReadableStreamDefaultReader<Uint8Array>>();
   /** 取消标记 */
   private abortedToolIds = new Set<string>();
+  /** 工具 fetch 服务 */
+  private fetchToolService: FetchToolService;
 
   constructor(
     private http: HttpClient,
     private authService: AuthService,
+    private projectService: ProjectService,
+    private connectionGraphService: ConnectionGraphService,
+    private ailyChatConfigService: AilyChatConfigService,
   ) {
-    console.log('[SubagentSession] 服务初始化');
+    this.fetchToolService = new FetchToolService(this.http);
+    // console.log('[SubagentSession] 服务初始化');
   }
 
   ngOnDestroy(): void {
@@ -128,7 +179,7 @@ export class SubagentSessionService implements OnDestroy {
     const task = args['task'] || args['content'] || JSON.stringify(args);
     const context = args['context'] || '';
 
-    console.log(`[SubagentSession] 执行 subagent 工具: ${tool_name}, agent: ${agent_name}, task: ${task.substring(0, 100)}...`);
+    // console.log(`[SubagentSession] 执行 subagent 工具: ${tool_name}, agent: ${agent_name}, task: ${task.substring(0, 100)}...`);
 
     // 1. 获取或创建 subagent 会话
     const session = await this.getOrCreateSession(agent_name);
@@ -152,7 +203,7 @@ export class SubagentSessionService implements OnDestroy {
       );
 
       this.emitProgress('completed', agent_name, tool_id, `${agent_name} 执行完成`);
-      console.log(`[SubagentSession] ${agent_name} 执行完成, 结果长度: ${result.length}`);
+      // console.log(`[SubagentSession] ${agent_name} 执行完成, 结果长度: ${result.length}`);
 
       return result;
     } catch (error: any) {
@@ -201,7 +252,7 @@ export class SubagentSessionService implements OnDestroy {
     }
     this.sessions.clear();
 
-    console.log('[SubagentSession] 已清理所有会话');
+    // console.log('[SubagentSession] 已清理所有会话');
   }
 
   /**
@@ -212,7 +263,7 @@ export class SubagentSessionService implements OnDestroy {
     if (session) {
       this.closeServerSession(session.sessionId);
       this.sessions.delete(agentName);
-      console.log(`[SubagentSession] 已清理 ${agentName} 的会话`);
+      // console.log(`[SubagentSession] 已清理 ${agentName} 的会话`);
     }
   }
 
@@ -227,19 +278,22 @@ export class SubagentSessionService implements OnDestroy {
   private async getOrCreateSession(agentName: string): Promise<SubagentSession> {
     const existing = this.sessions.get(agentName);
     if (existing) {
-      console.log(`[SubagentSession] 复用 ${agentName} 会话: ${existing.sessionId}`);
+      // console.log(`[SubagentSession] 复用 ${agentName} 会话: ${existing.sessionId}`);
       return existing;
     }
 
     // 创建新会话
     const sessionId = uuidv4();
-    console.log(`[SubagentSession] 为 ${agentName} 创建新会话: ${sessionId}`);
+    // console.log(`[SubagentSession] 为 ${agentName} 创建新会话: ${sessionId}`);
+
+    // 根据 agentName 过滤可用工具（与 BackgroundAgentService 同逻辑）
+    const agentTools = this.getToolsForAgent(agentName);
 
     // POST /api/v1/start_session
     const payload = {
       session_id: sessionId,
       agent: agentName,
-      tools: [],         // subagent 的工具由服务端管理
+      tools: agentTools,
       mode: 'agent',
     };
 
@@ -272,21 +326,20 @@ export class SubagentSessionService implements OnDestroy {
   }
 
   // =========================================================================
-  // 直连执行
+  // 直连执行（Copilot 式无状态 Request-per-Turn 工具调用循环）
   // =========================================================================
 
   /**
-   * 通过 chatRequest 直连 subagent 执行任务
+   * 通过 chatRequest 直连 subagent 执行任务 —— 完整工具调用循环
    *
    * 流程：
    * 1. 将用户消息加入会话历史
-   * 2. POST /api/v1/chat/{sessionId}，携带完整消息历史
-   * 3. 流式解析 NDJSON 响应，累积 assistant 文本
-   * 4. 处理 subagent 内部的工具调用事件（仅记录进度，不在前端执行）
-   * 5. 收到 TaskCompleted 或流结束后，返回完整回复
+   * 2. 循环：发送 chatRequest → 处理 SSE → 若有本地工具调用则执行并注入结果 → 重复
+   * 3. 收到 TaskCompleted(COMPLETED|TERMINATE|end_turn) 或无更多工具调用时返回最终文本
    *
-   * 注意：subagent 内部的工具调用由服务端编排执行（internal tools），
-   * 前端只负责收集最终文本回复。
+   * 与之前的区别：
+   * - 之前只发一轮 chatRequest，subagent 内部工具调用无法被本地执行，导致结果不完整
+   * - 现在实现了与 BackgroundAgentService.runToolCallingLoop() 同等的多轮循环
    */
   private async chatWithSubagent(
     session: SubagentSession,
@@ -294,24 +347,114 @@ export class SubagentSessionService implements OnDestroy {
     toolId: string,
     timeout: number,
   ): Promise<string> {
-    // 加入用户消息
     session.messages.push({ role: 'user', content: userContent });
 
+    const deadline = Date.now() + timeout;
+    const toolCallLimit = this.ailyChatConfigService?.maxCount || 30;
+    let iteration = 0;
+    let finalText = '';
+
+    while (iteration < toolCallLimit) {
+      if (this.abortedToolIds.has(toolId)) break;
+
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        throw new Error(`${session.agentName} 执行超时 (${timeout / 1000}s)`);
+      }
+
+      const turnState: SubagentTurnState = {
+        toolCalls: [],
+        pendingToolResults: [],
+        assistantContent: '',
+        taskCompleted: false,
+        stopReason: '',
+      };
+
+      // console.log(`[SubagentSession] ${session.agentName} 第 ${iteration + 1} 轮请求, messages: ${session.messages.length} 条`);
+
+      await this.processSubagentChatTurn(session, toolId, remaining, turnState);
+
+      if (this.abortedToolIds.has(toolId)) break;
+
+      finalText = turnState.assistantContent;
+
+      // TaskCompleted 且 stop_reason 为终止类型 → 循环结束
+      if (turnState.taskCompleted &&
+          ['COMPLETED', 'TERMINATE', 'end_turn'].includes(turnState.stopReason)) {
+        // console.log(`[SubagentSession] ${session.agentName} 任务完成, stop_reason: ${turnState.stopReason}`);
+        break;
+      }
+
+      // 没有待处理的工具结果 → 循环结束（纯文本回复或 internal 工具已由服务端处理完）
+      if (turnState.pendingToolResults.length === 0) {
+        // 如果 taskCompleted 但 stopReason 不是终止类型（如 tool_calls），且没有本地工具结果
+        // 说明是 internal 工具循环，但服务端应该在流中已处理完，直接结束
+        break;
+      }
+
+      // 有本地工具执行结果 → 将 assistant 消息(含 tool_calls) + 工具结果加入对话历史，继续下一轮
+      const assistantMessage: any = {
+        role: 'assistant',
+        content: turnState.assistantContent || ''
+      };
+      if (turnState.toolCalls.length > 0) {
+        assistantMessage.tool_calls = turnState.toolCalls.map(tc => ({
+          id: tc.tool_id,
+          type: 'function',
+          function: {
+            name: tc.tool_name,
+            arguments: typeof tc.tool_args === 'string' ? tc.tool_args : JSON.stringify(tc.tool_args)
+          }
+        }));
+      }
+      session.messages.push(assistantMessage);
+
+      for (const result of turnState.pendingToolResults) {
+        session.messages.push({
+          role: 'tool',
+          tool_call_id: result.tool_id,
+          name: result.tool_name,
+          content: typeof result.content === 'string' ? result.content : JSON.stringify(result.content)
+        });
+      }
+
+      iteration++;
+      // console.log(`[SubagentSession] ${session.agentName} ${turnState.pendingToolResults.length} 个工具结果已加入对话历史，继续第 ${iteration + 1} 轮`);
+    }
+
+    // 将最终的 assistant 回复加入会话历史（支持后续复用）
+    if (finalText) {
+      session.messages.push({ role: 'assistant', content: finalText });
+    }
+
+    return finalText || '(subagent 未返回内容)';
+  }
+
+  /**
+   * 发送一轮 chatRequest 并处理 SSE 流
+   * 流事件中遇到非 internal 的 tool_call_request 会立即本地执行，结果收集到 turnState
+   */
+  private async processSubagentChatTurn(
+    session: SubagentSession,
+    toolId: string,
+    timeout: number,
+    turnState: SubagentTurnState,
+  ): Promise<void> {
     const token = await this.authService.getToken2();
     const headers: HeadersInit = { 'Content-Type': 'application/json' };
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
+    const agentTools = this.getToolsForAgent(session.agentName);
     const payload = {
       session_id: session.sessionId,
       messages: session.messages,
-      tools: [],
+      tools: agentTools,
       mode: 'agent',
       agent: session.agentName,
     };
 
-    // 带超时的 fetch
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
@@ -336,16 +479,13 @@ export class SubagentSessionService implements OnDestroy {
       throw new Error(`${session.agentName} HTTP ${response.status}: ${response.statusText}`);
     }
 
-    // 流式读取并解析
     const reader = response.body!.getReader();
     this.activeReaders.set(toolId, reader);
     const decoder = new TextDecoder();
     let buffer = '';
-    let accumulatedText = '';
 
     try {
       while (true) {
-        // 检查是否被取消
         if (this.abortedToolIds.has(toolId)) {
           throw new Error(`${session.agentName} 执行被取消`);
         }
@@ -363,42 +503,23 @@ export class SubagentSessionService implements OnDestroy {
 
           try {
             const event = JSON.parse(line);
-            accumulatedText = this.handleSubagentStreamEvent(
-              event,
-              session.agentName,
-              toolId,
-              accumulatedText,
-            );
+            await this.handleSubagentStreamEvent(event, session.agentName, toolId, turnState);
           } catch (e) {
             console.warn(`[SubagentSession] JSON 解析失败:`, line, e);
           }
         }
       }
 
-      // 处理缓冲区剩余
       if (buffer.trim() && !this.abortedToolIds.has(toolId)) {
         try {
           const event = JSON.parse(buffer);
-          accumulatedText = this.handleSubagentStreamEvent(
-            event,
-            session.agentName,
-            toolId,
-            accumulatedText,
-          );
+          await this.handleSubagentStreamEvent(event, session.agentName, toolId, turnState);
         } catch { }
       }
     } finally {
       clearTimeout(timeoutId);
       this.activeReaders.delete(toolId);
-      this.abortedToolIds.delete(toolId);
     }
-
-    // 将 assistant 回复加入会话历史（支持后续复用）
-    if (accumulatedText) {
-      session.messages.push({ role: 'assistant', content: accumulatedText });
-    }
-
-    return accumulatedText || '(subagent 未返回内容)';
   }
 
   // =========================================================================
@@ -406,41 +527,56 @@ export class SubagentSessionService implements OnDestroy {
   // =========================================================================
 
   /**
-   * 处理 subagent SSE 流中的单个事件
-   * @returns 更新后的累积文本
+   * 处理 subagent SSE 流中的单个事件（async — 支持本地工具执行）
    */
-  private handleSubagentStreamEvent(
+  private async handleSubagentStreamEvent(
     event: any,
     agentName: string,
     toolId: string,
-    accumulatedText: string,
-  ): string {
+    turnState: SubagentTurnState,
+  ): Promise<void> {
     switch (event.type) {
       case 'ModelClientStreamingChunkEvent': {
         const content = event.content || '';
-        accumulatedText += content;
-        // 推送流式进度（节流：每次只发最新累积片段）
-        this.emitProgress('streaming', agentName, toolId, content, accumulatedText);
+        turnState.assistantContent += content;
+        this.emitProgress('streaming', agentName, toolId, content, turnState.assistantContent);
         break;
       }
 
       case 'tool_call_request': {
-        // Subagent 内部工具调用 — 服务端执行，前端只记录进度
-        const toolName = event.tool_name || 'unknown';
-        this.emitProgress('tool_call', agentName, toolId, `${agentName}: 调用 ${toolName}...`);
+        const innerToolName = event.tool_name || 'unknown';
+        const innerToolId = event.tool_id || `${toolId}_inner_${Date.now()}`;
+
+        this.emitProgressEx('tool_call_start', agentName, toolId, `${agentName}: 调用 ${innerToolName}...`, {
+          innerToolName,
+          innerToolId,
+        });
+
+        if (event.internal === true) {
+          break;
+        }
+
+        await this.handleLocalToolCall(event, agentName, toolId, turnState);
         break;
       }
 
       case 'tool_call_execution': {
-        // Subagent 内部工具执行完成
-        const execResult = event.is_error ? `执行失败` : '执行完成';
-        this.emitProgress('tool_call', agentName, toolId, `${agentName}: ${event.tool_name || ''} ${execResult}`);
+        const innerToolName2 = event.tool_name || 'unknown';
+        const innerToolId2 = event.tool_id || `${toolId}_inner_${Date.now()}`;
+        const isError = !!event.is_error;
+        const execResult = isError ? `执行失败` : '执行完成';
+        this.emitProgressEx('tool_call_end', agentName, toolId, `${agentName}: ${innerToolName2} ${execResult}`, {
+          innerToolName: innerToolName2,
+          innerToolId: innerToolId2,
+          isError,
+        });
         break;
       }
 
       case 'TaskCompleted': {
-        const reason = event.stop_reason || '';
-        console.log(`[SubagentSession] ${agentName} TaskCompleted, stop_reason: ${reason}`);
+        turnState.taskCompleted = true;
+        turnState.stopReason = event.stop_reason || event.data?.stop_reason || '';
+        // console.log(`[SubagentSession] ${agentName} TaskCompleted, stop_reason: ${turnState.stopReason}`);
         break;
       }
 
@@ -450,8 +586,123 @@ export class SubagentSessionService implements OnDestroy {
         break;
       }
     }
+  }
 
-    return accumulatedText;
+  // =========================================================================
+  // 本地工具执行（与 BackgroundAgentService.handleToolCallRequest 同逻辑）
+  // =========================================================================
+
+  /**
+   * 处理非 internal 的 tool_call_request：本地执行工具并收集结果
+   */
+  private async handleLocalToolCall(
+    event: any,
+    agentName: string,
+    toolId: string,
+    turnState: SubagentTurnState,
+  ): Promise<void> {
+    const toolName = event.tool_name;
+    const innerToolId = event.tool_id;
+
+    turnState.toolCalls.push({
+      tool_id: innerToolId,
+      tool_name: toolName,
+      tool_args: event.tool_args,
+    });
+
+    let toolArgs: any;
+    try {
+      toolArgs = typeof event.tool_args === 'string'
+        ? JSON.parse(event.tool_args)
+        : event.tool_args || {};
+    } catch {
+      turnState.pendingToolResults.push({
+        tool_id: innerToolId,
+        tool_name: toolName,
+        content: '参数解析失败',
+        is_error: true,
+      });
+      this.emitProgressEx('tool_call_end', agentName, toolId, `${agentName}: ${toolName} 参数解析失败`, {
+        innerToolName: toolName, innerToolId, isError: true,
+      });
+      return;
+    }
+
+    let result: ToolUseResult;
+    try {
+      result = await this.executeTool(toolName, toolArgs);
+    } catch (error: any) {
+      result = { is_error: true, content: `工具执行异常: ${error.message}` };
+    }
+
+    const isError = result.is_error || false;
+    this.emitProgressEx('tool_call_end', agentName, toolId,
+      `${agentName}: ${toolName} ${isError ? '失败' : '完成'}`, {
+        innerToolName: toolName, innerToolId, isError,
+      });
+
+    turnState.pendingToolResults.push({
+      tool_id: innerToolId,
+      tool_name: toolName,
+      content: typeof result.content === 'string' ? result.content : JSON.stringify(result.content),
+      is_error: isError,
+    });
+  }
+
+  /**
+   * 路由工具调用到具体的处理函数（与 BackgroundAgentService.executeTool 同逻辑）
+   */
+  private async executeTool(toolName: string, args: any): Promise<ToolUseResult> {
+    const secCtx = createSecurityContext(this.projectService.currentProjectPath || '');
+
+    switch (toolName) {
+      case 'generate_schematic':
+        return generateConnectionGraphTool(this.connectionGraphService, this.projectService, args);
+      case 'get_pinmap_summary':
+        return getPinmapSummaryTool(this.connectionGraphService, this.projectService, args);
+      case 'get_component_catalog':
+        return getSensorPinmapCatalogTool(this.connectionGraphService, this.projectService, args);
+      case 'validate_schematic':
+        return validateConnectionGraphTool(this.connectionGraphService, this.projectService, args);
+      case 'apply_schematic':
+        return applySchematicTool(this.connectionGraphService, this.projectService, args);
+      case 'get_current_schematic':
+        return getCurrentSchematicTool(this.connectionGraphService, this.projectService, args);
+      case 'generate_pinmap':
+        return generatePinmapTool(this.connectionGraphService, this.projectService, args);
+      case 'save_pinmap':
+        return savePinmapTool(this.connectionGraphService, this.projectService, args);
+      case 'get_context':
+        return getContextTool(this.projectService, args);
+      case 'get_project_info':
+        return getProjectInfoTool(this.projectService, args);
+      case 'read_file':
+        return readFileTool(args, secCtx);
+      case 'create_file':
+        return createFileTool(args, secCtx);
+      case 'edit_file':
+        return editFileTool(args);
+      case 'delete_file':
+        return deleteFileTool(args, secCtx);
+      case 'delete_folder':
+        return deleteFolderTool(args, secCtx);
+      case 'create_folder':
+        return createFolderTool(args);
+      case 'list_directory':
+        return listDirectoryTool(args);
+      case 'get_directory_tree':
+        return getDirectoryTreeTool(args);
+      case 'grep_tool':
+        return grepTool(args);
+      case 'glob_tool':
+        return globTool(args);
+      case 'get_board_parameters':
+        return getBoardParametersTool.handler(this.projectService, args);
+      case 'fetch':
+        return fetchTool(this.fetchToolService, args);
+      default:
+        return { is_error: true, content: `Subagent 不支持工具: ${toolName}` };
+    }
   }
 
   // =========================================================================
@@ -472,6 +723,37 @@ export class SubagentSessionService implements OnDestroy {
       content,
       accumulatedText,
       timestamp: Date.now(),
+    });
+  }
+
+  private emitProgressEx(
+    type: SubagentProgressEvent['type'],
+    agentName: string,
+    toolId: string,
+    content: string,
+    extra: { innerToolName?: string; innerToolId?: string; isError?: boolean; accumulatedText?: string } = {},
+  ): void {
+    this.progress$.next({
+      type,
+      agentName,
+      toolId,
+      content,
+      innerToolName: extra.innerToolName,
+      innerToolId: extra.innerToolId,
+      isError: extra.isError,
+      accumulatedText: extra.accumulatedText,
+      timestamp: Date.now(),
+    });
+  }
+
+  // =========================================================================
+  // 工具定义
+  // =========================================================================
+
+  private getToolsForAgent(agentName: string): any[] {
+    return (TOOLS as any[]).filter(tool => {
+      if (!tool.agents) return false;
+      return tool.agents.includes(agentName);
     });
   }
 }
