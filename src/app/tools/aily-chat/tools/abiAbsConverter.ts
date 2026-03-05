@@ -129,6 +129,10 @@ export function convertAbiToAbsWithLineMap(
       lines.push('# Mode: Explicit block types (no syntax sugar)');
     }    lines.push('# ============================================');
     lines.push('');
+    lines.push('# Global definitions can be created as standalone blocks or within arduino_global blocks, eg:');
+    lines.push('# arduino_global()');
+    lines.push('#    variable_define("variable", int, math_number(0))');
+    lines.push('');
   }
   
   if (abiJson.variables && Array.isArray(abiJson.variables)) {
@@ -136,10 +140,6 @@ export function convertAbiToAbsWithLineMap(
       for (const variable of abiJson.variables) {
         context.registerVariable(variable.id, variable.name, variable.type || 'int');
       }
-      lines.push('# Global definitions can be created as standalone blocks or within arduino_global blocks, eg:');
-      lines.push('# arduino_global()');
-      lines.push('#    variable_define("variable", int, math_number(0))');
-      lines.push('');
       lines.push('# Blockly workspace variables (auto-managed, do not edit):');
       for (const variable of abiJson.variables) {
         lines.push(`# - ${variable.name}: ${variable.type || 'int'}`);
