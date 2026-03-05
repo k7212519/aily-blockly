@@ -46,8 +46,8 @@ const ALLOWED_CONTENT_TYPES = [
   'application/rss+xml', 'application/atom+xml', 'application/svg+xml',
 ];
 
-/** 最终返回给 LLM 的内容长度上限（约 25k tokens） */
-const MAX_CONTENT_LENGTH_FOR_LLM = 80000;
+/** 最终返回给 LLM 的内容长度上限（约 10k tokens） */
+const MAX_CONTENT_LENGTH_FOR_LLM = 30000;
 
 /** 请求前 Content-Length 大小上限（5MB） */
 const DEFAULT_MAX_SIZE = 5 * 1024 * 1024;

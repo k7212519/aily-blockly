@@ -843,7 +843,7 @@ Query and return specific content (for detailed info)
     {
         name: "fetch",
         description: `获取网页内容和API数据。支持HTTP/HTTPS请求。
-- 内容超过 80000 字符时自动截断，截断时会提示剩余字符数
+- 内容超过限制字符时自动截断，截断时会提示剩余字符数
 - 支持分页读取：当内容被截断时，可用 startIndex 从截断位置继续读取
 如需搜索信息请优先使用 web_search 工具。`,
         input_schema: {

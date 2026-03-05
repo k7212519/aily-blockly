@@ -24,6 +24,7 @@ import { ElectronService } from './electron.service';
 import { TOOLS, ToolUseResult } from '../tools/aily-chat/tools/tools';
 import { createSecurityContext } from '../tools/aily-chat/services/security.service';
 import { ContextBudgetService } from '../tools/aily-chat/services/context-budget.service';
+import { TiktokenService } from '../tools/aily-chat/services/tiktoken.service';
 
 // 工具函数导入 — 连线图专属
 import {
@@ -141,10 +142,11 @@ export class BackgroundAgentService implements OnDestroy {
     private connectionGraphService: ConnectionGraphService,
     private electronService: ElectronService,
     private ailyChatConfigService: AilyChatConfigService,
+    private tiktokenService: TiktokenService,
   ) {
     this.fetchToolService = new FetchToolService(this.http);
     // 创建独立的 ContextBudgetService 实例，不污染全局单例
-    this.contextBudgetService = new ContextBudgetService(null as any, this.ailyChatConfigService);
+    this.contextBudgetService = new ContextBudgetService(null as any, this.ailyChatConfigService, this.tiktokenService);
     this.setupIpcListeners();
     console.log('[BackgroundAgent] 服务初始化');
   }
