@@ -56,14 +56,27 @@ interface GetContextResult {
     workspaceOverview?: string;
     cppCode?: string;
     warn?: string;
+    /** 当 LLM 发送了未知的 info_type 时，记录原始值（已自动降级为 'all'） */
+    unknownInfoType?: string;
 }
 
 /**
  * Get context tool implementation for retrieving environment context information
  */
 export async function getContextTool(prjService: ProjectService, input: GetContextInput): Promise<ToolUseResult> {
-    const { info_type = 'all' } = input;
+    const knownTypes: Array<GetContextInput['info_type']> = ['all', 'project', 'platform', 'system', 'editingMode'];
+    const rawType = input.info_type ?? 'all';
+    // 未知 type 时降级为 'all'，确保 LLM 发送未识别的 type 时仍能获取完整上下文
+    const info_type: GetContextInput['info_type'] = knownTypes.includes(rawType as GetContextInput['info_type'])
+        ? (rawType as GetContextInput['info_type'])
+        : 'all';
     const result: GetContextResult = {};
+
+    // 记录未知 type，方便排查 LLM 调用问题
+    if (!knownTypes.includes(rawType as GetContextInput['info_type'])) {
+        result.unknownInfoType = rawType;
+        console.warn(`[getContextTool] 收到未知 info_type: "${rawType}"，已自动降级为 "all"`);
+    }
 
     let is_error = false;
 

@@ -2547,14 +2547,17 @@ ${JSON.stringify(errData)}
       if (willCompress) {
         const postBudget = this.contextBudgetService.getSnapshot();
         const saved = preCompressBudget.currentTokens - postBudget.currentTokens;
-        this.displayToolCallState({
-          id: compressionStateId,
-          name: 'context_compression',
-          state: ToolCallState.DONE,
-          text: saved > 0
-            ? `上下文压缩完成：${preCompressBudget.currentTokens} → ${postBudget.currentTokens} tokens（节省 ${saved}）`
-            : `上下文检查完成 (${postBudget.usagePercent}%)`
-        });
+        if (saved > 0) {
+          // 只有实际节省了 token 才显示节省量，避免误导用户
+          this.displayToolCallState({
+            id: compressionStateId,
+            name: 'context_compression',
+            state: ToolCallState.DONE,
+            text: saved > 0
+              ? `上下文压缩完成：${preCompressBudget.currentTokens} → ${postBudget.currentTokens} tokens（节省 ${saved}）`
+              : `上下文检查完成 (${postBudget.usagePercent}%)`
+          });
+        }
       }
     } catch (error) {
       console.warn('[无状态模式] 上下文压缩失败，使用原始历史:', error);
