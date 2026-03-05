@@ -3155,31 +3155,62 @@ ${JSON.stringify(errData)}
                     if (!toolResult?.is_error) {
                       if (isNpmInstall) {
                         // console.log('检测到 npm install 命令，尝试加载库');
-                        // Extract all @aily-project/ packages from the command
-                        const npmRegex = /@aily-project\/[a-zA-Z0-9-_]+/g;  // 使用全局匹配
-                        const matches = command.match(npmRegex);
+                        const installSeparator = this.platformService.getPlatformSeparator();
+                        const libsToLoad: string[] = [];
 
-                        // console.log('npmRegex matches:', matches);
+                        // 1. 匹配 @aily-project/ 格式的包名
+                        const npmRegex = /@aily-project\/[a-zA-Z0-9-_]+/g;
+                        const scopedMatches = command.match(npmRegex);
+                        if (scopedMatches) {
+                          libsToLoad.push(...scopedMatches);
+                        }
 
-                        if (matches && matches.length > 0) {
-                          // 使用 Set 去重，避免重复加载
-                          const uniqueLibs = [...new Set(matches)];
-                          // console.log('去重后的库列表:', uniqueLibs);
-
-                          // 遍历所有匹配到的库包名
-                          for (const libPackageName of uniqueLibs) {
-                            // Load the library into blockly
+                        // 2. 匹配本地路径安装（./xxx、../xxx、绝对路径）
+                        // 先提取 npm i/install/ci 之后、下一个 && 或末尾之间的参数部分
+                        // 避免误把 cd "path" && npm i ... 中的 cd 路径当成安装路径
+                        const npmInstallArgMatch = command.match(/npm\s+(?:install|i|ci)\b(.*?)(?:&&|$)/);
+                        const npmInstallArgs = npmInstallArgMatch ? npmInstallArgMatch[1] : '';
+                        // 按空白分词，去除引号
+                        const tokens = npmInstallArgs.trim().split(/\s+/).map(t => t.replace(/^["']|["']$/g, ''));
+                        const skipTokens = new Set(['--save', '--save-dev', '-D', '-S', '-g', '--global', '--legacy-peer-deps', '--force']);
+                        for (const token of tokens) {
+                          if (!token || skipTokens.has(token) || token.startsWith('-')) continue;
+                          // 判断是否为本地路径：以 ./ ../ / 开头，或 Windows 绝对路径 C:\ D:\ 等
+                          const isLocalPath = token.startsWith('./') || token.startsWith('../') ||
+                            token.startsWith('/') || /^[A-Za-z]:[/\\]/.test(token) ||
+                            token.startsWith('.\\') || token.startsWith('..\\');
+                          if (isLocalPath) {
                             try {
-                              await this.blocklyService.loadLibrary(libPackageName, projectPath);
-                              // console.log("库加载成功:", libPackageName);
+                              // 解析为绝对路径
+                              let fullPath = token;
+                              if (!(/^[A-Za-z]:[/\\]/.test(token) || token.startsWith('/'))) {
+                                // 相对路径，基于 projectPath 解析
+                                fullPath = projectPath + installSeparator + token.replace(/[/\\]/g, installSeparator);
+                              }
+                              // 读取该路径下的 package.json 获取包名
+                              const pkgJsonPath = fullPath.replace(/[/\\]+$/, '') + installSeparator + 'package.json';
+                              const pkgJson = JSON.parse(this.electronService.readFile(pkgJsonPath));
+                              if (pkgJson?.name) {
+                                libsToLoad.push(pkgJson.name);
+                              }
                             } catch (e) {
-                              console.warn("加载库失败:", libPackageName, e);
-                              // 加载失败不影响其他库的加载，继续处理
+                              console.warn('读取本地包 package.json 失败:', token, e);
                             }
                           }
-                        } else {
-                          // console.log("projectOpen: ", projectPath);
-                          this.projectService.projectOpen(projectPath);
+                        }
+
+                        // 去重后加载所有库
+                        const uniqueLibs = [...new Set(libsToLoad)];
+                        // console.log('去重后的库列表:', uniqueLibs);
+
+                        for (const libPackageName of uniqueLibs) {
+                          try {
+                            await this.blocklyService.loadLibrary(libPackageName, projectPath);
+                            // console.log("库加载成功:", libPackageName);
+                          } catch (e) {
+                            console.warn("加载库失败:", libPackageName, e);
+                            // 加载失败不影响其他库的加载，继续处理
+                          }
                         }
                       }
                       // console.log(`命令 ${displayCommand} 执行成功`);
