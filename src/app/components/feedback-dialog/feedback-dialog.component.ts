@@ -197,7 +197,7 @@ ${dependenciesStr}
       .slice(0, 20);
 
     const errorLogsStr = errorLogs.length > 0
-      ? errorLogs.map(log => `  - [${log.timestamp}] ${stripAnsi(log.detail || '')}`).join('\n')
+      ? errorLogs.map(log => `  - [${new Date(log.timestamp!).toLocaleTimeString()}] ${stripAnsi(log.detail || '')}`).join('\n')
       : "  null";
 
     return `- Error Logs:
