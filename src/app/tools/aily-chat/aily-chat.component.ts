@@ -2336,6 +2336,8 @@ ${JSON.stringify(errData)}
 \`\`\`
 
 `);
+          this.isWaiting = false;
+          this.list[this.list.length - 1].state = 'done';
         }
       }
     });
@@ -5061,6 +5063,7 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
 `);
         }
         this.isWaiting = false;
+        this.list[this.list.length - 1].state = 'done';
       }
     });
   }
