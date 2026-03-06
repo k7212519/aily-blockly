@@ -1443,6 +1443,12 @@ Do not create non-existent boards and libraries.
 
   showAiWritingNotice(isWaiting) {
     if (isWaiting) {
+      // TODO @downey 优化：需要权限判断位置可能不准，具体可能是创建/连接图形时的某个操作，还未测试找出
+      if (this.electronService.isWindowMinimized()) {
+        this.electronService.notify('Aily', 'Blockly图形需要窗口权限', {
+          timeoutType: 'never',
+        });
+      }
       this.noticeService.update({
         title: "AI正在操作",
         state: "doing",

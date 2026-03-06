@@ -308,6 +308,13 @@ function registerWindowHandlers(mainWindow) {
         event.returnValue = isFocused;
     });
 
+    // 检查窗口是否最小化（同步）
+    ipcMain.on("window-is-minimized", (event) => {
+        const senderWindow = BrowserWindow.fromWebContents(event.sender);
+        const isMinimized = senderWindow ? senderWindow.isMinimized() : false;
+        event.returnValue = isMinimized;
+    });
+
     ipcMain.on("window-go-main", (event, data) => {
         const senderWindow = BrowserWindow.fromWebContents(event.sender);
         mainWindow.webContents.send("window-go-main", data.replace('/', ''));
