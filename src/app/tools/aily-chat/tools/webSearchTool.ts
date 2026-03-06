@@ -1,7 +1,6 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { firstValueFrom, timeout } from 'rxjs';
-import { injectTodoReminder } from './todoWriteTool';
 
 export interface WebSearchToolArgs {
   query: string;
@@ -232,5 +231,5 @@ export class WebSearchToolService {
 
 export async function webSearchTool(searchService: WebSearchToolService, args: WebSearchToolArgs): Promise<WebSearchToolResult> {
   const toolResult = await searchService.executeSearch(args);
-  return injectTodoReminder(toolResult, 'webSearchTool') as WebSearchToolResult;
+  return toolResult;
 }

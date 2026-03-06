@@ -1,5 +1,4 @@
 import { ToolUseResult } from "./tools";
-import { injectTodoReminder } from "./todoWriteTool";
 import { normalizePath } from "../services/security.service";
 
 /**
@@ -263,7 +262,7 @@ export async function grepTool(
                 is_error: true,
                 content: '搜索模式不能为空'
             };
-            return injectTodoReminder(toolResult, 'grepTool');
+            return toolResult;
         }
         
         // 默认使用当前工作目录
@@ -279,7 +278,7 @@ export async function grepTool(
                     is_error: true,
                     content: '未提供搜索路径，且无法获取当前项目路径'
                 };
-                return injectTodoReminder(toolResult, 'grepTool');
+                return toolResult;
             }
         }
         
@@ -294,7 +293,7 @@ export async function grepTool(
                 is_error: true,
                 content: `搜索路径不存在: ${searchPath}`
             };
-            return injectTodoReminder(toolResult, 'grepTool');
+            return toolResult;
         }
         
         // 检查是否为目录
@@ -304,7 +303,7 @@ export async function grepTool(
                 is_error: true,
                 content: `搜索路径不是目录: ${searchPath}`
             };
-            return injectTodoReminder(toolResult, 'grepTool');
+            return toolResult;
         }
         
         // 首先检查 ripgrep 是否可用
@@ -352,7 +351,7 @@ export async function grepTool(
                         is_error: true,
                         content: `搜索失败: ${result.error}`
                     };
-                    return injectTodoReminder(toolResult, 'grepTool');
+                    return toolResult;
                 }
                 
                 // 构建返回内容
@@ -361,7 +360,7 @@ export async function grepTool(
                         is_error: false,
                         content: `未找到匹配的内容\n搜索模式: ${pattern}\n搜索路径: ${searchPath}${include ? `\n文件过滤: ${include}` : ''}`
                     };
-                    return injectTodoReminder(toolResult, 'grepTool');
+                    return toolResult;
                 }
                 
                 // 🆕 数据量控制：最大 20KB 硬性限制
@@ -458,7 +457,7 @@ export async function grepTool(
                         mode: 'content'
                     }
                 };
-                return injectTodoReminder(toolResult, 'grepTool');
+                return toolResult;
             } catch (error: any) {
                 console.warn('searchContent 失败:', error);
                 // 降级到文件名模式
@@ -549,7 +548,7 @@ export async function grepTool(
             }
         };
         
-        return injectTodoReminder(toolResult, 'grepTool');
+        return toolResult;
     } catch (error: any) {
         console.warn("Grep搜索失败:", error);
         
@@ -562,6 +561,6 @@ export async function grepTool(
             is_error: true,
             content: errorMessage
         };
-        return injectTodoReminder(toolResult, 'grepTool');
+        return toolResult;
     }
 }

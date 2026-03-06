@@ -123,8 +123,8 @@ export function injectTodoReminder(
   sessionId: string = 'default'
 ): string {
   todoManager.recordToolCall(toolName);
-  const reminder = todoManager.checkAndGetReminder(sessionId);
-  return reminder || '';
+  const reminder = todoManager.checkAndGetReminder(sessionId) || '';
+  return reminder;
 }
 
 export function configureTodoManager(config: Partial<TodoManagerConfig>): void {

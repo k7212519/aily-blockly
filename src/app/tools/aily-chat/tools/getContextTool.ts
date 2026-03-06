@@ -1,6 +1,5 @@
 import { ToolUseResult } from "./tools";
 import { ProjectService } from "../../../services/project.service";
-import { injectTodoReminder } from "./todoWriteTool";
 import { getWorkspaceOverviewTool } from "./editBlockTool";
 
 
@@ -122,7 +121,7 @@ export async function getContextTool(prjService: ProjectService, input: GetConte
         is_error,
         content: JSON.stringify(result, null, 2)
     };
-    return injectTodoReminder(toolResult, 'getContextTool');
+    return toolResult;
 }
 
 /**

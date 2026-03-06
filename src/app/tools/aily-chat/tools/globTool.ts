@@ -1,5 +1,4 @@
 import { ToolUseResult } from "./tools";
-import { injectTodoReminder } from "./todoWriteTool";
 
 /**
  * glob 模式匹配输出结果
@@ -170,7 +169,7 @@ export default async function globTool(params: {
             is_error: true,
             content: '错误: pattern 参数是必需的且必须是字符串'
         };
-        return injectTodoReminder(toolResult, 'globTool');
+        return toolResult;
     }
     
     try {
@@ -181,7 +180,7 @@ export default async function globTool(params: {
                 is_error: true,
                 content: '错误: Glob 功能不可用。请确保应用正确配置了 electron API。'
             };
-            return injectTodoReminder(toolResult, 'globTool');
+            return toolResult;
         }
         
         // 执行搜索
@@ -198,7 +197,7 @@ export default async function globTool(params: {
                 is_error: true,
                 content: '搜索失败: 无法执行 glob 搜索操作'
             };
-            return injectTodoReminder(toolResult, 'globTool');
+            return toolResult;
         }
         
         // 格式化结果
@@ -215,7 +214,7 @@ export default async function globTool(params: {
                     path: path || '当前目录'
                 }
             };
-            return injectTodoReminder(toolResult, 'globTool');
+            return toolResult;
         }
         
         // 格式化文件列表
@@ -240,13 +239,13 @@ export default async function globTool(params: {
             }
         };
         
-        return injectTodoReminder(toolResult, 'globTool');
+        return toolResult;
     } catch (error) {
         console.warn('[Glob Tool] 执行错误:', error);
         const toolResult = {
             is_error: true,
             content: `执行错误: ${error instanceof Error ? error.message : String(error)}`
         };
-        return injectTodoReminder(toolResult, 'globTool');
+        return toolResult;
     }
 }

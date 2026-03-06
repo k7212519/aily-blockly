@@ -1,6 +1,5 @@
 import { ToolUseResult } from "./tools";
 import { ProjectService } from "../../../services/project.service";
-import { injectTodoReminder } from "./todoWriteTool";
 
 interface GetProjectInfoInput {
     include_readme?: boolean; // 是否包含readme_ai.md路径，默认true
@@ -165,5 +164,5 @@ export async function getProjectInfoTool(prjService: ProjectService, input: GetP
         is_error,
         content: JSON.stringify(result, null, 2)
     };
-    return injectTodoReminder(toolResult, 'getProjectInfoTool');
+    return toolResult;
 }

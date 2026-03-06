@@ -1,7 +1,6 @@
 import { ToolUseResult } from "./tools";
 import { ProjectService } from "../../../services/project.service";
 import { ConfigService } from '../../../services/config.service';
-import { injectTodoReminder } from "./todoWriteTool";
 
 interface LibraryInfo {
     name: string;
@@ -130,5 +129,5 @@ export async function newProjectTool(prjRootPath: string, toolArgs: any, prjServ
         is_error,
         content: toolResult
     };
-    return injectTodoReminder(toolResults, 'newProjectTool');
+    return toolResults;
 }
