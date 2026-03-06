@@ -1443,6 +1443,12 @@ Do not create non-existent boards and libraries.
 
   showAiWritingNotice(isWaiting) {
     if (isWaiting) {
+      // TODO @downey 优化：需要权限判断位置可能不准，具体可能是创建/连接图形时的某个操作，还未测试找出
+      if (this.electronService.isWindowMinimized()) {
+        this.electronService.notify('Aily', 'Blockly图形需要窗口权限', {
+          timeoutType: 'never',
+        });
+      }
       this.noticeService.update({
         title: "AI正在操作",
         state: "doing",
@@ -2336,6 +2342,8 @@ ${JSON.stringify(errData)}
 \`\`\`
 
 `);
+          this.isWaiting = false;
+          this.list[this.list.length - 1].state = 'done';
         }
       }
     });
@@ -2689,6 +2697,10 @@ ${JSON.stringify(errData)}
 
       // ★ 关键修复：无状态模式轮次结束时立即保存历史
       this.saveCurrentSession();
+
+      if (!this.electronService.isWindowFocused()) {
+        this.electronService.notify('Aily', '对话已完成');
+      }
     }
   }
 
@@ -5037,6 +5049,10 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
 
         // ★ 关键修复：传统模式对话结束时立即保存历史（替代旧的 3s 轮询 + 仅更新内存逻辑）
         this.saveCurrentSession();
+
+        if (!this.electronService.isWindowFocused()) {
+          this.electronService.notify('Aily', '对话已完成');
+        }
       },
       error: (err) => {
         console.warn('流连接出错:', err);
@@ -5061,6 +5077,7 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
 `);
         }
         this.isWaiting = false;
+        this.list[this.list.length - 1].state = 'done';
       }
     });
   }

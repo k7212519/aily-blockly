@@ -111,6 +111,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     onReceive: (callback) => ipcRenderer.on("window-receive", callback),
     // 检查窗口是否为活动窗口
     isFocused: () => ipcRenderer.sendSync("window-is-focused"),
+    // 检查窗口是否最小化
+    isMinimized: () => ipcRenderer.sendSync("window-is-minimized"),
     // 监听窗口获得焦点事件
     onFocus: (callback) => {
       const listener = () => callback();
