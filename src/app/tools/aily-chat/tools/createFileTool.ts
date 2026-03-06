@@ -1,5 +1,4 @@
 import { ToolUseResult } from "./tools";
-import { injectTodoReminder } from "./todoWriteTool";
 import { lintAndFormat, shouldLint } from "../services/lintService";
 import { 
     PathSecurityContext, 
@@ -45,7 +44,7 @@ export async function createFileTool(
                 is_error: true, 
                 content: `无效的文件路径: "${filePath}"` 
             };
-            return injectTodoReminder(toolResult, 'createFileTool');
+            return toolResult;
         }
 
         // ==================== 安全验证 ====================
@@ -60,7 +59,7 @@ export async function createFileTool(
                     is_error: true, 
                     content: `安全检查未通过: ${securityCheck.reason}` 
                 };
-                return injectTodoReminder(toolResult, 'createFileTool');
+                return toolResult;
             }
             
             // 检查写入大小限制
@@ -69,7 +68,7 @@ export async function createFileTool(
                     is_error: true, 
                     content: `写入内容过大: ${(content.length / 1024 / 1024).toFixed(2)}MB，超过限制 ${FILE_WRITE_LIMITS.maxWriteSize / 1024 / 1024}MB` 
                 };
-                return injectTodoReminder(toolResult, 'createFileTool');
+                return toolResult;
             }
         }
         // ==================== 安全验证结束 ====================
@@ -80,7 +79,7 @@ export async function createFileTool(
                 is_error: true,
                 content: `文件已存在: ${filePath}。如需覆盖，请设置 overwrite 参数为 true。`
             };
-            return injectTodoReminder(toolResult, 'createFileTool');
+            return toolResult;
         }
 
         const dir = window['path'].dirname(filePath);
@@ -122,7 +121,7 @@ export async function createFileTool(
                 is_error: true, 
                 content: `文件创建成功: ${filePath}${lintMessage}` 
             };
-            return injectTodoReminder(toolResult, 'createFileTool');
+            return toolResult;
         }
 
         // 记录成功
@@ -134,7 +133,7 @@ export async function createFileTool(
             is_error: false, 
             content: `文件创建成功: ${filePath}` 
         };
-        return injectTodoReminder(toolResult, 'createFileTool');
+        return toolResult;
     } catch (error: any) {
         console.warn("创建文件失败:", error);
         
@@ -155,6 +154,6 @@ export async function createFileTool(
             is_error: true, 
             content: errorMessage + `\n目标文件: ${params.path}` 
         };
-        return injectTodoReminder(toolResult, 'createFileTool');
+        return toolResult;
     }
 }

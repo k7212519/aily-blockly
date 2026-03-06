@@ -1,5 +1,4 @@
 import { ToolUseResult } from "./tools";
-import { injectTodoReminder } from "./todoWriteTool";
 import { normalizePath } from "../services/security.service";
 
 // 构建目录树的递归函数
@@ -76,7 +75,7 @@ export async function getDirectoryTreeTool(
                 is_error: true, 
                 content: `无效的目录路径: "${dirPath}"` 
             };
-            return injectTodoReminder(toolResult, 'getDirectoryTreeTool');
+            return toolResult;
         }
 
         // 检查路径是否存在
@@ -85,7 +84,7 @@ export async function getDirectoryTreeTool(
                 is_error: true,
                 content: `目录不存在: ${dirPath}`
             };
-            return injectTodoReminder(toolResult, 'getDirectoryTreeTool');
+            return toolResult;
         }
 
         // 检查是否为目录
@@ -95,7 +94,7 @@ export async function getDirectoryTreeTool(
                 is_error: true,
                 content: `路径不是目录: ${dirPath}`
             };
-            return injectTodoReminder(toolResult, 'getDirectoryTreeTool');
+            return toolResult;
         }
 
         // 限制最大深度以防止性能问题
@@ -110,7 +109,7 @@ export async function getDirectoryTreeTool(
                 is_error: true, 
                 content: `无法构建目录树: ${dirPath}` 
             };
-            return injectTodoReminder(toolResult, 'getDirectoryTreeTool');
+            return toolResult;
         }
 
         // 如果不包含文件，过滤掉文件节点
@@ -133,14 +132,14 @@ export async function getDirectoryTreeTool(
                 is_error: false, 
                 content: JSON.stringify(filteredTree, null, 2) 
             };
-            return injectTodoReminder(toolResult, 'getDirectoryTreeTool');
+            return toolResult;
         }
 
         const toolResult = { 
             is_error: false, 
             content: JSON.stringify(directoryTree, null, 2) 
         };
-        return injectTodoReminder(toolResult, 'getDirectoryTreeTool');
+        return toolResult;
     } catch (error: any) {
         console.warn("获取目录树失败:", error);
         
@@ -153,6 +152,6 @@ export async function getDirectoryTreeTool(
             is_error: true, 
             content: errorMessage + `\n目标目录: ${params.path}` 
         };
-        return injectTodoReminder(toolResult, 'getDirectoryTreeTool');
+        return toolResult;
     }
 }

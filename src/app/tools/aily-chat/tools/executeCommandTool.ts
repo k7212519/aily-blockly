@@ -1,6 +1,5 @@
 import { ToolUseResult } from "./tools";
 import { CmdService } from "../../../services/cmd.service";
-import { injectTodoReminder } from "./todoWriteTool";
 import { 
     CommandSecurity, 
     validateCommand, 
@@ -34,7 +33,7 @@ export async function executeCommandTool(
                 is_error,
                 content: toolResult
             };
-            return injectTodoReminder(toolResults, 'executeCommandTool');
+            return toolResult;
         }
 
         // console.log('Executing command:', data.command, 'in directory:', data.cwd);
@@ -46,7 +45,7 @@ export async function executeCommandTool(
                 is_error,
                 content: toolResult
             };
-            return injectTodoReminder(toolResults, 'executeCommandTool');
+            return toolResult;
         }
 
         // ==================== 安全验证 ====================
@@ -78,7 +77,7 @@ export async function executeCommandTool(
                 is_error,
                 content: toolResult
             };
-            return injectTodoReminder(toolResults, 'executeCommandTool');
+            return toolResult;
         }
         
         // 验证工作目录和删除命令路径
@@ -100,7 +99,7 @@ export async function executeCommandTool(
                     is_error,
                     content: toolResult
                 };
-                return injectTodoReminder(toolResults, 'executeCommandTool');
+                return toolResult;
             }
             
             // 验证文件操作命令的目标路径是否在安全范围内（删除、移动、复制、修改、重定向）
@@ -125,7 +124,7 @@ export async function executeCommandTool(
                     is_error,
                     content: toolResult
                 };
-                return injectTodoReminder(toolResults, 'executeCommandTool');
+                return toolResult;
             }
         }
         // ==================== 安全验证结束 ====================
@@ -202,6 +201,6 @@ export async function executeCommandTool(
             is_error,
             content: toolResult
         };
-        return injectTodoReminder(toolResults, 'executeCommandTool');
+        return toolResult;
     }
 }

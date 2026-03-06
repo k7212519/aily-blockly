@@ -1,7 +1,6 @@
 import { HttpClient, HttpHeaders, HttpResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { firstValueFrom, timeout } from 'rxjs';
-import { injectTodoReminder } from './todoWriteTool';
 
 // ===== URL 分类常量 =====
 const BINARY_EXTENSIONS = new Set([
@@ -694,5 +693,5 @@ export class FetchToolService {
 
 export async function fetchTool(fetchService: FetchToolService, args: FetchToolArgs): Promise<FetchToolResult> {
   const toolResult = await fetchService.executeFetch(args);
-  return injectTodoReminder(toolResult, 'fetchTool');
+  return toolResult;
 }
