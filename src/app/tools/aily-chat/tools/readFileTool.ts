@@ -1,5 +1,4 @@
 import { ToolUseResult } from "./tools";
-import { injectTodoReminder } from "./todoWriteTool";
 import { 
     PathSecurityContext, 
     validateFileRead,
@@ -134,7 +133,7 @@ export async function readFileTool(
                 is_error: true, 
                 content: `无效的文件路径: "${filePath}"` 
             };
-            return injectTodoReminder(toolResult, 'readFileTool');
+            return toolResult;
         }
 
         // 检查文件是否存在
@@ -143,7 +142,7 @@ export async function readFileTool(
                 is_error: true,
                 content: `文件不存在: ${filePath}`
             };
-            return injectTodoReminder(toolResult, 'readFileTool');
+            return toolResult;
         }
 
         // 检查是否为文件（不是目录）
@@ -153,7 +152,7 @@ export async function readFileTool(
                 is_error: true,
                 content: `路径是目录而不是文件: ${filePath}`
             };
-            return injectTodoReminder(toolResult, 'readFileTool');
+            return toolResult;
         }
 
         // 获取文件大小
@@ -172,7 +171,7 @@ export async function readFileTool(
                     is_error: true, 
                     content: `安全检查未通过: ${securityCheck.reason}` 
                 };
-                return injectTodoReminder(toolResult, 'readFileTool');
+                return toolResult;
             }
             
             // 检查文件扩展名
@@ -183,7 +182,7 @@ export async function readFileTool(
                     is_error: true, 
                     content: `禁止读取此类型文件: ${ext}` 
                 };
-                return injectTodoReminder(toolResult, 'readFileTool');
+                return toolResult;
             }
         }
         // ==================== 安全验证结束 ====================
@@ -256,7 +255,7 @@ export async function readFileTool(
                     is_error: true,
                     content: `无效的字节起始位置: ${start}（文件大小: ${fileSize} 字节）`
                 };
-                return injectTodoReminder(toolResult, 'readFileTool');
+                return toolResult;
             }
             
             // 如果文件不是很大，或者需要从头读取，可以直接读取后截取
@@ -297,7 +296,7 @@ export async function readFileTool(
                     is_error: true,
                     content: `文件过大 (${(fileSize / 1024 / 1024).toFixed(2)} MB)。建议使用字节范围读取 (startByte + byteCount) 或增加 maxSize 参数。当前限制: ${(maxSize / 1024 / 1024).toFixed(2)} MB`
                 };
-                return injectTodoReminder(toolResult, 'readFileTool');
+                return toolResult;
             }
             
             // 智能读取：分析文件特征
@@ -336,7 +335,7 @@ export async function readFileTool(
                         content: resultContent,
                         metadata
                     };
-                    return injectTodoReminder(toolResult, 'readFileTool');
+                    return toolResult;
                 }
             }
             
@@ -351,7 +350,7 @@ export async function readFileTool(
                     is_error: true,
                     content: `无效的起始行号: ${startLine}（文件总行数: ${lines.length}）`
                 };
-                return injectTodoReminder(toolResult, 'readFileTool');
+                return toolResult;
             }
             
             const selectedLines = lines.slice(start, start + count);
@@ -383,7 +382,7 @@ export async function readFileTool(
                             `3. 增加 maxSize 参数（不推荐）\n` +
                             `4. 使用 grep_tool 搜索特定内容`
                 };
-                return injectTodoReminder(toolResult, 'readFileTool');
+                return toolResult;
             }
             
             resultContent = await window['fs'].readFileSync(filePath, encoding);
@@ -410,7 +409,7 @@ export async function readFileTool(
             content: resultContent,
             metadata
         };
-        return injectTodoReminder(toolResult, 'readFileTool');
+        return toolResult;
     } catch (error: any) {
         console.warn("读取文件失败:", error);
         
@@ -431,6 +430,6 @@ export async function readFileTool(
             is_error: true, 
             content: errorMessage + `\n目标文件: ${params.path}` 
         };
-        return injectTodoReminder(toolResult, 'readFileTool');
+        return toolResult;
     }
 }

@@ -1,5 +1,4 @@
-﻿import { injectTodoReminder } from "./todoWriteTool";
-import { ConfigService } from '../../../services/config.service';
+﻿import { ConfigService } from '../../../services/config.service';
 
 // ==================== 新索引格式接口（boards-index.json / libraries-index.json）====================
 interface NewBoardItem {
@@ -348,7 +347,7 @@ export const searchBoardsLibrariesTool = {
                 is_error: true,
                 content: '请提供搜索关键词(filters.keywords)或筛选条件(filters.*)'
             };
-            return injectTodoReminder(toolResult, 'search_boards_libraries');
+            return toolResult;
         }
         
         // 转换为小写用于匹配
@@ -416,7 +415,7 @@ export const searchBoardsLibrariesTool = {
                     is_error: false,
                     content: `未找到与 "${queryDisplay}" 匹配的结果\n\n搜索范围: ${type === 'both' ? '开发板和库' : type === 'boards' ? '开发板' : '库'}\n${hint}`
                 };
-                return injectTodoReminder(toolResult, 'search_boards_libraries');
+                return toolResult;
             }
 
             // 格式化输出
@@ -474,14 +473,14 @@ export const searchBoardsLibrariesTool = {
                     }))
                 }
             };
-            return injectTodoReminder(toolResult, 'search_boards_libraries');
+            return toolResult;
 
         } catch (error) {
             const toolResult = {
                 is_error: true,
                 content: `搜索失败: ${error instanceof Error ? error.message : String(error)}`
             };
-            return injectTodoReminder(toolResult, 'search_boards_libraries');
+            return toolResult;
         }
     }
 };

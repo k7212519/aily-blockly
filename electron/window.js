@@ -153,7 +153,7 @@ function registerWindowHandlers(mainWindow) {
         const subWindow = new BrowserWindow({
             frame: false,
             autoHideMenuBar: true,
-            transparent: true,
+            thickFrame: true,
             titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
             alwaysOnTop: data.alwaysOnTop ? data.alwaysOnTop : false,
             width: data.width ? data.width : 800,
@@ -306,6 +306,13 @@ function registerWindowHandlers(mainWindow) {
         const senderWindow = BrowserWindow.fromWebContents(event.sender);
         const isFocused = senderWindow ? senderWindow.isFocused() : false;
         event.returnValue = isFocused;
+    });
+
+    // 检查窗口是否最小化（同步）
+    ipcMain.on("window-is-minimized", (event) => {
+        const senderWindow = BrowserWindow.fromWebContents(event.sender);
+        const isMinimized = senderWindow ? senderWindow.isMinimized() : false;
+        event.returnValue = isMinimized;
     });
 
     ipcMain.on("window-go-main", (event, data) => {

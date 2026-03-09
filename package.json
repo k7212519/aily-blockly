@@ -166,6 +166,7 @@
     "iconv-lite": "^0.7.0",
     "install": "^0.13.0",
     "js-base64": "^3.7.8",
+    "js-tiktoken": "^1.0.21",
     "jsonrepair": "^3.13.0",
     "konva": "^9.3.22",
     "lightweight-charts": "^5.1.0",

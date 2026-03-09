@@ -101,7 +101,7 @@ export async function syncAbsFileHandler(
       return await exportToAbs(abiFilePath, absFilePath, includeHeader, electronService);
     
     case 'import':
-      return await importFromAbs(absFilePath, abiFilePath, electronService, absAutoSyncService);
+      return await importFromAbs(absFilePath, abiFilePath, electronService, absAutoSyncService, projectService);
     
     case 'status':
       return await getAbsStatus(absFilePath, abiFilePath, electronService);
@@ -197,7 +197,8 @@ async function importFromAbs(
   absFilePath: string,
   abiFilePath: string,
   electronService: any,
-  absAutoSyncService?: AbsAutoSyncService
+  absAutoSyncService?: AbsAutoSyncService,
+  projectService?: any
 ): Promise<SyncAbsResult> {
   try {
     // 检查 ABS 文件是否存在
@@ -262,6 +263,7 @@ async function importFromAbs(
       const backupPath = `${abiFilePath}.backup`;
       const currentAbi = electronService.readFile(abiFilePath);
       electronService.writeFile(backupPath, currentAbi);
+      projectService?.copyPackageJsonToTemp(projectService?.currentProjectPath);
     }
     
     // 收集所有变量：从 @var 声明 + 从 $varName 引用自动推断

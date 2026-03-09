@@ -1,7 +1,6 @@
 import { HttpClient, HttpHeaders, HttpResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { firstValueFrom, timeout } from 'rxjs';
-import { injectTodoReminder } from './todoWriteTool';
 
 // ===== URL 分类常量 =====
 const BINARY_EXTENSIONS = new Set([
@@ -91,8 +90,7 @@ export interface FetchToolArgs {
   headers?: { [key: string]: string };
   body?: any;
   timeout?: number | string;
-  maxSize?: number | string; // 最大文件大小（字节）
-  responseType?: 'text' | 'json' | 'blob' | 'arraybuffer';
+  startIndex?: number | string;  // 分页起始字符索引（0-based）
 }
 
 export interface FetchToolResult {
@@ -121,13 +119,10 @@ export class FetchToolService {
         headers = {},
         body,
         timeout: timeoutMs = 30000,
-        maxSize = DEFAULT_MAX_SIZE, // 默认5MB
-        responseType = 'text'
       } = args;
 
       // 确保超时值是数字类型
       const timeoutNumber = typeof timeoutMs === 'string' ? parseInt(timeoutMs, 10) : timeoutMs;
-      const maxSizeNumber = typeof maxSize === 'string' ? parseInt(maxSize, 10) : maxSize;
 
       // 1. 验证 URL
       if (!url || !this.isValidUrl(url)) {
@@ -146,75 +141,109 @@ export class FetchToolService {
       }
 
       // 4. 检查缓存（仅 GET 请求）
-      if (method === 'GET') {
-        const cached = getCachedResponse(url, method);
-        if (cached) {
-          return { content: cached.content, is_error: false, metadata: { ...cached.metadata, fromCache: true } };
+      let content: string;
+      let contentType: string = '';
+      let responseStatus = 200;
+      let responseStatusText = 'OK';
+      let responseHeaders: { [key: string]: string } = {};
+      let fromCache = false;
+
+      const cached = (method === 'GET') ? getCachedResponse(url, method) : null;
+      if (cached) {
+        // 缓存命中：使用缓存的完整内容，仍需走分页/截断逻辑
+        content = cached.content;
+        contentType = cached.metadata?.contentType || '';
+        responseStatus = cached.metadata?.status || 200;
+        responseStatusText = cached.metadata?.statusText || 'OK (cached)';
+        responseHeaders = cached.metadata?.headers || {};
+        fromCache = true;
+      } else {
+        // 5. 解析 headers
+        if (headers && typeof headers === 'string') {
+          try { headers = JSON.parse(headers); } catch { headers = {}; }
+        }
+
+        // 6. HEAD 预检（仅 GET 请求，检查 Content-Type 和 Content-Length）
+        if (method === 'GET') {
+          const preCheckResult = await this.headPreCheck(url, headers, DEFAULT_MAX_SIZE, timeoutNumber);
+          if (preCheckResult) return preCheckResult;
+        }
+
+        // 7. 设置请求头
+        const httpHeaders = new HttpHeaders(headers);
+        const response = await this.executeRequest(method, url, httpHeaders, body, 'text', timeoutNumber);
+
+        // 8. 检查响应大小
+        const contentLengthHeader = response.headers.get('content-length');
+        if (contentLengthHeader && parseInt(contentLengthHeader) > DEFAULT_MAX_SIZE) {
+          return {
+            content: `资源大小 (${this.formatFileSize(parseInt(contentLengthHeader))}) 超过限制 (${this.formatFileSize(DEFAULT_MAX_SIZE)})。请提供更具体的资源地址或使用 web_search 工具搜索相关信息。`,
+            is_error: true
+          };
+        }
+
+        // 9. 提取响应内容
+        const extracted = await this.extractContent(response, 'text', DEFAULT_MAX_SIZE);
+        if (extracted.error) {
+          return { content: extracted.error, is_error: true };
+        }
+        content = extracted.content!;
+
+        // 10. HTML → Markdown 转换（去除 script/style/nav 等无用标签，转为干净文本）
+        contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('text/html')) {
+          content = this.htmlToMarkdown(content);
+        }
+
+        responseStatus = response.status;
+        responseStatusText = response.statusText;
+        response.headers.keys().forEach(key => {
+          responseHeaders[key] = response.headers.get(key) || '';
+        });
+
+        // 缓存完整内容（截断前），以支持后续分页读取
+        if (method === 'GET') {
+          setCachedResponse(url, method, content, {
+            status: responseStatus,
+            statusText: responseStatusText,
+            headers: responseHeaders,
+            contentType: contentType
+          });
         }
       }
 
-      // 5. 解析 headers
-      if (headers && typeof headers === 'string') {
-        try { headers = JSON.parse(headers); } catch { headers = {}; }
+      // 11. 分页取段 / 内容截断
+      const totalLength = content.length;
+      const startIdx = args.startIndex != null ? (typeof args.startIndex === 'string' ? parseInt(args.startIndex, 10) : args.startIndex) : 0;
+
+      if (startIdx > 0) {
+        // 从指定位置继续读取
+        const sliceEnd = Math.min(startIdx + MAX_CONTENT_LENGTH_FOR_LLM, totalLength);
+        content = content.substring(startIdx, sliceEnd);
+        const remaining = totalLength - sliceEnd;
+        if (remaining > 0) {
+          content += `\n\n[分页读取: 字符 ${startIdx}-${sliceEnd}/${totalLength}，剩余 ${remaining} 字符。可用 startIndex=${sliceEnd} 继续读取]`;
+        } else {
+          content += `\n\n[分页读取: 字符 ${startIdx}-${sliceEnd}/${totalLength}，已到末尾]`;
+        }
+      } else {
+        // 未指定分页，使用默认截断
+        content = this.truncateContent(content, MAX_CONTENT_LENGTH_FOR_LLM, totalLength);
       }
 
-      // 6. HEAD 预检（仅 GET 请求，检查 Content-Type 和 Content-Length）
-      if (method === 'GET') {
-        const preCheckResult = await this.headPreCheck(url, headers, maxSizeNumber, timeoutNumber);
-        if (preCheckResult) return preCheckResult;
-      }
-
-      // 7. 设置请求头
-      const httpHeaders = new HttpHeaders(headers);
-      const response = await this.executeRequest(method, url, httpHeaders, body, responseType, timeoutNumber);
-
-      // 8. 检查响应大小
-      const contentLengthHeader = response.headers.get('content-length');
-      if (contentLengthHeader && parseInt(contentLengthHeader) > maxSizeNumber) {
-        return {
-          content: `资源大小 (${this.formatFileSize(parseInt(contentLengthHeader))}) 超过限制 (${this.formatFileSize(maxSizeNumber)})。请提供更具体的资源地址或使用 web_search 工具搜索相关信息。`,
-          is_error: true
-        };
-      }
-
-      // 9. 提取响应内容
-      const extracted = await this.extractContent(response, responseType, maxSizeNumber);
-      if (extracted.error) {
-        return { content: extracted.error, is_error: true };
-      }
-      let content = extracted.content!;
-
-      // 10. HTML → Markdown 转换（去除 script/style/nav 等无用标签，转为干净文本）
-      const contentType = response.headers.get('content-type') || '';
-      if (contentType.includes('text/html') && responseType === 'text') {
-        content = this.htmlToMarkdown(content);
-      }
-
-      // 11. 内容截断（保护 LLM 上下文窗口）
-      content = this.truncateContent(content, MAX_CONTENT_LENGTH_FOR_LLM);
-
-      // 12. 构建响应头
-      const responseHeaders: { [key: string]: string } = {};
-      response.headers.keys().forEach(key => {
-        responseHeaders[key] = response.headers.get(key) || '';
-      });
-
+      // 12. 构建结果
       const result: FetchToolResult = {
         content: content || '',
         is_error: false,
         metadata: {
-          status: response.status,
-          statusText: response.statusText,
+          status: responseStatus,
+          statusText: responseStatusText,
           headers: responseHeaders,
           size: content?.length || 0,
-          contentType: contentType || undefined
+          contentType: contentType || undefined,
+          ...(fromCache ? { fromCache: true } : {})
         }
       };
-
-      // 13. 缓存 GET 请求结果
-      if (method === 'GET') {
-        setCachedResponse(url, method, result.content, result.metadata);
-      }
 
       return result;
 
@@ -613,8 +642,8 @@ export class FetchToolService {
 
   // ===== 内容截断 =====
 
-  /** 智能截断内容，尽量在自然边界截断 */
-  private truncateContent(content: string, maxLength: number): string {
+  /** 智能截断内容，尽量在自然边界截断，并提示分页读取 */
+  private truncateContent(content: string, maxLength: number, totalLength?: number): string {
     if (!content || content.length <= maxLength) return content;
     const truncated = content.substring(0, maxLength);
     const lastParagraph = truncated.lastIndexOf('\n\n');
@@ -622,8 +651,10 @@ export class FetchToolService {
     const cutPoint = lastParagraph > maxLength * 0.8 ? lastParagraph
       : lastNewline > maxLength * 0.9 ? lastNewline
       : maxLength;
+    const total = totalLength || content.length;
+    const remaining = total - cutPoint;
     return content.substring(0, cutPoint) +
-      `\n\n[内容已截断，原始大小约 ${this.formatFileSize(content.length)}，已保留前 ${this.formatFileSize(cutPoint)}]`;
+      `\n\n[内容已截断，已返回前 ${this.formatFileSize(cutPoint)}，原始大小约 ${this.formatFileSize(total)}，剩余 ${remaining} 字符。如需完整内容，可使用 startIndex=${cutPoint} 参数继续读取]`;
   }
 
   // ===== 工具方法 =====
@@ -662,5 +693,5 @@ export class FetchToolService {
 
 export async function fetchTool(fetchService: FetchToolService, args: FetchToolArgs): Promise<FetchToolResult> {
   const toolResult = await fetchService.executeFetch(args);
-  return injectTodoReminder(toolResult, 'fetchTool');
+  return toolResult;
 }
