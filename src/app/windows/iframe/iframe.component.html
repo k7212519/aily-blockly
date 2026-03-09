@@ -1,5 +1,13 @@
 <app-notification></app-notification>
-<app-sub-window [title]="windowTitle" [winBtns]="['minimize', 'maximize', 'close']">
+@if(embedded) {
+  <ng-container *ngTemplateOutlet="contentTpl"></ng-container>
+} @else {
+  <app-sub-window [title]="windowTitle" [winBtns]="['minimize', 'maximize', 'close']">
+    <ng-container *ngTemplateOutlet="contentTpl"></ng-container>
+  </app-sub-window>
+}
+
+<ng-template #contentTpl>
   <div class="content-wrapper">
     <div class="content-inner">
       @if(isLoading) {
@@ -38,4 +46,4 @@
     </div>
     }
   </div>
-</app-sub-window>
+</ng-template>

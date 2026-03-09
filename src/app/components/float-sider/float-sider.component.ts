@@ -142,21 +142,22 @@ export class FloatSiderComponent implements OnInit, OnDestroy {
   }
 
   async showCircuit() {
-    // this.message.warning(this.translate.instant('COMING SOON'));
-    // return;
     if (!this.electronService.isElectron || !this.boardPackagePath) {
       this.message.warning(this.translate.instant('FLOAT_SIDER.NO_PINMAP'));
       return;
     }
 
-    let windowUrl = 'https://tool.aily.pro/connection-graph?type=json&theme=dark';
+    // let windowUrl = 'https://tool.aily.pro/connection-graph?type=json&theme=dark';
     // let windowUrl = 'http://localhost:4201/connection-graph?type=json&theme=dark';
 
-    this.uiService.openWindow({
-      path: `iframe?url=${encodeURIComponent(windowUrl)}`,
-      data: null,
-      width: 900,
-      height: 700,
-    });
+    // this.uiService.openWindow({
+    //   path: `iframe?url=${encodeURIComponent(windowUrl)}`,
+    //   data: null,
+    //   width: 900,
+    //   height: 700,
+    // });
+
+    // 直接切换到 blockly-editor 的连线图 tab
+    this.uiService.actionSubject.next({ action: 'switch', type: 'editor-tab', data: 'graph' });
   }
 }

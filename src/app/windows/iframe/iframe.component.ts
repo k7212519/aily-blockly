@@ -5,6 +5,7 @@ import {
   Optional,
   OnInit,
   NgZone,
+  Input,
 } from '@angular/core';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { NZ_MODAL_DATA } from 'ng-zorro-antd/modal';
@@ -30,6 +31,7 @@ export type ConnectionGraphIpcType =
   | 'generate-graph-updated'
   | 'generate-graph-progress'
   | 'get-graph-data'
+  | 'set-graph-data'
   | 'save-graph-data'
   | 'regenerate-graph-data'
   | 'generate-graph-code';
@@ -52,6 +54,9 @@ export interface IframeModalData {
   styleUrl: './iframe.component.scss',
 })
 export class IframeComponent implements OnInit, OnDestroy {
+  @Input() url?: string;
+  @Input() embedded?: boolean;
+
   iframeSrc: SafeResourceUrl = '';
   private iframeData: unknown;
   private allowedOrigins: string[] = ['*'];
@@ -115,6 +120,11 @@ export class IframeComponent implements OnInit, OnDestroy {
     }, 10000); // 10秒超时
 
     await new Promise((resolve) => setTimeout(resolve, 100));
+
+    if (this.embedded) {
+      this.applyUrl(this.url);
+      return;
+    }
 
     // 如果不是 modal 模式，从 URL 查询参数读取
     if (!this.data) {
@@ -232,7 +242,7 @@ export class IframeComponent implements OnInit, OnDestroy {
                 resolve(this.iframeData ?? null);
               }, 5000);
               const listener = (_event: unknown, p: { type?: string; data?: { messageId?: string; payload?: unknown } }) => {
-                if (p?.type === 'get-graph-data' && p?.data?.messageId === messageId) {
+                if (p?.type === 'set-graph-data' && p?.data?.messageId === messageId) {
                   clearTimeout(timeoutId);
                   // window['ipcRenderer'].removeListener(IFRAME_CHANNEL_CONNECTION_GRAPH, listener);
                   resolve(p.data?.payload ?? this.iframeData ?? null);
@@ -351,14 +361,12 @@ export class IframeComponent implements OnInit, OnDestroy {
         case 'generate-graph-updated':
           this.ngZone.run(() => this.handleConnectionGraphUpdate(data));
           break;
-        case 'get-graph-data': {
-          const messageId = (data as { messageId?: string })?.messageId;
-          if (messageId) {
-            this.sendToMain('get-graph-data', {
-              messageId,
-              payload: this.iframeData,
-            });
-          }
+        case 'set-graph-data': {
+          // const messageId = (data as { messageId?: string })?.messageId;
+          // if (messageId) {
+          //   this.iframeData = (data as { payload?: unknown })?.payload;
+          // }
+          // this.remoteApi?.receiveData(this.iframeData);
           break;
         }
         case 'generate-graph-data':
@@ -382,10 +390,10 @@ export class IframeComponent implements OnInit, OnDestroy {
 
     window['ipcRenderer'].on(IFRAME_CHANNEL_CONNECTION_GRAPH, handler);
     this.connectionGraphIpcCleanup = () => {
-      window['ipcRenderer'].removeListener(
-        IFRAME_CHANNEL_CONNECTION_GRAPH,
-        handler,
-      );
+      // window['ipcRenderer'].removeListener(
+      //   IFRAME_CHANNEL_CONNECTION_GRAPH,
+      //   handler,
+      // );
     };
   }
 

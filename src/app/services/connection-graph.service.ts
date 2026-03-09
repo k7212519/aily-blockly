@@ -416,13 +416,13 @@ export class ConnectionGraphService {
                 ? this.buildPayload(boardPackagePath)
                 : null;
               window['ipcRenderer'].send('iframe-message-connection-graph', {
-                type: 'get-graph-data',
+                type: 'set-graph-data',
                 data: { messageId, payload: graphPayload },
               });
             } catch (e) {
               console.error('[ConnectionGraphService] 实时构建 payload 失败:', e);
               window['ipcRenderer'].send('iframe-message-connection-graph', {
-                type: 'get-graph-data',
+                type: 'set-graph-data',
                 data: { messageId, payload: null },
               });
             }

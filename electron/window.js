@@ -386,9 +386,16 @@ function registerWindowHandlers(mainWindow) {
                     console.error('[IPC] 转发 iframe-message-connection-graph 失败:', error.message);
                 }
             });
+            // 嵌入模式：主窗口内的 connection-graph（如 blockly-editor 的 graph-editor tab）也会发送 get-graph-data，
+            // 主窗口的 ConnectionGraphService 需要收到请求并响应，故主窗口发出的消息也需回传主窗口
+            if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+                mainWindow.webContents.send(IFRAME_CHANNEL_CONNECTION_GRAPH, payload);
+            }
         } else {
             // 子窗口 → 主窗口：转发给主窗口（含 get-graph-data）
-            mainWindow.webContents.send(IFRAME_CHANNEL_CONNECTION_GRAPH, payload);
+            if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+                mainWindow.webContents.send(IFRAME_CHANNEL_CONNECTION_GRAPH, payload);
+            }
         }
     });
 }
