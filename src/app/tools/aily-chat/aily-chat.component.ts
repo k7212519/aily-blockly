@@ -252,6 +252,7 @@ export class AilyChatComponent implements OnDestroy {
   private loginStatusSubscription: Subscription;
   private aiWritingSubscription: Subscription;
   private aiWaitingSubscription: Subscription;
+  private _aiNoticeShown = false;
   private projectPathSubscription: Subscription; // 订阅项目路径变化
   private configChangedSubscription: Subscription; // 订阅配置变更
   private blockSelectionSubscription: Subscription; // 订阅 Blockly 块选中事件
@@ -1470,6 +1471,7 @@ Do not create non-existent boards and libraries.
           timeoutType: 'never',
         });
       }
+      this._aiNoticeShown = true;
       this.noticeService.update({
         title: "AI正在操作",
         state: "doing",
@@ -1479,7 +1481,8 @@ Do not create non-existent boards and libraries.
           this.stop();
         },
       });
-    } else {
+    } else if (this._aiNoticeShown) {
+      this._aiNoticeShown = false;
       this.noticeService.clear();
     }
   }

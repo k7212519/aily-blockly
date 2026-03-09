@@ -160,7 +160,7 @@ export class NotificationComponent {
         sender: 'NotificationComponent',
         type: 'log'
       });
-    }, 100);
+    }, 20);
   }
 
 }
