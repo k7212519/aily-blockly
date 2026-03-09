@@ -173,7 +173,8 @@
             "BOARD": "Board",
             "PROJECT_NAME": "Projektname",
             "SAVE_PATH": "Speicherpfad",
-            "NAME_EXISTS": "Projektname existiert bereits, bitte ändern"
+            "NAME_EXISTS": "Projektname existiert bereits, bitte ändern",
+            "PATH_INVALID_CHARS": "Pfad enthält ungültige Zeichen (z.B. / : * ? \" < > |), bitte ändern"
         },
         "BUTTONS": {
             "USE_THIS": "Dieses Board verwenden",

@@ -169,7 +169,8 @@
             "BOARD": "보드",
             "PROJECT_NAME": "프로젝트 이름",
             "SAVE_PATH": "저장 경로",
-            "NAME_EXISTS": "프로젝트 이름이 이미 존재합니다. 수정해 주세요"
+            "NAME_EXISTS": "프로젝트 이름이 이미 존재합니다. 수정해 주세요",
+            "PATH_INVALID_CHARS": "경로에 잘못된 문자가 포함되어 있습니다 (/ : * ? \" < > | 등). 수정해 주세요"
         },
         "BUTTONS": {
             "USE_THIS": "이 보드 사용",

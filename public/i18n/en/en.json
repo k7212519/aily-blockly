@@ -222,7 +222,8 @@
             "BOARD": "Board",
             "PROJECT_NAME": "Project Name",
             "SAVE_PATH": "Save Path",
-            "NAME_EXISTS": "Project name already exists, please modify"
+            "NAME_EXISTS": "Project name already exists, please modify",
+            "PATH_INVALID_CHARS": "Path contains invalid characters (e.g. / : * ? \" < > |), please modify"
         },
         "BUTTONS": {
             "USE_THIS": "Use This Board",
