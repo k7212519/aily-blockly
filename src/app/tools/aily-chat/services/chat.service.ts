@@ -551,6 +551,9 @@ export class ChatService {
       this.authService.getToken2().then(token => {
         if (aborted) return;
 
+        // console.log(`[chatRequest诊断] 发送请求 session=${sessionId}, messages=${messages.length}条:`,
+        //   messages.map((m: any, i: number) => `[${i}] ${m.role}${m.tool_calls ? `(+${m.tool_calls.length}tc)` : ''}: ${(m.content || '').substring(0, 60)}...`));
+
         const headers: HeadersInit = {
           'Content-Type': 'application/json'
         };

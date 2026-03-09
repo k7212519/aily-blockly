@@ -2296,10 +2296,10 @@ ${JSON.stringify(errData)}
 
       const resourcesText = this.getResourcesText();
       if (resourcesText) {
-        llmText = `${resourcesText}\n\n<userRequest>${text}</userRequest>`;
+        llmText = `${resourcesText}\n\n<user_query>${text}</user_query>`;
         displayText = resourcesText + '\n\n' + text;
       } else {
-        llmText = `<userRequest>${text}</userRequest>`;
+        llmText = `<user_query>${text}</user_query>`;
         displayText = text;
       }
 
@@ -2309,6 +2309,8 @@ ${JSON.stringify(errData)}
       // ==================== 无状态模式：用户消息直接启动工具调用循环 ====================
       if (this.useStatelessMode) {
         this.conversationMessages.push({ role: 'user', content: llmText });
+        // console.log(`[无状态诊断] send() 新增 user 消息, conversationMessages 共 ${this.conversationMessages.length} 条:`,
+        //   this.conversationMessages.map((m, i) => `[${i}] ${m.role}${m.tool_calls ? '(+tool_calls)' : ''}: ${(m.content || '').substring(0, 60)}...`));
         this.isWaiting = true;
         this.currentMessageSource = 'mainAgent';
         this.toolCallingIteration = 0;
@@ -2634,7 +2636,8 @@ ${JSON.stringify(errData)}
     this.currentStatelessMode = true;
 
     const budget = this.contextBudgetService.getSnapshot();
-    // console.log(`[无状态模式] 启动第 ${this.toolCallingIteration + 1} 轮聊天请求, messages: ${this.conversationMessages.length} 条, tokens: ~${budget.currentTokens}/${budget.maxContextTokens} (${budget.usagePercent}%)`);
+    // console.log(`[无状态诊断] startChatTurn() 第 ${this.toolCallingIteration + 1} 轮, messages: ${this.conversationMessages.length} 条, tokens: ~${budget.currentTokens}/${budget.maxContextTokens} (${budget.usagePercent}%)`);
+    // console.log(`[无状态诊断] 发送的 messages:`, this.conversationMessages.map((m, i) => `[${i}] ${m.role}${m.tool_calls ? `(+${m.tool_calls.length}tool_calls)` : ''}: ${(m.content || '').substring(0, 80)}...`));
 
     // 使用修改后的 streamConnect，传入 stateless 标志
     this.streamConnect(true);
@@ -2660,6 +2663,8 @@ ${JSON.stringify(errData)}
         }
       }));
     }
+
+    // console.log(`[无状态诊断] continueToolCallingLoop() ${this.currentTurnToolCalls.length} 个工具调用, ${this.pendingToolResults.length} 个结果, assistantContent长度=${this.currentTurnAssistantContent.length}`);
 
     this.conversationMessages.push(assistantMessage);
 
@@ -2711,11 +2716,16 @@ ${JSON.stringify(errData)}
       this.continueToolCallingLoop();
     } else {
       // 无工具调用，正常结束
+      const sanitized = this.currentTurnAssistantContent ? this.sanitizeAssistantContent(this.currentTurnAssistantContent) : '';
+      // console.log(`[无状态诊断] finalizeStatelessTurn() 正常结束, currentTurnAssistantContent长度=${this.currentTurnAssistantContent.length}, sanitized长度=${sanitized.length}`);
       if (this.currentTurnAssistantContent) {
         this.conversationMessages.push({
           role: 'assistant',
-          content: this.sanitizeAssistantContent(this.currentTurnAssistantContent)
+          content: sanitized
         });
+        // console.log(`[无状态诊断] 已存入 assistant 消息, conversationMessages 共 ${this.conversationMessages.length} 条`);
+      } else {
+        // console.warn(`[无状态诊断] ⚠️ currentTurnAssistantContent 为空, 未存入 assistant 消息!`);
       }
       // 更新上下文预算（轮次结束时的最终状态，含工具定义）
       this.contextBudgetService.updateBudget(this.conversationMessages, this.getCurrentTools());
@@ -3227,6 +3237,7 @@ ${JSON.stringify(errData)}
                     const command = toolArgs.command;
                     const isNpmInstall = command.includes('npm i') || command.includes('npm install')
                     const isNpmUninstall = command.includes('npm uninstall');
+                    let unloadResults: string[] = [];
 
                     // 如果是 npm uninstall，需要在执行命令之前先卸载库（因为命令执行后文件就被删除了）
                     if (isNpmUninstall) {
@@ -3283,13 +3294,14 @@ ${JSON.stringify(errData)}
                         }
 
                         // 遍历所有匹配到的库包名进行卸载
+                        const unloadResults: string[] = [];
                         for (const libPackageName of uniqueLibs) {
                           try {
                             await this.blocklyService.unloadLibrary(libPackageName, projectPath);
-                            // console.log("库卸载成功:", libPackageName);
+                            unloadResults.push(`${libPackageName} 卸载成功`);
                           } catch (e) {
                             console.warn("卸载库失败:", libPackageName, e);
-                            // 卸载失败不影响其他库的处理，继续
+                            unloadResults.push(`${libPackageName} 卸载失败: ${e.message || e}`);
                           }
                         }
                       }
@@ -3297,6 +3309,11 @@ ${JSON.stringify(errData)}
 
                     // 执行命令，传递安全上下文用于路径验证
                     toolResult = await executeCommandTool(this.cmdService, toolArgs, this.securityContext);
+
+                    // npm uninstall 成功后，将库卸载结果附加到返回内容中
+                    if (isNpmUninstall && unloadResults && unloadResults.length > 0) {
+                      toolResult.content = (toolResult.content || '') + `\n\n库卸载结果:\n${unloadResults.join('\n')}`;
+                    }
 
                     if (!toolResult?.is_error) {
                       if (isNpmInstall) {
@@ -3349,14 +3366,19 @@ ${JSON.stringify(errData)}
                         const uniqueLibs = [...new Set(libsToLoad)];
                         // console.log('去重后的库列表:', uniqueLibs);
 
+                        const loadResults: string[] = [];
                         for (const libPackageName of uniqueLibs) {
                           try {
                             await this.blocklyService.loadLibrary(libPackageName, projectPath);
-                            // console.log("库加载成功:", libPackageName);
+                            loadResults.push(`${libPackageName} 加载成功`);
                           } catch (e) {
                             console.warn("加载库失败:", libPackageName, e);
-                            // 加载失败不影响其他库的加载，继续处理
+                            loadResults.push(`${libPackageName} 加载失败: ${e.message || e}`);
                           }
+                        }
+                        // 将库加载结果附加到返回内容中，让 LLM 知道哪些库加载成功/失败
+                        if (loadResults.length > 0) {
+                          toolResult.content = (toolResult.content || '') + `\n\n库加载结果:\n${loadResults.join('\n')}`;
                         }
                       }
                       // console.log(`命令 ${displayCommand} 执行成功`);
@@ -4766,11 +4788,13 @@ ${JSON.stringify(errData)}
                 }
               }
 
-              // 根据执行结果确定状态
-              if (toolResult && toolResult?.is_error) {
-                resultState = "error";
-              } else if (toolResult && toolResult.warning) {
-                resultState = "warn";
+              // 根据执行结果确定状态（仅在 resultState 仍为默认值 "done" 时应用，避免覆盖各 case 中已明确设置的状态）
+              if (resultState === "done") {
+                if (toolResult && toolResult?.is_error) {
+                  resultState = "error";
+                } else if (toolResult && toolResult.warning) {
+                  resultState = "warn";
+                }
               }
             } catch (error) {
               console.warn('工具执行出错:', error);
@@ -4895,7 +4919,7 @@ ${JSON.stringify(errData)}
 // - 复杂结构分步创建，先创建外层再填充内层
 // - 使用get_abs_syntax工具了解ABS语法规范，确保代码符合要求
                 toolContent += `
-<rules>Blockly代码编辑流程:
+<rules># Blockly代码编辑流程:
 【需求分析】
 仔细分析用户需求，理解要实现的功能和目标。对于不明确的需求，提出澄清问题。
 
