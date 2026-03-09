@@ -173,7 +173,8 @@
             "BOARD": "開發板",
             "PROJECT_NAME": "專案名稱",
             "SAVE_PATH": "儲存路徑",
-            "NAME_EXISTS": "專案名稱已存在，請修改"
+            "NAME_EXISTS": "專案名稱已存在，請修改",
+            "PATH_INVALID_CHARS": "路徑包含非法字元（如 / : * ? \" < > | 等），請修改"
         },
         "BUTTONS": {
             "USE_THIS": "使用此開發板創建專案",

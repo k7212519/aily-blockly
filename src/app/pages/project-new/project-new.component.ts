@@ -121,6 +121,7 @@ export class ProjectNewComponent {
       this.selectBoard(this.boardList[0]);
     }
     this.newProjectData.name = this.projectService.generateUniqueProjectName(this.newProjectData.path, 'project_');
+    this.checkPathInvalidChars();
   }
 
   process(array) {
@@ -184,7 +185,7 @@ export class ProjectNewComponent {
     if (folderPath.slice(-1) !== pt) {
       this.newProjectData.path = folderPath + pt;
     }
-    // 在这里对返回的 folderPath 进行后续处理
+    this.checkPathInvalidChars();
   }
 
   // 检查项目名称是否存在
@@ -198,12 +199,32 @@ export class ProjectNewComponent {
     } else {
       this.showIsExist = false;
     }
+    this.checkPathInvalidChars();
     return isExist;
+  }
+
+  // macOS 项目名称非法字符检查：/ \0 : 等（仅检查用户输入的项目名）
+  showIsPathPassed = false;
+  checkPathInvalidChars(): boolean {
+    if (!this.platformService.isMac()) {
+      this.showIsPathPassed = false;
+      return false;
+    }
+    // macOS 文件名特殊及非法字符：/ \0 : \ * ? " < > | \n \r 等
+    const invalidChars = /[\s\0:\\*?^$!#%&()=+`~'"<>|\n\r]/;
+    console.log('invalidChars: ', this.newProjectData.path);
+    const hasInvalid = invalidChars.test(this.newProjectData.path);
+    this.showIsPathPassed = hasInvalid;
+    return hasInvalid;
   }
 
   async createProject() {
     // 判断是否有同名项目
     if (await this.checkPathIsExist()) {
+      return;
+    }
+    // macOS 路径非法字符检查
+    if (this.checkPathInvalidChars()) {
       return;
     }
     this.currentStep = 2;

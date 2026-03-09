@@ -222,7 +222,8 @@
             "BOARD": "开发板",
             "PROJECT_NAME": "项目名称",
             "SAVE_PATH": "保存路径",
-            "NAME_EXISTS": "项目名称已存在，请修改"
+            "NAME_EXISTS": "项目名称已存在，请修改",
+            "PATH_INVALID_CHARS": "路径包含非法字符（如 / : * ? \" < > | 等），请修改"
         },
         "BUTTONS": {
             "USE_THIS": "创建新项目",
