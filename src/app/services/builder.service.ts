@@ -49,29 +49,35 @@ export class BuilderService {
    */
   async build() {
     try {
-      const result = await this.actionService.dispatchWithFeedback('compile-begin', {}, 600000).toPromise();
+      const feedback = await this.actionService.dispatchWithFeedback('compile-begin', {}, 600000).toPromise();
 
       // listener handler 内部 catch 了编译错误，所以 feedback.success 总是 true
       // 需要检查 data.success 来判断编译是否真正成功
-      const buildResult = result.data?.result;
-      const buildSuccess = result.data?.success !== false && buildResult?.state !== 'error';
+      const buildResult = feedback?.data?.result;
+      const buildSuccess = feedback?.success !== false
+        && feedback?.data?.success !== false
+        && !!buildResult
+        && buildResult?.state !== 'error';
 
       if (!this.electronService.isWindowFocused()) {
         this.electronService.notify('编译', buildResult?.text || '');
       }
 
       if (!buildSuccess) {
-        // 编译失败，构造包含错误详情的错误对象抛出
-        const error: any = new Error(buildResult?.text || '编译失败');
+        // 编译失败，构造包含状态和错误详情的错误对象抛出
+        const error: any = new Error(buildResult?.text || feedback?.error || '编译失败');
+        error.state = buildResult?.state || 'error';
+        error.text = buildResult?.text || feedback?.error || '编译失败';
+        error.fullStdErr = buildResult?.fullStdErr;
         error.buildResult = buildResult;
         throw error;
       }
 
       return buildResult;
-    } catch (error) {
+    } catch (error: any) {
       // console.error('编译失败:', error);
       if (!this.electronService.isWindowFocused()) {
-        this.electronService.notify('编译', '编译失败');
+        this.electronService.notify('编译', error?.text || error?.message || '编译失败');
       }
       throw error;
     }
