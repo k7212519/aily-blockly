@@ -173,7 +173,8 @@
             "BOARD": "Carte",
             "PROJECT_NAME": "Nom du Projet",
             "SAVE_PATH": "Chemin de Sauvegarde",
-            "NAME_EXISTS": "Le nom du projet existe déjà, veuillez le modifier"
+            "NAME_EXISTS": "Le nom du projet existe déjà, veuillez le modifier",
+            "PATH_INVALID_CHARS": "Le chemin contient des caractères invalides (ex. / : * ? \" < > |), veuillez modifier"
         },
         "BUTTONS": {
             "USE_THIS": "Utiliser cette Carte",

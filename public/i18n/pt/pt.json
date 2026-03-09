@@ -173,7 +173,8 @@
             "BOARD": "Placa",
             "PROJECT_NAME": "Nome do projeto",
             "SAVE_PATH": "Caminho de salvamento",
-            "NAME_EXISTS": "Nome do projeto já existe, por favor modifique"
+            "NAME_EXISTS": "Nome do projeto já existe, por favor modifique",
+            "PATH_INVALID_CHARS": "O caminho contém caracteres inválidos (ex. / : * ? \" < > |), por favor modifique"
         },
         "BUTTONS": {
             "USE_THIS": "Usar esta Placa",
