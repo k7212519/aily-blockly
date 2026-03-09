@@ -5173,13 +5173,16 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
           this.list[this.list.length - 1].state = 'done';
         }
 
+        const httpErrorText = this.getPreferredHttpErrorMessage(err);
+        const errorClosingTags = this.getClosingTagsForOpenBlocks();
+
         // 只有在活跃对话中才显示错误提示和重试按钮
         // if (this.isWaiting) {
-        this.appendMessage('aily', `
+        this.appendMessage('aily', `${errorClosingTags}
 \`\`\`aily-state
 {
   "state": "warn",
-  "text": "网络似乎开小差了，请检查连接并重试。",
+  "text": "${this.makeJsonSafe(httpErrorText)}",
   "id": "network-error-${Date.now()}"
 }
 \`\`\`
@@ -5193,6 +5196,146 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
         this.list[this.list.length - 1].state = 'done';
       }
     });
+  }
+
+  private getPreferredHttpErrorMessage(err: any): string {
+    const detailMessage = this.extractErrorDetailMessage(err);
+    if (detailMessage) {
+      return detailMessage;
+    }
+
+    return this.getHttpErrorFallbackMessage(err);
+  }
+
+  private extractErrorDetailMessage(err: any): string {
+    if (!err) {
+      return '';
+    }
+
+    const detailCandidate =
+      err?.error ??
+      err?.response?.data ??
+      err?.data ??
+      err?.cause?.error;
+
+    const asObject = detailCandidate && typeof detailCandidate === 'object' ? detailCandidate : null;
+    if (asObject) {
+      const objectCode = asObject.code;
+      const objectMessage =
+        asObject.message ??
+        asObject.msg ??
+        asObject.error_description ??
+        asObject.error ??
+        asObject.detail;
+
+      // 当后端返回 code 时，优先展示详情中的可读错误信息。
+      if (objectCode !== undefined && objectCode !== null) {
+        if (typeof objectMessage === 'string' && objectMessage.trim()) {
+          return objectMessage.trim();
+        }
+      }
+
+      if (typeof objectMessage === 'string' && objectMessage.trim()) {
+        return objectMessage.trim();
+      }
+    }
+
+    const directTextCandidates = [
+      err?.detail,
+      err?.error?.detail,
+      err?.error?.message,
+      err?.response?.data?.message,
+      err?.response?.data?.detail,
+      err?.message,
+      typeof err === 'string' ? err : ''
+    ];
+
+    for (const candidate of directTextCandidates) {
+      if (typeof candidate !== 'string') {
+        continue;
+      }
+
+      const text = candidate.trim();
+      if (!text) {
+        continue;
+      }
+
+      // 跳过仅有 HTTP 状态的通用文本，交给 fallback 映射处理。
+      const isHttpStatusText = /\bhttp\s*error\b/i.test(text) || /\bstatus\s*[:=]?\s*\d{3}\b/i.test(text);
+      if (isHttpStatusText) {
+        continue;
+      }
+
+      return text;
+    }
+
+    return '';
+  }
+
+  private getHttpErrorFallbackMessage(err: any): string {
+    const status = this.extractHttpStatusCode(err);
+
+    const statusMessageMap: Record<number, string> = {
+      400: '请求格式错误，请检查。',
+      401: '登录已失效，请重新登录。',
+      403: '无权限执行该操作。',
+      404: '资源不存在，请确认。',
+      408: '请求超时，请重试。',
+      429: '请求过快，请稍后再试。',
+      500: '服务器异常，请稍后再试。',
+      502: '网关无响应，请稍后再试。',
+      503: '服务繁忙，请稍后再试。',
+      504: 'AI响应超时，请重试。'
+    };
+
+    return statusMessageMap[status] || '网络异常，请检查连接。';
+  }
+
+  private extractHttpStatusCode(err: any): number {
+    // 1) 优先读取结构化字段（HttpErrorResponse / fetch 包装对象）
+    const directCandidate =
+      err?.status ??
+      err?.statusCode ??
+      err?.response?.status ??
+      err?.error?.status ??
+      err?.error?.statusCode ??
+      err?.cause?.status ??
+      err?.cause?.statusCode;
+
+    const directStatus = Number(directCandidate);
+    if (Number.isFinite(directStatus) && directStatus >= 100 && directStatus <= 599) {
+      return directStatus;
+    }
+
+    // 2) 兼容 chat.service 中 new Error("HTTP error! Status: xxx") 的场景
+    const textCandidates = [
+      err?.message,
+      err?.error?.message,
+      err?.response?.statusText,
+      err?.cause?.message,
+      typeof err === 'string' ? err : ''
+    ].filter(Boolean);
+
+    for (const text of textCandidates) {
+      const matched = String(text).match(/\b(?:http\s*error[^\d]*|status\s*[:=]?\s*)(\d{3})\b/i);
+      if (matched?.[1]) {
+        return Number(matched[1]);
+      }
+    }
+
+    // 3) 网络错误（fetch TypeError / Failed to fetch）统一按 0 处理
+    const joined = textCandidates.map(v => String(v)).join(' | ').toLowerCase();
+    if (
+      joined.includes('failed to fetch') ||
+      joined.includes('networkerror') ||
+      joined.includes('network error') ||
+      joined.includes('load failed') ||
+      joined.includes('timeout')
+    ) {
+      return 0;
+    }
+
+    return 0;
   }
 
   getHistory(): void {
@@ -5663,6 +5806,10 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
     // 发送重试消息
     const retryMessage = '请重试上次的操作。';
     await this.send('user', retryMessage, false);
+
+    // 与普通按钮点击行为保持一致，重试后立即回到底部
+    this.autoScrollEnabled = true;
+    this.scrollToBottom();
   }
 
   selectContent: ResourceItem[] = []
