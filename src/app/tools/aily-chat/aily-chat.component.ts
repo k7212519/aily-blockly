@@ -240,6 +240,8 @@ export class AilyChatComponent implements OnDestroy {
   private currentStatelessMode = false;
   /** 服务端会话是否有效（从历史记录加载的 sessionId 服务端可能不存在） */
   private serverSessionActive = false;
+  /** 记录最近一次 startSession 时使用的模式；用于发送前按需重建会话 */
+  private sessionModeAtStart = '';
 
   // ==================== 上下文预算（供 UI 消费） ====================
   /** 上下文预算状态 Observable（供模板绑定） */
@@ -1989,6 +1991,7 @@ Do not create non-existent boards and libraries.
   async startSession(): Promise<void> {
     if (this.debug) {
       this.sessionId = new Date().getTime().toString();
+      this.sessionModeAtStart = this.currentMode;
       this.isWaiting = true;
       this.streamConnect();
       return;
@@ -2146,6 +2149,7 @@ Do not create non-existent boards and libraries.
 
             // ★ 服务端会话已建立
             this.serverSessionActive = true;
+            this.sessionModeAtStart = this.currentMode;
 
             // ★ 会话启动后立即更新上下文预算（显示 System + Tools 基础开销）
             this.contextBudgetService.updateBudget(this.conversationMessages, this.getCurrentTools());
@@ -2233,6 +2237,58 @@ ${JSON.stringify(errData)}
       this.chatHistoryService.migrateSessionId(oldSessionId, newSessionId);
       // console.log(`[AilyChat] 服务端会话已重新注册: ${oldSessionId} → ${newSessionId}`);
     }
+  }
+
+  /**
+   * 发送前确保服务端会话模式与当前 UI 模式一致。
+   * 仅在模式变更时重建会话，并保留客户端上下文与历史索引。
+   */
+  private async ensureSessionModeAlignedBeforeSend(): Promise<void> {
+    if (!this.sessionId) {
+      return;
+    }
+
+    if (!this.sessionModeAtStart || this.sessionModeAtStart === this.currentMode) {
+      return;
+    }
+
+    const previousSessionMode = this.sessionModeAtStart;
+    const savedMessages = [...this.conversationMessages];
+    const savedIteration = this.toolCallingIteration;
+    const savedTitle = this.chatService.currentSessionTitle;
+    const savedPath = this.chatService.currentSessionPath;
+    const savedList = [...this.list];
+    const oldSessionId = this.sessionId;
+
+    await this.stopAndCloseSession(true);
+
+    try {
+      await this.startSession();
+    } catch (err) {
+      // 重建失败时恢复客户端状态，并保留旧会话模式快照用于后续重试。
+      this.conversationMessages = savedMessages;
+      this.toolCallingIteration = savedIteration;
+      this.list = savedList;
+      this.chatService.currentSessionTitle = savedTitle;
+      this.chatService.currentSessionPath = savedPath;
+      this.sessionModeAtStart = previousSessionMode;
+      throw err;
+    }
+
+    // 恢复客户端对话上下文
+    this.conversationMessages = savedMessages;
+    this.toolCallingIteration = savedIteration;
+    this.chatService.currentSessionTitle = savedTitle;
+    this.chatService.currentSessionPath = savedPath;
+    this.list = savedList;
+
+    // 若服务端返回了新会话 ID，迁移本地历史索引
+    const newSessionId = this.sessionId;
+    if (oldSessionId && newSessionId && oldSessionId !== newSessionId) {
+      this.chatHistoryService.migrateSessionId(oldSessionId, newSessionId);
+    }
+
+    this.contextBudgetService?.updateBudget(this.conversationMessages, this.getCurrentTools());
   }
 
   closeSession(): void {
@@ -2355,6 +2411,14 @@ ${JSON.stringify(errData)}
       // 重置流式文本检测状态（新消息开始）
       this.repetitionDetectionService.resetStreamTokens();
       this.insideThink = false;
+
+      // 模式切换后不立即中断会话；仅在真正发送消息前按需重建。
+      try {
+        await this.ensureSessionModeAlignedBeforeSend();
+      } catch (err) {
+        console.warn('发送前模式对齐失败:', err);
+        return;
+      }
 
       // ★ 先生成标题（使用原始用户输入，不包含附件 context 块）
       this.generateTitle(text);
@@ -6442,7 +6506,7 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
   }
 
   /**
-   * 切换AI模式并创建新会话
+   * 切换AI模式（不立即重建会话）
    * @param mode 要切换到的模式
    */
   private async switchToMode(mode: string) {
@@ -6452,44 +6516,7 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
 
     // 保存模式到配置
     this.chatService.saveChatMode(mode as 'agent' | 'ask');
-
-    // ★ 切换模式时保留对话上下文（与 ensureServerSession 同策略）
-    const savedMessages = [...this.conversationMessages];
-    const savedIteration = this.toolCallingIteration;
-    const savedTitle = this.chatService.currentSessionTitle;
-    const savedPath = this.chatService.currentSessionPath;
-    const savedList = [...this.list];
-    const oldSessionId = this.sessionId;
-
-    await this.stopAndCloseSession();
-
-    try {
-      await this.startSession();
-    } catch (err) {
-      console.error('切换模式失败:', err);
-      // 恢复状态
-      this.conversationMessages = savedMessages;
-      this.toolCallingIteration = savedIteration;
-      this.list = savedList;
-      // 回退模式
-      this.chatService.saveChatMode('agent');
-      return;
-    }
-
-    // ★ 恢复客户端对话上下文
-    this.conversationMessages = savedMessages;
-    this.toolCallingIteration = savedIteration;
-    this.chatService.currentSessionTitle = savedTitle;
-    this.chatService.currentSessionPath = savedPath;
-    this.list = savedList;
-
-    // ★ 如果 sessionId 发生变化，迁移历史索引
-    const newSessionId = this.sessionId;
-    if (oldSessionId && newSessionId && oldSessionId !== newSessionId) {
-      this.chatHistoryService.migrateSessionId(oldSessionId, newSessionId);
-    }
-
-    // ★ 重新计算上下文预算
+    // 立即更新预算展示（工具集合可能随模式变化）
     this.contextBudgetService?.updateBudget(this.conversationMessages, this.getCurrentTools());
   }
 
