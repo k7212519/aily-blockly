@@ -17,18 +17,33 @@ export class UploaderService {
   async upload() {
     try {
       this.uiService.sendToolSignal('serial-monitor:disconnect');
-      const result = await this.actionService.dispatchWithFeedback('upload-begin', {}, 300000).toPromise();
-      if (!this.electronService.isWindowFocused()) {
-        this.electronService.notify('上传', result.data?.result?.text || '');
+      const feedback = await this.actionService.dispatchWithFeedback('upload-begin', {}, 300000).toPromise();
+
+      const uploadResult = feedback?.data?.result;
+      const uploadSuccess = feedback?.success !== false
+        && feedback?.data?.success !== false
+        && !!uploadResult
+        && uploadResult?.state !== 'error';
+
+      if (!uploadSuccess) {
+        const error: any = new Error(uploadResult?.text || feedback?.error || '上传失败');
+        error.state = uploadResult?.state || 'error';
+        error.text = uploadResult?.text || feedback?.error || '上传失败';
+        error.result = uploadResult;
+        throw error;
       }
-      this.uiService.sendToolSignal('serial-monitor:connect');
-      return result.data?.result;
-    } catch (error) {
+
       if (!this.electronService.isWindowFocused()) {
-        this.electronService.notify('上传', '上传失败');
+        this.electronService.notify('上传', uploadResult?.text || '');
       }
-      this.uiService.sendToolSignal('serial-monitor:connect');
+      return uploadResult;
+    } catch (error: any) {
+      if (!this.electronService.isWindowFocused()) {
+        this.electronService.notify('上传', error?.text || error?.message || '上传失败');
+      }
       throw error;
+    } finally {
+      this.uiService.sendToolSignal('serial-monitor:connect');
     }
   }
 

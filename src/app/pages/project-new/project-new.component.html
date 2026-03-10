@@ -187,13 +187,17 @@
                 <i class="fa-light fa-folder"></i>
               </div>
             </ng-template>
+            @if(showIsPathPassed){
+            <div class="error animate__animated animate__faster animate__fadeInDown">{{ 'PROJECT_NEW.FORM.PATH_INVALID_CHARS' |
+              translate }}</div>
+            }
           </div>
           <div class="step-btns">
             <button nz-button nzType="default" (click)="currentStep = 0">
               {{ 'PROJECT_NEW.BUTTONS.PREV' | translate }}
             </button>
             @if (currentStep == 1) {
-            <button nz-button nzType="primary" [disabled]="showIsExist" (click)="createProject()">
+            <button nz-button nzType="primary" [disabled]="showIsExist || showIsPathPassed" (click)="createProject()">
               {{ 'PROJECT_NEW.BUTTONS.CREATE' | translate }}
             </button>
             }@else if (currentStep == 2) {

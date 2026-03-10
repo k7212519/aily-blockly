@@ -413,8 +413,8 @@ export class HeaderComponent implements OnDestroy {
         this.builderService.build().then(result => {
           item.state = result.state || 'done';
         }).catch(err => {
-          console.log("编译未完成: ", JSON.stringify(err));
-          if (err && err.state) item.state = err.state;
+          // console.log("编译未完成: ", JSON.stringify(err));
+          item.state = this.resolveActionErrorState(err, ['buildResult']);
         })
         break;
       case 'upload':
@@ -429,8 +429,8 @@ export class HeaderComponent implements OnDestroy {
         this.uploaderService.upload().then(result => {
           item.state = result.state || 'done';
         }).catch(err => {
-          console.log("上传未完成: ", JSON.stringify(err));
-          if (err && err.state) item.state = err.state;
+          // console.log("上传未完成: ", JSON.stringify(err));
+          item.state = this.resolveActionErrorState(err, ['result']);
         });
         break;
       case 'settings-open':
@@ -471,6 +471,26 @@ export class HeaderComponent implements OnDestroy {
         console.log('未处理的操作:', item.action);
         break;
     }
+  }
+
+  private resolveActionErrorState(err: any, nestedKeys: string[] = []): RunState['state'] {
+    const directState = err?.state;
+    if (this.isValidRunState(directState)) {
+      return directState;
+    }
+
+    for (const key of nestedKeys) {
+      const nestedState = err?.[key]?.state;
+      if (this.isValidRunState(nestedState)) {
+        return nestedState;
+      }
+    }
+
+    return 'error';
+  }
+
+  private isValidRunState(state: any): state is RunState['state'] {
+    return ['default', 'doing', 'done', 'error', 'warn'].includes(state);
   }
 
   minimize() {

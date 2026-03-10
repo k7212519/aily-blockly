@@ -173,7 +173,8 @@
             "BOARD": "Placa",
             "PROJECT_NAME": "Nombre del Proyecto",
             "SAVE_PATH": "Ruta de Guardado",
-            "NAME_EXISTS": "El nombre del proyecto ya existe, por favor modifíquelo"
+            "NAME_EXISTS": "El nombre del proyecto ya existe, por favor modifíquelo",
+            "PATH_INVALID_CHARS": "La ruta contiene caracteres no válidos (ej. / : * ? \" < > |), por favor modifique"
         },
         "BUTTONS": {
             "USE_THIS": "Usar esta Placa",
