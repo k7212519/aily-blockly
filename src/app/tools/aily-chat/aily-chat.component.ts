@@ -253,6 +253,7 @@ export class AilyChatComponent implements OnDestroy {
   private loginStatusSubscription: Subscription;
   private aiWritingSubscription: Subscription;
   private aiWaitingSubscription: Subscription;
+  private _aiNoticeShown = false;
   private projectPathSubscription: Subscription; // 订阅项目路径变化
   private configChangedSubscription: Subscription; // 订阅配置变更
   private blockSelectionSubscription: Subscription; // 订阅 Blockly 块选中事件
@@ -1465,6 +1466,13 @@ Do not create non-existent boards and libraries.
 
   showAiWritingNotice(isWaiting) {
     if (isWaiting) {
+      // TODO @downey 优化：需要权限判断位置可能不准，具体可能是创建/连接图形时的某个操作，还未测试找出
+      if (this.electronService.isWindowMinimized()) {
+        this.electronService.notify('Aily', 'Blockly图形需要窗口权限', {
+          timeoutType: 'never',
+        });
+      }
+      this._aiNoticeShown = true;
       this.noticeService.update({
         title: "AI正在操作",
         state: "doing",
@@ -1474,7 +1482,8 @@ Do not create non-existent boards and libraries.
           this.stop();
         },
       });
-    } else {
+    } else if (this._aiNoticeShown) {
+      this._aiNoticeShown = false;
       this.noticeService.clear();
     }
   }
@@ -2313,6 +2322,15 @@ ${JSON.stringify(errData)}
         return;
       }
 
+      // 兜底修复：上一轮被 stop/cancel 后，确保新请求不会继承旧取消态。
+      if (this.isCancelled) {
+        this.isCancelled = false;
+        this.pendingUserInput = false;
+        this.streamCompleted = false;
+        this.sseStreamCompleted = false;
+        this.activeToolExecutions = 0;
+      }
+
       // 重置流式文本检测状态（新消息开始）
       this.repetitionDetectionService.resetStreamTokens();
       this.insideThink = false;
@@ -2423,6 +2441,8 @@ ${JSON.stringify(errData)}
 \`\`\`
 
 `);
+          this.isWaiting = false;
+          this.list[this.list.length - 1].state = 'done';
         }
       }
     });
@@ -2432,6 +2452,20 @@ ${JSON.stringify(errData)}
   stop() {
     // 标记任务已取消，防止后续工具结果触发重连
     this.isCancelled = true;
+    const wasStatelessTurn = this.currentStatelessMode;
+
+    // 立即断开旧流，避免其延迟 complete 回调覆盖新请求状态。
+    if (this.messageSubscription) {
+      this.messageSubscription.unsubscribe();
+      this.messageSubscription = null;
+    }
+
+    // stop/cancel 不依赖 StreamComplete，直接清理当前轮次流式状态。
+    this.pendingUserInput = false;
+    this.streamCompleted = false;
+    this.sseStreamCompleted = false;
+    this.activeToolExecutions = 0;
+    this.currentStatelessMode = false;
 
     // ★ 关键修复：立即断开 SSE 订阅，从根源上消除竞态窗口。
     //   如果不在此处断开，当用户快速点击按钮时会出现以下竞态：
@@ -2449,7 +2483,7 @@ ${JSON.stringify(errData)}
 
     // ★ 无状态模式：stop() 时将已累积的 assistant 内容保存到对话历史，
     //   防止 aily-button 截断对话后用户点击按钮时 LLM 丢失上下文
-    if (this.currentStatelessMode && this.currentTurnAssistantContent) {
+    if (wasStatelessTurn && this.currentTurnAssistantContent) {
       const assistantMessage: any = {
         role: 'assistant',
         content: this.sanitizeAssistantContent(this.currentTurnAssistantContent)
@@ -2507,21 +2541,26 @@ ${JSON.stringify(errData)}
       this.list[this.list.length - 1].state = 'done';
     }
 
-    // ★ 同步设置 isWaiting=false / isCompleted=true，
-    //   防止 aily-button 截断后用户立即点击按钮时 send() 因 isWaiting=true 静默丢弃消息。
+    // 本地立即收尾，避免 cancelTask 响应延迟导致后续请求被阻塞。
     this.isWaiting = false;
     this.isCompleted = true;
 
-    // ★ 无状态模式：同步保存会话历史（不再依赖 cancelTask 回调，避免异步竞态）
-    if (this.currentStatelessMode) {
+    const shouldSaveSession = this.useStatelessMode || wasStatelessTurn;
+    if (shouldSaveSession) {
       this.saveCurrentSession();
     }
 
-    this.chatService.cancelTask(this.sessionId).subscribe((res: any) => {
-      if (res.status === 'success') {
-        console.log('任务已取消:', res);
-      } else {
-        console.warn('取消任务失败:', res);
+    this.chatService.cancelTask(this.sessionId).subscribe({
+      next: (res: any) => {
+        if (res.status === 'success') {
+          console.log('任务已取消:', res);
+        } else {
+          console.warn('取消任务失败:', res);
+        }
+      },
+      error: (err) => {
+        // 本地已完成 stop，接口失败仅记录，不影响后续会话。
+        console.warn('取消任务请求失败:', err);
       }
     });
   }
@@ -2797,6 +2836,10 @@ ${JSON.stringify(errData)}
 
       // ★ 关键修复：无状态模式轮次结束时立即保存历史
       this.saveCurrentSession();
+
+      if (!this.electronService.isWindowFocused()) {
+        this.electronService.notify('Aily', '对话已完成');
+      }
     }
   }
 
@@ -5205,6 +5248,10 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
 
         // ★ 关键修复：传统模式对话结束时立即保存历史（替代旧的 3s 轮询 + 仅更新内存逻辑）
         this.saveCurrentSession();
+
+        if (!this.electronService.isWindowFocused()) {
+          this.electronService.notify('Aily', '对话已完成');
+        }
       },
       error: (err) => {
         console.warn('流连接出错:', err);
@@ -5213,13 +5260,16 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
           this.list[this.list.length - 1].state = 'done';
         }
 
+        const httpErrorText = this.getPreferredHttpErrorMessage(err);
+        const errorClosingTags = this.getClosingTagsForOpenBlocks();
+
         // 只有在活跃对话中才显示错误提示和重试按钮
         // if (this.isWaiting) {
-        this.appendMessage('aily', `
+        this.appendMessage('aily', `${errorClosingTags}
 \`\`\`aily-state
 {
   "state": "warn",
-  "text": "网络似乎开小差了，请检查连接并重试。",
+  "text": "${this.makeJsonSafe(httpErrorText)}",
   "id": "network-error-${Date.now()}"
 }
 \`\`\`
@@ -5229,10 +5279,150 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
 \`\`\`
 
 `);
-        // }
-        // this.isWaiting = false;
+        this.isWaiting = false;
+        this.list[this.list.length - 1].state = 'done';
       }
     });
+  }
+
+  private getPreferredHttpErrorMessage(err: any): string {
+    const detailMessage = this.extractErrorDetailMessage(err);
+    if (detailMessage) {
+      return detailMessage;
+    }
+
+    return this.getHttpErrorFallbackMessage(err);
+  }
+
+  private extractErrorDetailMessage(err: any): string {
+    if (!err) {
+      return '';
+    }
+
+    const detailCandidate =
+      err?.error ??
+      err?.response?.data ??
+      err?.data ??
+      err?.cause?.error;
+
+    const asObject = detailCandidate && typeof detailCandidate === 'object' ? detailCandidate : null;
+    if (asObject) {
+      const objectCode = asObject.code;
+      const objectMessage =
+        asObject.message ??
+        asObject.msg ??
+        asObject.error_description ??
+        asObject.error ??
+        asObject.detail;
+
+      // 当后端返回 code 时，优先展示详情中的可读错误信息。
+      if (objectCode !== undefined && objectCode !== null) {
+        if (typeof objectMessage === 'string' && objectMessage.trim()) {
+          return objectMessage.trim();
+        }
+      }
+
+      if (typeof objectMessage === 'string' && objectMessage.trim()) {
+        return objectMessage.trim();
+      }
+    }
+
+    const directTextCandidates = [
+      err?.detail,
+      err?.error?.detail,
+      err?.error?.message,
+      err?.response?.data?.message,
+      err?.response?.data?.detail,
+      err?.message,
+      typeof err === 'string' ? err : ''
+    ];
+
+    for (const candidate of directTextCandidates) {
+      if (typeof candidate !== 'string') {
+        continue;
+      }
+
+      const text = candidate.trim();
+      if (!text) {
+        continue;
+      }
+
+      // 跳过仅有 HTTP 状态的通用文本，交给 fallback 映射处理。
+      const isHttpStatusText = /\bhttp\s*error\b/i.test(text) || /\bstatus\s*[:=]?\s*\d{3}\b/i.test(text);
+      if (isHttpStatusText) {
+        continue;
+      }
+
+      return text;
+    }
+
+    return '';
+  }
+
+  private getHttpErrorFallbackMessage(err: any): string {
+    const status = this.extractHttpStatusCode(err);
+
+    const statusMessageMap: Record<number, string> = {
+      400: '请求格式错误，请检查。',
+      401: '登录已失效，请重新登录。',
+      403: '无权限执行该操作。',
+      404: '资源不存在，请确认。',
+      408: '请求超时，请重试。',
+      429: '请求过快，请稍后再试。',
+      500: '服务器异常，请稍后再试。',
+      502: '网关无响应，请稍后再试。',
+      503: '服务繁忙，请稍后再试。',
+      504: 'AI响应超时，请重试。'
+    };
+
+    return statusMessageMap[status] || '网络异常，请检查连接。';
+  }
+
+  private extractHttpStatusCode(err: any): number {
+    // 1) 优先读取结构化字段（HttpErrorResponse / fetch 包装对象）
+    const directCandidate =
+      err?.status ??
+      err?.statusCode ??
+      err?.response?.status ??
+      err?.error?.status ??
+      err?.error?.statusCode ??
+      err?.cause?.status ??
+      err?.cause?.statusCode;
+
+    const directStatus = Number(directCandidate);
+    if (Number.isFinite(directStatus) && directStatus >= 100 && directStatus <= 599) {
+      return directStatus;
+    }
+
+    // 2) 兼容 chat.service 中 new Error("HTTP error! Status: xxx") 的场景
+    const textCandidates = [
+      err?.message,
+      err?.error?.message,
+      err?.response?.statusText,
+      err?.cause?.message,
+      typeof err === 'string' ? err : ''
+    ].filter(Boolean);
+
+    for (const text of textCandidates) {
+      const matched = String(text).match(/\b(?:http\s*error[^\d]*|status\s*[:=]?\s*)(\d{3})\b/i);
+      if (matched?.[1]) {
+        return Number(matched[1]);
+      }
+    }
+
+    // 3) 网络错误（fetch TypeError / Failed to fetch）统一按 0 处理
+    const joined = textCandidates.map(v => String(v)).join(' | ').toLowerCase();
+    if (
+      joined.includes('failed to fetch') ||
+      joined.includes('networkerror') ||
+      joined.includes('network error') ||
+      joined.includes('load failed') ||
+      joined.includes('timeout')
+    ) {
+      return 0;
+    }
+
+    return 0;
   }
 
   getHistory(): void {
@@ -5703,6 +5893,10 @@ Your role is ASK (Advisory & Quick Support) - you provide analysis, recommendati
     // 发送重试消息
     const retryMessage = '请重试上次的操作。';
     await this.send('user', retryMessage, false);
+
+    // 与普通按钮点击行为保持一致，重试后立即回到底部
+    this.autoScrollEnabled = true;
+    this.scrollToBottom();
   }
 
   selectContent: ResourceItem[] = []

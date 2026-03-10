@@ -173,7 +173,8 @@
             "BOARD": "ボード",
             "PROJECT_NAME": "プロジェクト名",
             "SAVE_PATH": "保存パス",
-            "NAME_EXISTS": "プロジェクト名は既に存在します。変更してください"
+            "NAME_EXISTS": "プロジェクト名は既に存在します。変更してください",
+            "PATH_INVALID_CHARS": "パスに無効な文字（/ : * ? \" < > | など）が含まれています。変更してください"
         },
         "BUTTONS": {
             "USE_THIS": "このボードを使用",
@@ -239,6 +240,10 @@
     },
     "UPDATE_DIALOG": {
         "TITLE": "ソフトウェアアップデート",
+        "TITLE_READY": "アップデート準備完了",
+        "TITLE_NEW_VERSION": "新しいバージョン {{version}} が利用可能です",
+        "TEXT_DOWNLOADED": "バージョン {{version}} のダウンロードが完了しました。今すぐインストールしますか？",
+        "TEXT_AVAILABLE": "現在のバージョン {{currentVersion}}、新しいバージョン {{version}}<br>このアップデートをダウンロードしてインストールしますか？",
         "DOWNLOAD_FAILED": "ダウンロード失敗",
         "REMIND_LATER": "後で通知",
         "SKIP_VERSION": "このバージョンをスキップ",

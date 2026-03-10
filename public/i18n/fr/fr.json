@@ -173,7 +173,8 @@
             "BOARD": "Carte",
             "PROJECT_NAME": "Nom du Projet",
             "SAVE_PATH": "Chemin de Sauvegarde",
-            "NAME_EXISTS": "Le nom du projet existe déjà, veuillez le modifier"
+            "NAME_EXISTS": "Le nom du projet existe déjà, veuillez le modifier",
+            "PATH_INVALID_CHARS": "Le chemin contient des caractères invalides (ex. / : * ? \" < > |), veuillez modifier"
         },
         "BUTTONS": {
             "USE_THIS": "Utiliser cette Carte",
@@ -239,6 +240,10 @@
     },
     "UPDATE_DIALOG": {
         "TITLE": "Mise à jour du logiciel",
+        "TITLE_READY": "Mise à jour prête",
+        "TITLE_NEW_VERSION": "Nouvelle version {{version}} disponible",
+        "TEXT_DOWNLOADED": "La version {{version}} a été téléchargée. Installer maintenant ?",
+        "TEXT_AVAILABLE": "Version actuelle {{currentVersion}}, nouvelle version {{version}}<br>Voulez-vous télécharger et installer cette mise à jour ?",
         "DOWNLOAD_FAILED": "Échec du téléchargement",
         "REMIND_LATER": "Rappeler plus tard",
         "SKIP_VERSION": "Ignorer cette version",

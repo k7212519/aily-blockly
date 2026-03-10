@@ -44,6 +44,74 @@ export class ChatService {
   private textSubject = new Subject<ChatTextMessage>();
   private static instance: ChatService;
 
+  private async readHttpErrorBody(response: Response): Promise<any> {
+    try {
+      const rawText = await response.clone().text();
+      if (!rawText) {
+        return null;
+      }
+
+      try {
+        return JSON.parse(rawText);
+      } catch {
+        return { message: rawText, detail: rawText };
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  private extractErrorCode(errorBody: any): string | number | undefined {
+    if (!errorBody || typeof errorBody !== 'object') {
+      return undefined;
+    }
+
+    return errorBody.code ?? errorBody.error?.code ?? errorBody.data?.code;
+  }
+
+  private extractErrorMessage(errorBody: any): string {
+    if (!errorBody) {
+      return '';
+    }
+
+    if (typeof errorBody === 'string') {
+      return errorBody.trim();
+    }
+
+    if (typeof errorBody !== 'object') {
+      return '';
+    }
+
+    const messageCandidate =
+      errorBody.message ??
+      errorBody.msg ??
+      errorBody.detail ??
+      errorBody.error_description ??
+      errorBody.error?.message ??
+      errorBody.error;
+
+    return typeof messageCandidate === 'string' ? messageCandidate.trim() : '';
+  }
+
+  private createNormalizedHttpError(response: Response, errorBody: any, fallbackMessage?: string): any {
+    const detail = this.extractErrorMessage(errorBody);
+    const code = this.extractErrorCode(errorBody);
+
+    return {
+      name: 'HttpRequestError',
+      status: response.status,
+      statusCode: response.status,
+      code,
+      message: detail || fallbackMessage || `HTTP error! Status: ${response.status}`,
+      detail,
+      error: errorBody,
+      response: {
+        status: response.status,
+        statusText: response.statusText
+      }
+    };
+  }
+
   constructor(
     private http: HttpClient,
     private configService: ConfigService,
@@ -426,7 +494,8 @@ export class ChatService {
           if (aborted) return;
 
           if (!response.ok) {
-            observer.error(new Error(`HTTP error! Status: ${response.status}`));
+            const errorBody = await this.readHttpErrorBody(response);
+            observer.error(this.createNormalizedHttpError(response, errorBody));
             return;
           }
 
@@ -551,14 +620,22 @@ export class ChatService {
       this.authService.getToken2().then(token => {
         if (aborted) return;
 
-        // console.log(`[chatRequest诊断] 发送请求 session=${sessionId}, messages=${messages.length}条:`,
-        //   messages.map((m: any, i: number) => `[${i}] ${m.role}${m.tool_calls ? `(+${m.tool_calls.length}tc)` : ''}: ${(m.content || '').substring(0, 60)}...`));
+        // 调试异常注入：在控制台设置 localStorage.ailyChatDebugForceError 后自动附带请求头
+        let debugForceErrorCode = '';
+        try {
+          debugForceErrorCode = (localStorage.getItem('ailyChatDebugForceError') || '').trim();
+        } catch {
+          debugForceErrorCode = '';
+        }
 
         const headers: HeadersInit = {
           'Content-Type': 'application/json'
         };
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
+        }
+        if (debugForceErrorCode) {
+          headers['X-Debug-Force-Error'] = debugForceErrorCode;
         }
 
         fetch(`${API.chatRequest}/${sessionId}`, {
@@ -571,9 +648,10 @@ export class ChatService {
 
             let streamResponse = response;
             if (!response.ok) {
+              const errorBody = await this.readHttpErrorBody(response);
+
               if (response.status === 404) {
                 try {
-                  const errorBody = await response.json().catch(() => null);
                   if (errorBody && errorBody.code === 21001) {
                     // 会话不存在（服务器重启导致），透明地重建会话并重试请求
                     await this.startSession(mode, tools as any, maxCount, llmConfig, selectModel).toPromise();
@@ -585,12 +663,17 @@ export class ChatService {
                     });
                     if (aborted) return;
                     if (!retryResp.ok) {
-                      observer.error(new Error(`HTTP error after session restart! Status: ${retryResp.status}`));
+                      const retryErrorBody = await this.readHttpErrorBody(retryResp);
+                      observer.error(this.createNormalizedHttpError(
+                        retryResp,
+                        retryErrorBody,
+                        `HTTP error after session restart! Status: ${retryResp.status}`
+                      ));
                       return;
                     }
                     streamResponse = retryResp;
                   } else {
-                    observer.error(new Error(`HTTP error! Status: ${response.status}`));
+                    observer.error(this.createNormalizedHttpError(response, errorBody));
                     return;
                   }
                 } catch (retryErr) {
@@ -598,7 +681,7 @@ export class ChatService {
                   return;
                 }
               } else {
-                observer.error(new Error(`HTTP error! Status: ${response.status}`));
+                observer.error(this.createNormalizedHttpError(response, errorBody));
                 return;
               }
             }

@@ -222,7 +222,8 @@
             "BOARD": "开发板",
             "PROJECT_NAME": "项目名称",
             "SAVE_PATH": "保存路径",
-            "NAME_EXISTS": "项目名称已存在，请修改"
+            "NAME_EXISTS": "项目名称已存在，请修改",
+            "PATH_INVALID_CHARS": "路径包含非法字符（如 / : * ? \" < > | 等），请修改"
         },
         "BUTTONS": {
             "USE_THIS": "创建新项目",
@@ -288,6 +289,10 @@
     },
     "UPDATE_DIALOG": {
         "TITLE": "软件更新",
+        "TITLE_READY": "更新已准备就绪",
+        "TITLE_NEW_VERSION": "发现新版本 {{version}}",
+        "TEXT_DOWNLOADED": "新版本 {{version}} 已下载完成，是否立即安装？",
+        "TEXT_AVAILABLE": "当前版本 {{currentVersion}}，新版本 {{version}}<br>是否要下载并安装此更新？",
         "DOWNLOAD_FAILED": "下载失败",
         "REMIND_LATER": "稍后提醒",
         "SKIP_VERSION": "跳过此版本",

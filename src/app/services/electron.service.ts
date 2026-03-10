@@ -212,6 +212,23 @@ export class ElectronService {
   }
 
   /**
+   * 检查当前窗口是否最小化
+   * @returns boolean
+   */
+  isWindowMinimized(): boolean {
+    if (!this.isElectron) {
+      return false;
+    }
+
+    try {
+      return window['iWindow'].isMinimized();
+    } catch (error) {
+      console.error('Check window minimized error:', error);
+      return false;
+    }
+  }
+
+  /**
    * 监听窗口获得焦点事件
    * @param callback 回调函数
    * @returns 取消监听的函数

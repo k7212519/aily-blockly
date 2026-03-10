@@ -222,7 +222,8 @@
             "BOARD": "Board",
             "PROJECT_NAME": "Project Name",
             "SAVE_PATH": "Save Path",
-            "NAME_EXISTS": "Project name already exists, please modify"
+            "NAME_EXISTS": "Project name already exists, please modify",
+            "PATH_INVALID_CHARS": "Path contains invalid characters (e.g. / : * ? \" < > |), please modify"
         },
         "BUTTONS": {
             "USE_THIS": "Use This Board",
@@ -288,6 +289,10 @@
     },
     "UPDATE_DIALOG": {
         "TITLE": "Software Update",
+        "TITLE_READY": "Update Ready",
+        "TITLE_NEW_VERSION": "New Version {{version}} Available",
+        "TEXT_DOWNLOADED": "Version {{version}} has been downloaded. Install now?",
+        "TEXT_AVAILABLE": "Current version {{currentVersion}}, new version {{version}}<br>Would you like to download and install this update?",
         "DOWNLOAD_FAILED": "Download Failed",
         "REMIND_LATER": "Remind Later",
         "SKIP_VERSION": "Skip This Version",

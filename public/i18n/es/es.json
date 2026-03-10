@@ -173,7 +173,8 @@
             "BOARD": "Placa",
             "PROJECT_NAME": "Nombre del Proyecto",
             "SAVE_PATH": "Ruta de Guardado",
-            "NAME_EXISTS": "El nombre del proyecto ya existe, por favor modifíquelo"
+            "NAME_EXISTS": "El nombre del proyecto ya existe, por favor modifíquelo",
+            "PATH_INVALID_CHARS": "La ruta contiene caracteres no válidos (ej. / : * ? \" < > |), por favor modifique"
         },
         "BUTTONS": {
             "USE_THIS": "Usar esta Placa",
@@ -239,6 +240,10 @@
     },
     "UPDATE_DIALOG": {
         "TITLE": "Actualización de software",
+        "TITLE_READY": "Actualización lista",
+        "TITLE_NEW_VERSION": "Nueva versión {{version}} disponible",
+        "TEXT_DOWNLOADED": "La versión {{version}} se ha descargado. ¿Instalar ahora?",
+        "TEXT_AVAILABLE": "Versión actual {{currentVersion}}, nueva versión {{version}}<br>¿Desea descargar e instalar esta actualización?",
         "DOWNLOAD_FAILED": "Descarga fallida",
         "REMIND_LATER": "Recordar más tarde",
         "SKIP_VERSION": "Omitir esta versión",
