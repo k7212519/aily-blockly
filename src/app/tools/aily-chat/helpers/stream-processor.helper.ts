@@ -370,6 +370,8 @@ export class StreamProcessorHelper {
         if (!AilyHost.get().electron?.isWindowFocused()) {
           AilyHost.get().electron?.notify('Aily', '对话已完成');
         }
+        // 应用延迟的模型/模式切换
+        this.engine.applyPendingSwitch();
       },
       error: (err) => {
         console.warn('流连接出错:', err);
@@ -381,6 +383,8 @@ export class StreamProcessorHelper {
         this.engine.msg.appendMessage('aily', `${errorClosingTags}\n\`\`\`aily-state\n{\n  "state": "warn",\n  "text": "${this.engine.msg.makeJsonSafe(httpErrorText)}",\n  "id": "network-error-${Date.now()}"\n}\n\`\`\`\n\n\`\`\`aily-button\n[{"text":"重试","action":"retry","type":"primary"}]\n\`\`\`\n\n`);
         this.engine.isWaiting = false;
         this.engine.list[this.engine.list.length - 1].state = 'done';
+        // 应用延迟的模型/模式切换
+        this.engine.applyPendingSwitch();
       }
     });
   }

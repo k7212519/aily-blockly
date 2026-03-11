@@ -95,6 +95,10 @@ export class ChatEngineService {
   /** 会话级标记：规则/角色提示词是否已注入（仅首次工具调用时注入） */
   rulesInjectedThisSession = false;
 
+  /** 延迟切换：活跃请求期间暂存待切换的模型/模式，完成后自动应用 */
+  _pendingModelSwitch: ModelConfig | null = null;
+  _pendingModeSwitch: string | null = null;
+
   // ==================== 订阅 ====================
   messageSubscription: any;
   private textMessageSubscription: Subscription;
@@ -626,12 +630,28 @@ Do not create non-existent boards and libraries.
       next: (res: any) => { if (res.status !== 'success') { console.warn('取消任务失败:', res); } },
       error: (err) => { console.warn('取消任务请求失败:', err); }
     });
+
+    // 停止后应用延迟切换
+    this.applyPendingSwitch();
   }
 
   // ==================== 模式 / 模型切换 ====================
 
   async switchToModel(model: ModelConfig): Promise<void> {
     if (model.model === this.currentModel?.model) return;
+    // 活跃请求期间：保存偏好并暂存，待当前请求完成后自动应用
+    if (this.isWaiting) {
+      this.chatService.saveChatModel(model);
+      this._pendingModelSwitch = model;
+      this._pendingModeSwitch = null; // 模型切换优先，清除待切换模式
+      this.message.info('模型将在当前对话完成后切换');
+      return;
+    }
+    await this._doSwitchModel(model);
+  }
+
+  /** 实际执行模型切换（重建会话） */
+  private async _doSwitchModel(model: ModelConfig): Promise<void> {
     this.chatService.saveChatModel(model);
     const savedMessages = [...this.conversationMessages];
     const savedIteration = this.toolCallingIteration;
@@ -661,6 +681,19 @@ Do not create non-existent boards and libraries.
 
   async switchToMode(mode: string): Promise<void> {
     if (mode === this.currentMode) return;
+    // 活跃请求期间：保存偏好并暂存，待当前请求完成后自动应用
+    if (this.isWaiting) {
+      this.chatService.saveChatMode(mode as 'agent' | 'ask');
+      this._pendingModeSwitch = mode;
+      this._pendingModelSwitch = null; // 模式切换优先，清除待切换模型
+      this.message.info('模式将在当前对话完成后切换');
+      return;
+    }
+    await this._doSwitchMode(mode);
+  }
+
+  /** 实际执行模式切换（重建会话） */
+  private async _doSwitchMode(mode: string): Promise<void> {
     this.chatService.saveChatMode(mode as 'agent' | 'ask');
     const savedMessages = [...this.conversationMessages];
     const savedIteration = this.toolCallingIteration;
@@ -687,6 +720,22 @@ Do not create non-existent boards and libraries.
       this.chatHistoryService.migrateSessionId(oldSessionId, newSessionId);
     }
     this.contextBudgetService?.updateBudget(this.conversationMessages, this.turnLoop.getCurrentTools());
+  }
+
+  /**
+   * 应用延迟的模型/模式切换。
+   * 在 turn 完成（finalizeStatelessTurn / stream complete / stop）后调用。
+   */
+  async applyPendingSwitch(): Promise<void> {
+    const pendingModel = this._pendingModelSwitch;
+    const pendingMode = this._pendingModeSwitch;
+    this._pendingModelSwitch = null;
+    this._pendingModeSwitch = null;
+    if (pendingModel) {
+      await this._doSwitchModel(pendingModel);
+    } else if (pendingMode) {
+      await this._doSwitchMode(pendingMode);
+    }
   }
 
   // ==================== 任务操作 ====================

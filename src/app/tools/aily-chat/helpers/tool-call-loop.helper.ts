@@ -209,6 +209,8 @@ export class ToolCallLoopHelper {
       if (!AilyHost.get().electron?.isWindowFocused()) {
         AilyHost.get().electron?.notify('Aily', '对话已完成');
       }
+      // 应用延迟的模型/模式切换
+      this.engine.applyPendingSwitch();
     }
   }
 }
