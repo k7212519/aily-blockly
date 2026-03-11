@@ -196,10 +196,14 @@ export class ContextBudgetService {
     'gpt-4': 8192,
     'gpt-3.5-turbo': 16385,
     'claude-3-opus': 200000,
-    'claude-3-sonnet': 200000,
-    'claude-3-haiku': 200000,
-    'claude-3.5-sonnet': 200000,
-    'claude-4-sonnet': 200000,
+    'claude-3-sonnet': 128000,
+    'claude-3-haiku': 128000,
+    'claude-3.5-sonnet': 128000,
+    'claude-4-sonnet': 128000,
+    'claude-4.5-sonnet': 128000,
+    'claude-4.6-sonnet': 128000,
+    'claude-4.5-opus': 128000,
+    'claude-4.6-opus': 128000,
     'deepseek-chat': 64000,
     'deepseek-coder': 64000,
     'qwen-turbo': 131072,
@@ -210,7 +214,7 @@ export class ContextBudgetService {
   };
 
   /** 默认上下文窗口大小 */
-  private static readonly DEFAULT_CONTEXT_SIZE = 200000;
+  private static readonly DEFAULT_CONTEXT_SIZE = 128000;
 
   /** 工具结果压缩阈值比例（占 maxContextTokens 的百分比） */
   private static readonly COMPRESSION_THRESHOLD_RATIO = 0.50;
