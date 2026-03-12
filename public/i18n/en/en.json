@@ -414,13 +414,19 @@
     },
     "FLOAT_SIDER": {
         "PROJECT_SETTINGS": "Project Settings",
+        "ARCH": "Architecture Diagram",
         "PINMAP": "Pin Map",
         "CIRCUIT": "Circuit Diagram",
         "DOCUMENTATION": "Documentation",
         "FEEDBACK": "Feedback",
         "NO_PINMAP": "Pin map not available for this board",
         "PINMAP_PARSE_ERROR": "Pin map parsing failed",
-        "NO_DOCUMENTATION": "Documentation not available for this board"
+        "NO_DOCUMENTATION": "Documentation not available for this board",
+        "ARCH_ELECTRON_ONLY": "Architecture diagram is only available in desktop app",
+        "NO_PROJECT": "No project opened",
+        "NO_ARCH": "arch.md not found in project directory",
+        "ARCH_EMPTY": "No mermaid diagram found in arch.md",
+        "ARCH_RENDER_FAILED": "Failed to render architecture diagram"
     },
     "SERIAL": {
         "SELECT_PORT_FIRST": "Please select a serial port first",

@@ -365,13 +365,19 @@
     },
     "FLOAT_SIDER": {
         "PROJECT_SETTINGS": "Paramètres du Projet",
+        "ARCH": "Diagramme d'Architecture",
         "PINMAP": "Schéma des Broches",
         "CIRCUIT": "Schéma de Câblage",
         "DOCUMENTATION": "Documentation",
         "FEEDBACK": "Retour d'information",
         "NO_PINMAP": "Schéma des broches non disponible pour cette carte",
         "PINMAP_PARSE_ERROR": "Échec de l'analyse du schéma des broches",
-        "NO_DOCUMENTATION": "Documentation non disponible pour cette carte"
+        "NO_DOCUMENTATION": "Documentation non disponible pour cette carte",
+        "ARCH_ELECTRON_ONLY": "Le diagramme d'architecture n'est disponible que dans l'application bureau",
+        "NO_PROJECT": "Aucun projet ouvert",
+        "NO_ARCH": "arch.md introuvable dans le répertoire du projet",
+        "ARCH_EMPTY": "Aucun diagramme mermaid trouvé dans arch.md",
+        "ARCH_RENDER_FAILED": "Échec du rendu du diagramme d'architecture"
     },
     "SERIAL": {
         "SELECT_PORT_FIRST": "Veuillez d'abord sélectionner un port série",

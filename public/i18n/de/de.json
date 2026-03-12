@@ -365,13 +365,19 @@
     },
     "FLOAT_SIDER": {
         "PROJECT_SETTINGS": "Projekteinstellungen",
+        "ARCH": "Architekturdiagramm",
         "PINMAP": "Pin-Belegung",
         "CIRCUIT": "Schaltplan",
         "DOCUMENTATION": "Dokumentation",
         "FEEDBACK": "Feedback",
         "NO_PINMAP": "Pin-Belegung für dieses Board nicht verfügbar",
         "PINMAP_PARSE_ERROR": "Fehler beim Parsen der Pin-Belegung",
-        "NO_DOCUMENTATION": "Dokumentation für dieses Board nicht verfügbar"
+        "NO_DOCUMENTATION": "Dokumentation für dieses Board nicht verfügbar",
+        "ARCH_ELECTRON_ONLY": "Architekturdiagramm nur in der Desktop-App verfügbar",
+        "NO_PROJECT": "Kein Projekt geöffnet",
+        "NO_ARCH": "arch.md im Projektverzeichnis nicht gefunden",
+        "ARCH_EMPTY": "Kein Mermaid-Diagramm in arch.md gefunden",
+        "ARCH_RENDER_FAILED": "Architekturdiagramm konnte nicht gerendert werden"
     },
     "SERIAL": {
         "SELECT_PORT_FIRST": "Bitte wählen Sie zuerst einen seriellen Port aus",

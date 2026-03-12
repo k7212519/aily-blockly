@@ -365,13 +365,19 @@
     },
     "FLOAT_SIDER": {
         "PROJECT_SETTINGS": "項目設置",
+        "ARCH": "框架圖",
         "PINMAP": "引腳圖",
         "CIRCUIT": "電路連接",
         "DOCUMENTATION": "文檔",
         "FEEDBACK": "反饋",
         "NO_PINMAP": "該開發板沒有提供引腳圖",
         "PINMAP_PARSE_ERROR": "引腳圖解析失敗",
-        "NO_DOCUMENTATION": "該開發板沒有提供文檔鏈接"
+        "NO_DOCUMENTATION": "該開發板沒有提供文檔鏈接",
+        "ARCH_ELECTRON_ONLY": "框架圖僅在桌面應用中可用",
+        "NO_PROJECT": "未打開項目",
+        "NO_ARCH": "項目目錄下未找到 arch.md",
+        "ARCH_EMPTY": "arch.md 中未找到 mermaid 圖表",
+        "ARCH_RENDER_FAILED": "框架圖渲染失敗"
     },
     "SERIAL": {
         "SELECT_PORT_FIRST": "請先選擇串口",

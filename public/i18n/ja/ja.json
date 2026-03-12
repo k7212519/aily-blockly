@@ -365,13 +365,19 @@
     },
     "FLOAT_SIDER": {
         "PROJECT_SETTINGS": "プロジェクト設定",
+        "ARCH": "アーキテクチャ図",
         "PINMAP": "ピン配置図",
         "CIRCUIT": "回路接続図",
         "DOCUMENTATION": "ドキュメント",
         "FEEDBACK": "フィードバック",
         "NO_PINMAP": "このボードのピン配置図は利用できません",
         "PINMAP_PARSE_ERROR": "ピン配置図の解析に失敗しました",
-        "NO_DOCUMENTATION": "このボードのドキュメントは利用できません"
+        "NO_DOCUMENTATION": "このボードのドキュメントは利用できません",
+        "ARCH_ELECTRON_ONLY": "アーキテクチャ図はデスクトップアプリでのみ利用可能です",
+        "NO_PROJECT": "プロジェクトが開かれていません",
+        "NO_ARCH": "プロジェクトディレクトリに arch.md が見つかりません",
+        "ARCH_EMPTY": "arch.md に mermaid 図が見つかりません",
+        "ARCH_RENDER_FAILED": "アーキテクチャ図のレンダリングに失敗しました"
     },
     "SERIAL": {
         "SELECT_PORT_FIRST": "先にシリアルポートを選択してください",

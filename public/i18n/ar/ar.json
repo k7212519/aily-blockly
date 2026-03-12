@@ -365,13 +365,19 @@
     },
     "FLOAT_SIDER": {
         "PROJECT_SETTINGS": "إعدادات المشروع",
+        "ARCH": "مخطط البنية",
         "PINMAP": "خريطة الدبابيس",
         "CIRCUIT": "مخطط الدائرة",
         "DOCUMENTATION": "التوثيق",
         "FEEDBACK": "ملاحظات",
         "NO_PINMAP": "خريطة الدبابيس غير متوفرة لهذه اللوحة",
         "PINMAP_PARSE_ERROR": "فشل تحليل خريطة الدبابيس",
-        "NO_DOCUMENTATION": "التوثيق غير متوفر لهذه اللوحة"
+        "NO_DOCUMENTATION": "التوثيق غير متوفر لهذه اللوحة",
+        "ARCH_ELECTRON_ONLY": "مخطط البنية متاح فقط في تطبيق سطح المكتب",
+        "NO_PROJECT": "لا يوجد مشروع مفتوح",
+        "NO_ARCH": "لم يتم العثور على arch.md في مجلد المشروع",
+        "ARCH_EMPTY": "لم يتم العثور على مخطط mermaid في arch.md",
+        "ARCH_RENDER_FAILED": "فشل عرض مخطط البنية"
     },
     "SERIAL": {
         "SELECT_PORT_FIRST": "يرجى تحديد منفذ تسلسلي أولاً",

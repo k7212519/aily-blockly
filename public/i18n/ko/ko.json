@@ -361,13 +361,19 @@
     },
     "FLOAT_SIDER": {
         "PROJECT_SETTINGS": "프로젝트 설정",
+        "ARCH": "아키텍처 다이어그램",
         "PINMAP": "핀 맵",
         "CIRCUIT": "회로 연결도",
         "DOCUMENTATION": "문서",
         "FEEDBACK": "피드백",
         "NO_PINMAP": "이 보드에 대한 핀 맵을 사용할 수 없습니다",
         "PINMAP_PARSE_ERROR": "핀 맵 파싱 실패",
-        "NO_DOCUMENTATION": "이 보드에 대한 문서를 사용할 수 없습니다"
+        "NO_DOCUMENTATION": "이 보드에 대한 문서를 사용할 수 없습니다",
+        "ARCH_ELECTRON_ONLY": "아키텍처 다이어그램은 데스크톱 앱에서만 사용 가능합니다",
+        "NO_PROJECT": "열린 프로젝트가 없습니다",
+        "NO_ARCH": "프로젝트 디렉토리에서 arch.md를 찾을 수 없습니다",
+        "ARCH_EMPTY": "arch.md에서 mermaid 다이어그램을 찾을 수 없습니다",
+        "ARCH_RENDER_FAILED": "아키텍처 다이어그램 렌더링 실패"
     },
     "SERIAL": {
         "SELECT_PORT_FIRST": "먼저 시리얼 포트를 선택하세요",

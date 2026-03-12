@@ -365,13 +365,19 @@
     },
     "FLOAT_SIDER": {
         "PROJECT_SETTINGS": "Configurações do Projeto",
+        "ARCH": "Diagrama de Arquitetura",
         "PINMAP": "Mapa de Pinos",
         "CIRCUIT": "Diagrama de Circuito",
         "DOCUMENTATION": "Documentação",
         "FEEDBACK": "Feedback",
         "NO_PINMAP": "Mapa de pinos não disponível para esta placa",
         "PINMAP_PARSE_ERROR": "Falha ao analisar mapa de pinos",
-        "NO_DOCUMENTATION": "Documentação não disponível para esta placa"
+        "NO_DOCUMENTATION": "Documentação não disponível para esta placa",
+        "ARCH_ELECTRON_ONLY": "Diagrama de arquitetura disponível apenas no aplicativo desktop",
+        "NO_PROJECT": "Nenhum projeto aberto",
+        "NO_ARCH": "arch.md não encontrado no diretório do projeto",
+        "ARCH_EMPTY": "Nenhum diagrama mermaid encontrado em arch.md",
+        "ARCH_RENDER_FAILED": "Falha ao renderizar diagrama de arquitetura"
     },
     "SERIAL": {
         "SELECT_PORT_FIRST": "Selecione uma porta serial primeiro",
