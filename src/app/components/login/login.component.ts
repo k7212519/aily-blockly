@@ -11,6 +11,7 @@ import { NzModalModule } from 'ng-zorro-antd/modal';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { Subject, takeUntil, interval, Subscription } from 'rxjs';
 import { AuthService } from '../../services/auth.service';
+import { ConfigService } from '../../services/config.service';
 import { NzMessageService } from 'ng-zorro-antd/message';
 import { ElectronService } from '../../services/electron.service';
 import sha256 from 'crypto-js/sha256';
@@ -62,9 +63,21 @@ export class LoginComponent implements OnDestroy {
   agreementModalTitle = '';
   agreementModalContent: SafeHtml = '';
 
-  // 协议 markdown 文件路径
-  private readonly userAgreementPath = 'doc/user-agreement.md';
-  private readonly privacyPolicyPath = 'doc/privacy-policy.md';
+  // 协议文档路径：中文(zh_cn/zh_hk)用 zh 版本，其他语言用英文
+  private getUserAgreementUrl(): string {
+    const base = this.configService.getWebUrl();
+    const lang = this.translate.currentLang || this.translate.defaultLang || 'en';
+    const isZh = lang === 'zh_cn' || lang === 'zh_hk' || lang === 'zh-CN' || lang === 'zh-HK';
+    const file = isZh ? 'agreement/TERMS-zh.md' : 'agreement/TERMS.md';
+    return `${base}/${file}`;
+  }
+  private getPrivacyPolicyUrl(): string {
+    const base = this.configService.getWebUrl();
+    const lang = this.translate.currentLang || this.translate.defaultLang || 'en';
+    const isZh = lang === 'zh_cn' || lang === 'zh_hk' || lang === 'zh-CN' || lang === 'zh-HK';
+    const file = isZh ? 'agreement/PRIVACY-zh.md' : 'agreement/PRIVACY.md';
+    return `${base}/${file}`;
+  }
 
   // 邮箱登录相关
   inputEmail = '';
@@ -75,6 +88,7 @@ export class LoginComponent implements OnDestroy {
 
   constructor(
     private authService: AuthService,
+    private configService: ConfigService,
     private message: NzMessageService,
     private electronService: ElectronService,
     private translate: TranslateService,
@@ -355,7 +369,7 @@ export class LoginComponent implements OnDestroy {
    */
   showUserAgreement(): void {
     this.agreementModalTitle = this.translate.instant('LOGIN.USER_AGREEMENT');
-    this.http.get(this.userAgreementPath, { responseType: 'text' }).subscribe({
+    this.http.get(this.getUserAgreementUrl(), { responseType: 'text' }).subscribe({
       next: (content) => {
         this.agreementModalContent = this.sanitizer.bypassSecurityTrustHtml(this.parseMarkdown(content));
         this.isAgreementModalVisible = true;
@@ -372,7 +386,7 @@ export class LoginComponent implements OnDestroy {
    */
   showPrivacyPolicy(): void {
     this.agreementModalTitle = this.translate.instant('LOGIN.PRIVACY_POLICY');
-    this.http.get(this.privacyPolicyPath, { responseType: 'text' }).subscribe({
+    this.http.get(this.getPrivacyPolicyUrl(), { responseType: 'text' }).subscribe({
       next: (content) => {
         this.agreementModalContent = this.sanitizer.bypassSecurityTrustHtml(this.parseMarkdown(content));
         this.isAgreementModalVisible = true;

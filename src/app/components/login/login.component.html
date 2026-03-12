@@ -141,9 +141,9 @@
         <div class="agreement-section">
             <label nz-checkbox [(ngModel)]="agreedToTerms" (ngModelChange)="onAgreementChange()">
                 <span>{{ 'LOGIN.AGREEMENT_PREFIX' | translate }}</span>
-                <a class="agreement-link" (click)="showUserAgreement(); $event.preventDefault()">{{ 'LOGIN.USER_AGREEMENT' | translate }}</a>
+                <a class="agreement-link" (click)="showUserAgreement(); $event.preventDefault(); $event.stopPropagation()">{{ 'LOGIN.USER_AGREEMENT' | translate }}</a>
                 <span>{{ 'LOGIN.AGREEMENT_AND' | translate }}</span>
-                <a class="agreement-link" (click)="showPrivacyPolicy(); $event.preventDefault()">{{ 'LOGIN.PRIVACY_POLICY' | translate }}</a>
+                <a class="agreement-link" (click)="showPrivacyPolicy(); $event.preventDefault(); $event.stopPropagation()">{{ 'LOGIN.PRIVACY_POLICY' | translate }}</a>
             </label>
         </div>
     </div>
