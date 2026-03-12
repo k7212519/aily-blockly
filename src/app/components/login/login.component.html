@@ -148,11 +148,4 @@
         </div>
     </div>
 </div>
-<nz-modal [(nzVisible)]="isAgreementModalVisible" [nzTitle]="agreementModalTitle" [nzFooter]="agreementModalFooter"
-    [nzWidth]="560" (nzOnCancel)="handleAgreementModalClose()" nzClassName="agreement-preview-modal sscroll">
-    <ng-template #agreementModalFooter>
-        <button nz-button nzType="primary" (click)="handleAgreementModalClose()">{{ 'LOGIN.MODAL_CLOSE' | translate }}</button>
-    </ng-template>
-    <div *nzModalContent class="agreement-modal-content" [innerHTML]="agreementModalContent"></div>
-</nz-modal>
 }

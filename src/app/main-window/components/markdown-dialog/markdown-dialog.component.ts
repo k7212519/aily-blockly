@@ -32,6 +32,9 @@ export class MarkdownDialogComponent implements OnInit {
   ) {
     this.title = data.title || '';
     this.docUrl = data.docUrl || '';
+    if (data.buttons?.length) {
+      this.buttons = data.buttons;
+    }
   }
 
   ngOnInit() {

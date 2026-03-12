@@ -1,14 +1,14 @@
 import { CommonModule } from '@angular/common';
 import { Component, ViewChild, OnDestroy, ChangeDetectorRef } from '@angular/core';
-import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzCheckboxModule } from 'ng-zorro-antd/checkbox';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzInputModule } from 'ng-zorro-antd/input';
-import { NzModalModule } from 'ng-zorro-antd/modal';
+import { NzModalModule, NzModalService } from 'ng-zorro-antd/modal';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { MarkdownDialogComponent } from '../../main-window/components/markdown-dialog/markdown-dialog.component';
 import { Subject, takeUntil, interval, Subscription } from 'rxjs';
 import { AuthService } from '../../services/auth.service';
 import { ConfigService } from '../../services/config.service';
@@ -59,9 +59,6 @@ export class LoginComponent implements OnDestroy {
 
   // 用户协议与隐私协议
   agreedToTerms = false;
-  isAgreementModalVisible = false;
-  agreementModalTitle = '';
-  agreementModalContent: SafeHtml = '';
 
   // 协议文档路径：中文(zh_cn/zh_hk)用 zh 版本，其他语言用英文
   private getUserAgreementUrl(): string {
@@ -93,8 +90,8 @@ export class LoginComponent implements OnDestroy {
     private electronService: ElectronService,
     private translate: TranslateService,
     private http: HttpClient,
-    private sanitizer: DomSanitizer,
     private cdr: ChangeDetectorRef,
+    private modal: NzModalService,
   ) {
     // 监听登录状态，控制组件显隐
     this.authService.isLoggedIn$
@@ -368,16 +365,21 @@ export class LoginComponent implements OnDestroy {
    * 弹窗预览用户协议
    */
   showUserAgreement(): void {
-    this.agreementModalTitle = this.translate.instant('LOGIN.USER_AGREEMENT');
-    this.http.get(this.getUserAgreementUrl(), { responseType: 'text' }).subscribe({
-      next: (content) => {
-        this.agreementModalContent = this.sanitizer.bypassSecurityTrustHtml(this.parseMarkdown(content));
-        this.isAgreementModalVisible = true;
-        this.cdr.detectChanges();
+    this.modal.create({
+      nzTitle: null,
+      nzFooter: null,
+      nzClosable: false,
+      nzBodyStyle: { padding: '0' },
+      nzContent: MarkdownDialogComponent,
+      nzWidth: '500px',
+      nzData: {
+        title: this.translate.instant('LOGIN.USER_AGREEMENT'),
+        docUrl: this.getUserAgreementUrl(),
+        buttons: [
+          { text: 'LOGIN.MODAL_CLOSE', type: 'default', action: 'close' }
+        ]
       },
-      error: () => {
-        this.message.error(this.translate.instant('LOGIN.AGREEMENT_LOAD_FAILED') || '加载用户协议失败');
-      },
+      nzMaskClosable: false,
     });
   }
 
@@ -385,50 +387,20 @@ export class LoginComponent implements OnDestroy {
    * 弹窗预览隐私政策
    */
   showPrivacyPolicy(): void {
-    this.agreementModalTitle = this.translate.instant('LOGIN.PRIVACY_POLICY');
-    this.http.get(this.getPrivacyPolicyUrl(), { responseType: 'text' }).subscribe({
-      next: (content) => {
-        this.agreementModalContent = this.sanitizer.bypassSecurityTrustHtml(this.parseMarkdown(content));
-        this.isAgreementModalVisible = true;
-        this.cdr.detectChanges();
+    this.modal.create({
+      nzTitle: null,
+      nzFooter: null,
+      nzClosable: false,
+      nzBodyStyle: { padding: '0' },
+      nzWidth: '500px',
+      nzContent: MarkdownDialogComponent,
+      nzData: {
+        title: this.translate.instant('LOGIN.PRIVACY_POLICY'),
+        docUrl: this.getPrivacyPolicyUrl(),
+        buttons: [{ text: 'LOGIN.MODAL_CLOSE', type: 'default', action: 'close' }],
       },
-      error: () => {
-        this.message.error(this.translate.instant('LOGIN.PRIVACY_LOAD_FAILED') || '加载隐私政策失败');
-      },
+      nzMaskClosable: false,
     });
-  }
-
-  /**
-   * 关闭协议弹窗
-   */
-  handleAgreementModalClose(): void {
-    this.isAgreementModalVisible = false;
-    this.agreementModalContent = '';
-  }
-
-  /**
-   * 将 Markdown 解析为 HTML
-   */
-  private parseMarkdown(markdown: string): string {
-    return (
-      markdown
-        // 处理标题
-        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-        // 处理粗体
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        // 处理分割线
-        .replace(/^---$/gm, '<hr>')
-        // 处理无序列表
-        .replace(/^- (.+)$/gm, '<li>$1</li>')
-        .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
-        // 处理段落
-        .replace(/^(?!<[hul]|<li|<hr)(.+)$/gm, '<p>$1</p>')
-        // 清理多余空行
-        .replace(/<p><\/p>/g, '')
-        .replace(/\n\n+/g, '\n')
-    );
   }
 
   /**
