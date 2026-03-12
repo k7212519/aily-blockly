@@ -503,7 +503,12 @@
         "ENTER_CREDENTIALS": "請輸入用戶名和密碼",
         "LOGIN_SUCCESS": "登錄成功",
         "LOGIN_FAILED": "登錄失敗",
-        "LOGIN_NETWORK_ERROR": "登錄失敗，請檢查網絡連接"
+        "LOGIN_NETWORK_ERROR": "登錄失敗，請檢查網絡連接",
+        "AGREEMENT_PREFIX": "我已閱讀並同意",
+        "USER_AGREEMENT": "用戶協議",
+        "AGREEMENT_AND": "和",
+        "PRIVACY_POLICY": "隱私政策",
+        "AGREEMENT_REQUIRED": "請先勾選同意用戶協議和隱私政策"
     },
     "COMMON": {
         "FEATURE_COMING_SOON": "功能即將上線"

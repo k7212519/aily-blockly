@@ -562,7 +562,12 @@
         "ENTER_CREDENTIALS": "Please enter username and password",
         "LOGIN_SUCCESS": "Login successful",
         "LOGIN_FAILED": "Login failed",
-        "LOGIN_NETWORK_ERROR": "Login failed, please check network connection"
+        "LOGIN_NETWORK_ERROR": "Login failed, please check network connection",
+        "AGREEMENT_PREFIX": "I have read and agree to the",
+        "USER_AGREEMENT": "User Agreement",
+        "AGREEMENT_AND": "and",
+        "PRIVACY_POLICY": "Privacy Policy",
+        "AGREEMENT_REQUIRED": "Please agree to the User Agreement and Privacy Policy first"
     },
     "COMMON": {
         "FEATURE_COMING_SOON": "Feature coming soon",

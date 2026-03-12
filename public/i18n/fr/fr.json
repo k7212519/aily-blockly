@@ -503,7 +503,12 @@
         "ENTER_CREDENTIALS": "Veuillez entrer le nom d'utilisateur et le mot de passe",
         "LOGIN_SUCCESS": "Connexion réussie",
         "LOGIN_FAILED": "Échec de la connexion",
-        "LOGIN_NETWORK_ERROR": "Échec de la connexion, veuillez vérifier la connexion réseau"
+        "LOGIN_NETWORK_ERROR": "Échec de la connexion, veuillez vérifier la connexion réseau",
+        "AGREEMENT_PREFIX": "J'ai lu et j'accepte les",
+        "USER_AGREEMENT": "Conditions d'utilisation",
+        "AGREEMENT_AND": "et la",
+        "PRIVACY_POLICY": "Politique de confidentialité",
+        "AGREEMENT_REQUIRED": "Veuillez accepter les conditions d'utilisation et la politique de confidentialité"
     },
     "COMMON": {
         "FEATURE_COMING_SOON": "Fonctionnalité bientôt disponible"

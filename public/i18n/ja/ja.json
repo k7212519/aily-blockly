@@ -503,7 +503,12 @@
         "ENTER_CREDENTIALS": "ユーザー名とパスワードを入力してください",
         "LOGIN_SUCCESS": "ログイン成功",
         "LOGIN_FAILED": "ログイン失敗",
-        "LOGIN_NETWORK_ERROR": "ログインに失敗しました。ネットワーク接続を確認してください"
+        "LOGIN_NETWORK_ERROR": "ログインに失敗しました。ネットワーク接続を確認してください",
+        "AGREEMENT_PREFIX": "私は以下を読み、同意します：",
+        "USER_AGREEMENT": "利用規約",
+        "AGREEMENT_AND": "および",
+        "PRIVACY_POLICY": "プライバシーポリシー",
+        "AGREEMENT_REQUIRED": "利用規約とプライバシーポリシーに同意してください"
     },
     "COMMON": {
         "FEATURE_COMING_SOON": "機能は近日公開予定"

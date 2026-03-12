@@ -503,7 +503,12 @@
         "ENTER_CREDENTIALS": "Por favor, digite nome de usuário e senha",
         "LOGIN_SUCCESS": "Login bem-sucedido",
         "LOGIN_FAILED": "Falha no login",
-        "LOGIN_NETWORK_ERROR": "Falha no login, verifique a conexão de rede"
+        "LOGIN_NETWORK_ERROR": "Falha no login, verifique a conexão de rede",
+        "AGREEMENT_PREFIX": "Li e concordo com o",
+        "USER_AGREEMENT": "Acordo do Usuário",
+        "AGREEMENT_AND": "e a",
+        "PRIVACY_POLICY": "Política de Privacidade",
+        "AGREEMENT_REQUIRED": "Por favor, concorde com o Acordo do Usuário e a Política de Privacidade primeiro"
     },
     "COMMON": {
         "FEATURE_COMING_SOON": "Recurso em breve"

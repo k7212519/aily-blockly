@@ -503,7 +503,12 @@
         "ENTER_CREDENTIALS": "Por favor ingrese nombre de usuario y contraseña",
         "LOGIN_SUCCESS": "Inicio de sesión exitoso",
         "LOGIN_FAILED": "Error en el inicio de sesión",
-        "LOGIN_NETWORK_ERROR": "Error en el inicio de sesión, verifique la conexión de red"
+        "LOGIN_NETWORK_ERROR": "Error en el inicio de sesión, verifique la conexión de red",
+        "AGREEMENT_PREFIX": "He leído y acepto el",
+        "USER_AGREEMENT": "Acuerdo de Usuario",
+        "AGREEMENT_AND": "y la",
+        "PRIVACY_POLICY": "Política de Privacidad",
+        "AGREEMENT_REQUIRED": "Por favor, acepte el Acuerdo de Usuario y la Política de Privacidad primero"
     },
     "COMMON": {
         "FEATURE_COMING_SOON": "Función próximamente"

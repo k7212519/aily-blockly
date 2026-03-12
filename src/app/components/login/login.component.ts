@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, ViewChild, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NzButtonModule } from 'ng-zorro-antd/button';
+import { NzCheckboxModule } from 'ng-zorro-antd/checkbox';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzInputModule } from 'ng-zorro-antd/input';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -16,6 +17,7 @@ import { AltchaComponent } from './altcha/altcha.component';
   selector: 'app-login',
   imports: [
     NzButtonModule,
+    NzCheckboxModule,
     CommonModule,
     FormsModule,
     NzIconModule,
@@ -44,11 +46,16 @@ export class LoginComponent implements OnDestroy {
   // 微信扫码登录相关属性
   wechatQrcodeUrl: string | null = null;
   wechatTicket: string | null = null;
-  wechatStatus: 'loading' | 'pending' | 'confirmed' | 'expired' | 'error' = 'loading';
+  wechatStatus: 'loading' | 'pending' | 'confirmed' | 'expired' | 'error' | 'pending_agreement' = 'loading';
   wechatStatusMessage: string = '';
   wechatCheckSubscription: Subscription | null = null;
   wechatQrcodeCountdown = 60; // 二维码 60s 倒计时
   private wechatQrcodeTimer: ReturnType<typeof setInterval> | null = null;
+
+  // 用户协议与隐私协议
+  agreedToTerms = false;
+  userAgreementUrl = 'https://aily.pro/user-agreement';
+  privacyPolicyUrl = 'https://aily.pro/privacy-policy';
 
   // 邮箱登录相关
   inputEmail = '';
@@ -78,9 +85,14 @@ export class LoginComponent implements OnDestroy {
   mode = '';
   select(mode) {
     this.mode = mode;
-    // 当选择微信登录时，初始化二维码
+    // 当选择微信登录时，若已勾选协议则初始化二维码
     if (mode === 'wechat') {
-      this.initWeChatLogin();
+      if (this.agreedToTerms) {
+        this.initWeChatLogin();
+      } else {
+        this.wechatStatus = 'pending_agreement';
+        this.wechatQrcodeUrl = null;
+      }
     } else {
       // 切换到其他登录方式时，清理微信登录状态
       this.cleanupWeChatLogin();
@@ -251,6 +263,10 @@ export class LoginComponent implements OnDestroy {
    * 刷新微信二维码
    */
   refreshWeChatQrcode() {
+    if (!this.agreedToTerms) {
+      this.message.warning(this.translate.instant('LOGIN.AGREEMENT_REQUIRED'));
+      return;
+    }
     this.cleanupWeChatLogin();
     this.initWeChatLogin();
   }
@@ -323,6 +339,49 @@ export class LoginComponent implements OnDestroy {
   }
 
   /**
+   * 打开协议静态页面
+   */
+  openAgreementUrl(url: string): void {
+    if (this.electronService.isElectron) {
+      this.electronService.openUrl(url);
+    } else {
+      window.open(url, '_blank');
+    }
+  }
+
+  /**
+   * 检查是否已同意协议
+   */
+  private checkAgreement(): boolean {
+    if (!this.agreedToTerms) {
+      this.message.warning(this.translate.instant('LOGIN.AGREEMENT_REQUIRED'));
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * 协议勾选状态变化时：
+   * - 勾选且为微信模式：初始化二维码
+   * - 取消勾选且为微信模式：隐藏二维码，显示协议提示
+   */
+  onAgreementChange(): void {
+    if (this.mode !== 'wechat') {
+      return;
+    }
+    if (this.agreedToTerms) {
+      if (!this.wechatQrcodeUrl && this.wechatStatus !== 'loading') {
+        this.initWeChatLogin();
+      }
+    } else {
+      // 取消勾选：清理微信登录状态，显示协议提示
+      this.cleanupWeChatLogin();
+      this.wechatStatus = 'pending_agreement';
+      this.wechatQrcodeUrl = null;
+    }
+  }
+
+  /**
    * 执行 altcha 隐式验证
    * @returns Promise<string | null> 返回验证 token，验证失败返回 null
    */
@@ -349,6 +408,9 @@ export class LoginComponent implements OnDestroy {
    * 执行实际的GitHub登录流程
    */
   async loginByGithub() {
+    if (!this.checkAgreement()) {
+      return;
+    }
     try {
       const altchaToken = await this.verifyAltcha();
       if (altchaToken === null) {
@@ -438,6 +500,9 @@ export class LoginComponent implements OnDestroy {
    * 发送邮箱验证码
    */
   async sendVerificationCode() {
+    if (!this.checkAgreement()) {
+      return;
+    }
     if (!this.inputEmail) {
       this.message.warning(this.translate.instant('LOGIN.ENTER_EMAIL'));
       return;
@@ -500,6 +565,9 @@ export class LoginComponent implements OnDestroy {
    * 邮箱验证码登录
    */
   async loginByEmail() {
+    if (!this.checkAgreement()) {
+      return;
+    }
     if (!this.inputEmail) {
       this.message.warning(this.translate.instant('LOGIN.ENTER_EMAIL'));
       return;

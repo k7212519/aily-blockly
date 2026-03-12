@@ -562,7 +562,12 @@
         "ENTER_CREDENTIALS": "请输入用户名和密码",
         "LOGIN_SUCCESS": "登录成功",
         "LOGIN_FAILED": "登录失败",
-        "LOGIN_NETWORK_ERROR": "登录失败，请检查网络连接"
+        "LOGIN_NETWORK_ERROR": "登录失败，请检查网络连接",
+        "AGREEMENT_PREFIX": "我已阅读并同意",
+        "USER_AGREEMENT": "用户协议",
+        "AGREEMENT_AND": "和",
+        "PRIVACY_POLICY": "隐私政策",
+        "AGREEMENT_REQUIRED": "请先勾选同意用户协议和隐私政策"
     },
     "COMMON": {
         "FEATURE_COMING_SOON": "功能即将上线",
