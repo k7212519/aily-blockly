@@ -367,6 +367,13 @@
         "MODE_QA_FULL": "问答模式",
         "STOP_CURRENT_SESSION_FIRST": "请先停止当前会话，再新建",
         "NO_HISTORY_SESSION": "没有历史会话记录",
+        "MERMAID_SAVE_ARCH": "保存为框架图",
+        "MERMAID_ARCH_OVERWRITE_TITLE": "覆盖确认",
+        "MERMAID_ARCH_OVERWRITE_CONTENT": "项目目录下已存在框架图文件，是否覆盖？",
+        "MERMAID_ARCH_CONFIRM": "确认",
+        "MERMAID_ARCH_CANCEL": "取消",
+        "MERMAID_COPY_FAILED": "复制失败",
+        "MERMAID_SAVE_FAILED": "保存失败",
         "ONBOARDING": {
             "STEP1_TITLE": "输入框",
             "STEP1_DESC": "在这里输入你想问的问题或需要AI帮助完成的任务，按 Enter 发送，Ctrl+Enter 换行",

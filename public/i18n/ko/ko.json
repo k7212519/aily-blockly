@@ -314,6 +314,13 @@
         "MODE_QA_FULL": "Q&A 모드",
         "STOP_CURRENT_SESSION_FIRST": "새 세션을 생성하기 전에 먼저 현재 세션을 중지하세요",
         "NO_HISTORY_SESSION": "기록된 대화 기록이 없습니다",
+        "MERMAID_SAVE_ARCH": "아키텍처 다이어그램으로 저장",
+        "MERMAID_ARCH_OVERWRITE_TITLE": "덮어쓰기 확인",
+        "MERMAID_ARCH_OVERWRITE_CONTENT": "프로젝트 디렉토리에 아키텍처 다이어그램 파일이 이미 있습니다. 덮어쓰시겠습니까?",
+        "MERMAID_ARCH_CONFIRM": "확인",
+        "MERMAID_ARCH_CANCEL": "취소",
+        "MERMAID_COPY_FAILED": "복사 실패",
+        "MERMAID_SAVE_FAILED": "저장 실패",
         "ONBOARDING": {
             "STEP1_TITLE": "입력 상자",
             "STEP1_DESC": "여기에 질문이나 AI가 도와줄 작업을 입력하세요. Enter로 전송, Ctrl+Enter로 줄바꿈",

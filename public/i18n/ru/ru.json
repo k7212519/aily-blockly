@@ -318,6 +318,13 @@
         "MODE_QA_FULL": "Режим вопрос-ответ",
         "STOP_CURRENT_SESSION_FIRST": "Пожалуйста, остановите текущий сеанс перед созданием нового",
         "NO_HISTORY_SESSION": "Нет записей сессий в истории",
+        "MERMAID_SAVE_ARCH": "Сохранить как диаграмму архитектуры",
+        "MERMAID_ARCH_OVERWRITE_TITLE": "Подтверждение перезаписи",
+        "MERMAID_ARCH_OVERWRITE_CONTENT": "Файл диаграммы архитектуры уже существует в директории проекта. Перезаписать?",
+        "MERMAID_ARCH_CONFIRM": "Подтвердить",
+        "MERMAID_ARCH_CANCEL": "Отмена",
+        "MERMAID_COPY_FAILED": "Ошибка копирования",
+        "MERMAID_SAVE_FAILED": "Ошибка сохранения",
         "ONBOARDING": {
             "STEP1_TITLE": "Поле ввода",
             "STEP1_DESC": "Введите здесь ваши вопросы или задачи для помощи ИИ. Нажмите Enter для отправки, Ctrl+Enter для новой строки",

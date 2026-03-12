@@ -318,6 +318,13 @@
         "MODE_QA_FULL": "Q&Aモード",
         "STOP_CURRENT_SESSION_FIRST": "新しいセッションを作成する前に、現在のセッションを停止してください",
         "NO_HISTORY_SESSION": "履歴セッション記録がありません",
+        "MERMAID_SAVE_ARCH": "構成図として保存",
+        "MERMAID_ARCH_OVERWRITE_TITLE": "上書き確認",
+        "MERMAID_ARCH_OVERWRITE_CONTENT": "プロジェクトディレクトリに構成図ファイルが既に存在します。上書きしますか？",
+        "MERMAID_ARCH_CONFIRM": "確認",
+        "MERMAID_ARCH_CANCEL": "キャンセル",
+        "MERMAID_COPY_FAILED": "コピーに失敗しました",
+        "MERMAID_SAVE_FAILED": "保存に失敗しました",
         "ONBOARDING": {
             "STEP1_TITLE": "入力ボックス",
             "STEP1_DESC": "ここに質問やAIに手伝ってもらいたいタスクを入力してください。Enterで送信、Ctrl+Enterで改行",

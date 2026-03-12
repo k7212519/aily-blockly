@@ -318,6 +318,13 @@
         "MODE_QA_FULL": "Mode Q&R",
         "STOP_CURRENT_SESSION_FIRST": "Veuillez d'abord arrêter la session en cours avant d'en créer une nouvelle",
         "NO_HISTORY_SESSION": "Aucun enregistrement de session historique",
+        "MERMAID_SAVE_ARCH": "Enregistrer comme diagramme d'architecture",
+        "MERMAID_ARCH_OVERWRITE_TITLE": "Confirmer l'écrasement",
+        "MERMAID_ARCH_OVERWRITE_CONTENT": "Le fichier du diagramme d'architecture existe déjà dans le répertoire du projet. Écraser ?",
+        "MERMAID_ARCH_CONFIRM": "Confirmer",
+        "MERMAID_ARCH_CANCEL": "Annuler",
+        "MERMAID_COPY_FAILED": "Échec de la copie",
+        "MERMAID_SAVE_FAILED": "Échec de l'enregistrement",
         "ONBOARDING": {
             "STEP1_TITLE": "Zone de saisie",
             "STEP1_DESC": "Tapez ici vos questions ou tâches pour l'assistance IA. Appuyez sur Entrée pour envoyer, Ctrl+Entrée pour nouvelle ligne",
