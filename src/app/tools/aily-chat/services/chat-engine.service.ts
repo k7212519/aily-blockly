@@ -132,6 +132,7 @@ export class ChatEngineService {
   get isWaiting() { return this._isWaiting; }
   set isWaiting(value: boolean) {
     this._isWaiting = value;
+    this.chatService.isWaiting = value;
     AilyHost.get().blockly.aiWaiting = value;
     if (!value) {
       this.aiWriting = false;
@@ -175,6 +176,7 @@ export class ChatEngineService {
    */
   init(chatTextareaRef: ElementRef | null): void {
     this.chatTextareaRef = chatTextareaRef;
+    this.chatService.isWaiting = this._isWaiting;
 
     this.prjPath = AilyHost.get().project.currentProjectPath === AilyHost.get().project.projectRootPath
       ? '' : AilyHost.get().project.currentProjectPath;
@@ -187,6 +189,7 @@ export class ChatEngineService {
    * 引擎销毁 — 由 Component 的 ngOnDestroy 调用
    */
   destroy(): void {
+    this.chatService.isWaiting = false;
     this.session.saveCurrentSession();
     this.chatHistoryService.flushAll();
 
@@ -470,14 +473,20 @@ Do not create non-existent boards and libraries.
     } else {
       this.inputValue = text;
     }
-    setTimeout(() => {
+    const doSend = async () => {
       if (this.chatTextareaRef?.nativeElement) {
         const textarea = this.chatTextareaRef.nativeElement;
         textarea.focus();
         textarea.setSelectionRange(textarea.value.length, textarea.value.length);
       }
-      if (options?.autoSend) { this.send('user', this.inputValue, true); }
-    }, 100);
+      if (options?.autoSend) {
+        if (options?.newChatFirst && this.sessionId) {
+          await this.newChat();
+        }
+        this.send('user', this.inputValue, true);
+      }
+    };
+    setTimeout(() => doSend(), 100);
   }
 
   // ==================== 外观方法（转发到 helper） ====================
