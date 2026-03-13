@@ -230,6 +230,16 @@ export class IframeComponent implements OnInit, OnDestroy {
           generateGraphData: () => {
             this.sendToMain('generate-graph-data');
           },
+          regenerateGraphData: () => {
+            this.onRegenerate();
+          },
+          generateGraphCode: () => {
+            this.onSyncToCode();
+          },
+          saveGraphData: (data) => {
+            this.iframeData = data;
+            this.sendToMain('save-graph-data', this.iframeData);
+          },
           // 子页面调用此方法通过 IPC 实时获取连线图 payload（type: get-graph-data）
           getGraphData: () => {
             if (!this.electronService.isElectron || !window['ipcRenderer']) {
@@ -528,10 +538,6 @@ export class IframeComponent implements OnInit, OnDestroy {
       text: '正在重新生成连线图...',
       state: 'doing',
       showProgress: false,
-    });
-
-    this.callRemote('clearCache').catch(() => {
-      // 子页面未暴露 clearCache 时静默忽略
     });
 
     this.sendToMain('regenerate-graph-data');
