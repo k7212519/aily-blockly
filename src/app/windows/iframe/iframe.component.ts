@@ -525,7 +525,7 @@ export class IframeComponent implements OnInit, OnDestroy {
       showProgress: false,
     });
 
-    this.sendToMain('regenerate-graph-data');
+    this.sendToMain('generate-graph-data');
   }
 
   /**
