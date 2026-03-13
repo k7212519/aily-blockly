@@ -95,7 +95,7 @@ const AILY_TYPES = [
     @if (isType('aily-mermaid') || isMermaidStd) {
       <div class="aily-mermaid-wrapper" (click)="openMermaidFullscreen()" title="点击全屏查看">
         <div class="aily-mermaid-toolbar" (click)="$event.stopPropagation()">
-          <button type="button" class="aily-mermaid-toolbar-btn" [class.success]="mermaidCopySuccess"
+          <!-- <button type="button" class="aily-mermaid-toolbar-btn" [class.success]="mermaidCopySuccess"
             (click)="copyMermaidCode($event)"
             nz-tooltip [nzTooltipTitle]="'MENU.FILE_COPY' | translate" nzTooltipPlacement="top">
             @if (mermaidCopySuccess) {
@@ -103,7 +103,7 @@ const AILY_TYPES = [
             } @else {
               <i class="fa-regular fa-copy"></i>
             }
-          </button>
+          </button> -->
           @if (archNeedsOverwriteConfirm) {
             <button type="button" class="aily-mermaid-toolbar-btn" [class.success]="mermaidDownloadSuccess"
               nz-popconfirm
@@ -168,7 +168,7 @@ const AILY_TYPES = [
     }
     .aily-mermaid-toolbar {
       position: absolute;
-      top: 8px;
+      top: 4px;
       right: 12px;
       display: flex;
       gap: 3px;
@@ -178,6 +178,7 @@ const AILY_TYPES = [
       border: 1px solid #767676;
       border-radius: 8px;
       padding: 3px;
+      background: #333333;
     }
     .aily-mermaid-wrapper:hover .aily-mermaid-toolbar {
       opacity: 1;
