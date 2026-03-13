@@ -75,16 +75,12 @@ export class IframeComponent implements OnInit, OnDestroy {
   showEmptyState = false;
   // Loading 状态显示控制
   isLoading = true;
-  // 文件更新提示
-  hasUpdate = false;
   /** 是否为 component-viewer 窗口 */
   isComponentViewerWindow = false;
 
   // ===== 连线图自动生成相关 =====
   /** 是否为连线图窗口 */
   isConnectionGraphWindow = false;
-  /** 是否正在生成中 */
-  isGenerating = false;
   /** connection-graph IPC 统一监听清理函数 */
   private connectionGraphIpcCleanup: (() => void) | null = null;
 
@@ -381,7 +377,6 @@ export class IframeComponent implements OnInit, OnDestroy {
         }
         case 'generate-graph-data':
           this.ngZone.run(() => {
-            this.isGenerating = true;
             this.noticeService.update({
               title: 'AI生成中',
               text: '正在准备生成连线图...',
@@ -457,15 +452,8 @@ export class IframeComponent implements OnInit, OnDestroy {
     }
   }
 
-  /**
-   * 关闭更新提示（用户选择不刷新）
-   */
-  dismissUpdate(): void {
-    this.hasUpdate = false;
-  }
-
   // =====================================================
-  // 连线图自动生成 - 进度处理 & 操作按钮
+  // 连线图自动生成 - 进度处理
   // =====================================================
 
   /**
@@ -499,7 +487,6 @@ export class IframeComponent implements OnInit, OnDestroy {
         });
         break;
       case 'complete':
-        this.isGenerating = false;
         this.noticeService.update({
           title: 'AI生成完成',
           text: '连线图生成完成',
@@ -508,7 +495,6 @@ export class IframeComponent implements OnInit, OnDestroy {
         });
         break;
       case 'error':
-        this.isGenerating = false;
         this.noticeService.update({
           title: 'AI生成失败',
           text: event.content || '生成失败',
@@ -532,7 +518,6 @@ export class IframeComponent implements OnInit, OnDestroy {
    * 操作按钮: 重新生成
    */
   onRegenerate(): void {
-    this.isGenerating = true;
     this.noticeService.update({
       title: 'AI生成中',
       text: '正在重新生成连线图...',
