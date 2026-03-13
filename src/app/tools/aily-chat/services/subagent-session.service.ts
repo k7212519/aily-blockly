@@ -213,12 +213,16 @@ export class SubagentSessionService implements OnDestroy {
    * 清理所有 subagent 会话（主会话重置时调用）
    */
   cleanupAll(): void {
+    // 先标记所有活跃工具为已取消（确保正在执行中的 chatWithSubagent 循环能检测到）
+    for (const toolId of this.activeReaders.keys()) {
+      this.abortedToolIds.add(toolId);
+    }
+
     // 取消所有正在执行的 reader
     for (const [toolId, reader] of this.activeReaders) {
       reader.cancel().catch(() => {});
     }
     this.activeReaders.clear();
-    this.abortedToolIds.clear();
 
     // 关闭服务端会话
     for (const [_, session] of this.sessions) {
@@ -226,7 +230,8 @@ export class SubagentSessionService implements OnDestroy {
     }
     this.sessions.clear();
 
-    // console.log('[SubagentSession] 已清理所有会话');
+    // 延迟清理 abortedToolIds（给正在执行的工具一点时间检测到取消标记）
+    setTimeout(() => this.abortedToolIds.clear(), 2000);
   }
 
   /**
@@ -631,11 +636,8 @@ export class SubagentSessionService implements OnDestroy {
     // 已注册工具：通过 ToolRegistry 统一调度
     if (ToolRegistry.has(toolName)) {
       const ctx = {
-        projectService: AilyHost.get().project,
-        connectionGraphService: AilyHost.get().connectionGraph,
+        host: AilyHost.get(),
         securityContext: createSecurityContext(AilyHost.get().project.currentProjectPath || ''),
-        fetchToolService: this.fetchToolService,
-        configService: AilyHost.get().config,
       };
       return ToolRegistry.execute(toolName, args, ctx);
     }

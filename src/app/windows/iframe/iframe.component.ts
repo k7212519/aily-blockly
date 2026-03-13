@@ -118,12 +118,12 @@ export class IframeComponent implements OnInit, OnDestroy {
         }
 
         // 检测生成模式
-        const mode = params['mode'];
-        if (mode === 'generating') {
-          this.isGenerating = true;
-          this.safeUpdateNotice('正在准备生成连线图...', 'doing');
-          this.startProgressIpcListener();
-        }
+        // const mode = params['mode'];
+        // if (mode === 'generating') {
+        //   this.isGenerating = true;
+        //   this.safeUpdateNotice('正在准备生成连线图...', 'doing');
+        //   this.startProgressIpcListener();
+        // }
 
         const filePath = params['filePath'];
         if (filePath && this.electronService.isElectron) {

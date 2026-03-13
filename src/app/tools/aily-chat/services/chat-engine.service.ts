@@ -101,6 +101,9 @@ export class ChatEngineService {
   _pendingModelSwitch: ModelConfig | null = null;
   _pendingModeSwitch: string | null = null;
 
+  /** autoSend 消息在 sessionId 未就绪时的暂存区，startSession 完成后自动冲刷 */
+  private _pendingAutoSendText: string | null = null;
+
   // ==================== 订阅 ====================
   messageSubscription: any;
   private textMessageSubscription: Subscription;
@@ -111,6 +114,7 @@ export class ChatEngineService {
   private configChangedSubscription: Subscription;
   private blockSelectionSubscription: Subscription;
   private subagentProgressSubscription: Subscription;
+  private uiChatMessageSubscription: Subscription;
   private taskActionHandler: ((event: Event) => void) | null = null;
 
   // ==================== 外部引用 ====================
@@ -201,12 +205,22 @@ export class ChatEngineService {
   // ==================== 订阅管理 ====================
 
   private setupSubscriptions(): void {
-    // 订阅外部文本消息
+    // 订阅外部文本消息（ChatService 内部 Subject）
     this.textMessageSubscription = this.chatService.getTextMessages().subscribe(
       message => {
         this.receiveTextFromExternal(message.text, message.options);
       }
     );
+
+    // 订阅通过 UiService 从外部发来的聊天消息（通过 AilyHost 抽象层解耦）
+    const uiChatMessage$ = AilyHost.get().ui?.chatMessage$;
+    if (uiChatMessage$) {
+      this.uiChatMessageSubscription = uiChatMessage$.subscribe(
+        (message: any) => {
+          this.receiveTextFromExternal(message.text, message.options);
+        }
+      );
+    }
 
     AilyHost.get().authFull?.initializeAuth().then(() => {
       AilyHost.get().authFull?.userInfo$.subscribe(userInfo => {
@@ -293,6 +307,13 @@ export class ChatEngineService {
           this.session.startSession().then(() => {
             this.session.getHistory();
             this.checkFirstUsage();
+            // 冲刷因 sessionId 未就绪而暂存的 autoSend 消息
+            if (this._pendingAutoSendText) {
+              const txt = this._pendingAutoSendText;
+              this._pendingAutoSendText = null;
+              this.inputValue = txt;
+              setTimeout(() => this.send('user', txt, true), 50);
+            }
           }).catch(() => {});
         }
 
@@ -344,6 +365,7 @@ export class ChatEngineService {
     if (this.configChangedSubscription) { this.configChangedSubscription.unsubscribe(); this.configChangedSubscription = null; }
     if (this.blockSelectionSubscription) { this.blockSelectionSubscription.unsubscribe(); this.blockSelectionSubscription = null; }
     if (this.subagentProgressSubscription) { this.subagentProgressSubscription.unsubscribe(); this.subagentProgressSubscription = null; }
+    if (this.uiChatMessageSubscription) { this.uiChatMessageSubscription.unsubscribe(); this.uiChatMessageSubscription = null; }
     if (this.taskActionHandler) { document.removeEventListener('aily-task-action', this.taskActionHandler); this.taskActionHandler = null; }
     this.isSessionStarting = false;
     this.mcpInitialized = false;
@@ -465,6 +487,11 @@ Do not create non-existent boards and libraries.
       this.scrollManager.scrollToBottom();
       return;
     }
+    // 当前有对话正在执行时，拦截 autoSend 请求并提示用户
+    if (options?.autoSend && this.isWaiting) {
+      this.message.warning('当前对话正在执行中，请等待完成后再试');
+      return;
+    }
     if (options?.cover === false) {
       this.inputValue = this.inputValue ? this.inputValue + '\n' + text : text;
     } else {
@@ -476,7 +503,16 @@ Do not create non-existent boards and libraries.
         textarea.focus();
         textarea.setSelectionRange(textarea.value.length, textarea.value.length);
       }
-      if (options?.autoSend) { this.send('user', this.inputValue, true); }
+      if (options?.autoSend) {
+        if (this.sessionId) {
+          // sessionId 已就绪，直接发送
+          this.send('user', this.inputValue, true);
+        } else {
+          // sessionId 尚未就绪（startSession 仍在进行 / 未登录）
+          // 暂存文本，等待 startSession 完成后自动冲刷
+          this._pendingAutoSendText = this.inputValue;
+        }
+      }
     }, 100);
   }
 

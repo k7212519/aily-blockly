@@ -215,15 +215,15 @@ export class FloatSiderComponent implements OnInit, OnDestroy {
   }
 
   showCircuit() {
-    this.message.warning(this.translate.instant('COMING SOON'));
-    return;
+    // this.message.warning(this.translate.instant('COMING SOON'));
+    // return;
     if (!this.electronService.isElectron || !this.boardPackagePath) {
       this.message.warning(this.translate.instant('FLOAT_SIDER.NO_PINMAP'));
       return;
     }
 
-    const windowUrl = 'https://tool.aily.pro/connection-graph?type=json&theme=dark';
-    // const windowUrl = 'http://localhost:4201/connection-graph?type=json&theme=dark';
+    // const windowUrl = 'https://tool.aily.pro/connection-graph?type=json&theme=dark';
+    const windowUrl = 'http://localhost:4201/connection-graph?type=json&theme=dark';
 
     // 构建连线图 payload
     const payload = this.connectionGraphService.buildPayload(this.boardPackagePath);
@@ -245,10 +245,11 @@ export class FloatSiderComponent implements OnInit, OnDestroy {
         width: 900,
         height: 700,
       });
-      // 延迟确保子窗口已打开并注册 IPC 监听，再启动生成
-      setTimeout(() => {
-        this.backgroundAgent.generateSchematic();
-      }, 800);
+      // // 延迟确保子窗口已打开并注册 IPC 监听，再启动生成
+      // setTimeout(() => {
+      //   this.backgroundAgent.generateSchematic();
+      // }, 800);
+      this.uiService.openAndSendToChat('生成项目连线图', { autoSend: true });
     }
   }
 }
