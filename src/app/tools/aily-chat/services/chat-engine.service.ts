@@ -136,6 +136,7 @@ export class ChatEngineService {
   get isWaiting() { return this._isWaiting; }
   set isWaiting(value: boolean) {
     this._isWaiting = value;
+    this.chatService.isWaiting = value;
     AilyHost.get().blockly.aiWaiting = value;
     if (!value) {
       this.aiWriting = false;
@@ -179,6 +180,7 @@ export class ChatEngineService {
    */
   init(chatTextareaRef: ElementRef | null): void {
     this.chatTextareaRef = chatTextareaRef;
+    this.chatService.isWaiting = this._isWaiting;
 
     this.prjPath = AilyHost.get().project.currentProjectPath === AilyHost.get().project.projectRootPath
       ? '' : AilyHost.get().project.currentProjectPath;
@@ -191,6 +193,7 @@ export class ChatEngineService {
    * 引擎销毁 — 由 Component 的 ngOnDestroy 调用
    */
   destroy(): void {
+    this.chatService.isWaiting = false;
     this.session.saveCurrentSession();
     this.chatHistoryService.flushAll();
 
