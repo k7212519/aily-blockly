@@ -259,10 +259,8 @@ export class BackgroundAgentService implements OnDestroy {
     if (!this.electronService.isElectron || !window['ipcRenderer']) return;
 
     window['ipcRenderer'].on('iframe-message-connection-graph', (_event: any, payload: { type: string; data?: unknown }) => {
-      if (payload?.type === 'generate-graph-data') {
-        console.log('[BackgroundAgent] 收到重新生成请求');
-        this.generateSchematic();
-      } else if (payload?.type === 'generate-graph-code') {
+      // generate-graph-data 已改由 @schematicAgent 直连路由处理，BackgroundAgent 不再响应
+      if (payload?.type === 'generate-graph-code') {
         console.log('[BackgroundAgent] 收到同步到代码请求');
         this.handleSyncToCodeRequest();
       }

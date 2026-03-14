@@ -2474,9 +2474,8 @@ IMPORTANT: 任务ID为简单的递增数字（1, 2, 3...），请使用正确的
     },
     {
         name: 'validate_schematic',
-        description: `验证并保存接线图。支持 JSON 和 AWS 两种格式输入。
+        description: `验证并保存接线图。
 
-**JSON 格式：** 通过 connection_data 参数传入完整 JSON
 **AWS 格式：** 通过 aws 参数传入 AWS (Aily Wiring Syntax) 语法
 
 **调用时机：** generate_schematic 返回引脚摘要后，你生成连线后调用本工具。
@@ -2485,22 +2484,45 @@ IMPORTANT: 任务ID为简单的递增数字（1, 2, 3...），请使用正确的
 1. **get_context()**：获取当前项目和库的上下文信息，了解当前项目实际使用的开发板和组件
 2. **get_component_catalog(includeBoards: true)**：获取开发板 + 组件的 pinmapId 列表
 3. **generate_schematic(pinmapIds: [...])**：获取引脚摘要和连线规则
-4. **你生成连线**：输出 AWS 格式或 JSON 格式
+4. **你生成连线**：输出 AWS 格式
 5. **validate_schematic**：验证并保存`,
         input_schema: {
             type: 'object',
             properties: {
-                connection_data: {
-                    type: 'object',
-                    description: 'JSON 格式的接线图数据（符合 connection_output.json 格式）。与 aws 参数二选一。'
-                },
                 aws: {
                     type: 'string',
-                    description: 'AWS (Aily Wiring Syntax) 格式的接线描述。与 connection_data 参数二选一。'
+                    description: 'AWS (Aily Wiring Syntax) 格式的接线描述。'
                 }
             },
             required: []
         },
+//         description: `验证并保存接线图。支持 JSON 和 AWS 两种格式输入。
+
+// **JSON 格式：** 通过 connection_data 参数传入完整 JSON
+// **AWS 格式：** 通过 aws 参数传入 AWS (Aily Wiring Syntax) 语法
+
+// **调用时机：** generate_schematic 返回引脚摘要后，你生成连线后调用本工具。
+
+// **推荐流程：**
+// 1. **get_context()**：获取当前项目和库的上下文信息，了解当前项目实际使用的开发板和组件
+// 2. **get_component_catalog(includeBoards: true)**：获取开发板 + 组件的 pinmapId 列表
+// 3. **generate_schematic(pinmapIds: [...])**：获取引脚摘要和连线规则
+// 4. **你生成连线**：输出 AWS 格式或 JSON 格式
+// 5. **validate_schematic**：验证并保存`,
+//         input_schema: {
+//             type: 'object',
+//             properties: {
+//                 connection_data: {
+//                     type: 'object',
+//                     description: 'JSON 格式的接线图数据（符合 connection_output.json 格式）。与 aws 参数二选一。'
+//                 },
+//                 aws: {
+//                     type: 'string',
+//                     description: 'AWS (Aily Wiring Syntax) 格式的接线描述。与 connection_data 参数二选一。'
+//                 }
+//             },
+//             required: []
+//         },
         agents: ["schematicAgent"]
     },
     {
