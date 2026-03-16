@@ -18,6 +18,7 @@ import { XAilyContextViewerComponent } from './x-aily-context-viewer/x-aily-cont
 import { XAilyBlocklyViewerComponent } from './x-aily-blockly-viewer/x-aily-blockly-viewer.component';
 import { XAilyErrorViewerComponent } from './x-aily-error-viewer/x-aily-error-viewer.component';
 import { XAilyTaskActionViewerComponent } from './x-aily-task-action-viewer/x-aily-task-action-viewer.component';
+import { XAilyQuestionViewerComponent } from './x-aily-question-viewer/x-aily-question-viewer.component';
 import { XAilyCodeViewerComponent } from './x-aily-code-viewer/x-aily-code-viewer.component';
 import { XAilyDefaultViewerComponent } from './x-aily-default-viewer/x-aily-default-viewer.component';
 import { NzModalService } from 'ng-zorro-antd/modal';
@@ -34,7 +35,7 @@ import { ChatService } from '../../services/chat.service';
 const AILY_TYPES = [
   'aily-state', 'aily-button', 'aily-board', 'aily-library',
   'aily-think', 'aily-mermaid', 'aily-context', 'aily-blockly',
-  'aily-error', 'aily-task-action',
+  'aily-error', 'aily-task-action', 'aily-question',
 ] as const;
 
 /**
@@ -72,6 +73,7 @@ const AILY_TYPES = [
     XAilyBlocklyViewerComponent,
     XAilyErrorViewerComponent,
     XAilyTaskActionViewerComponent,
+    XAilyQuestionViewerComponent,
     XAilyCodeViewerComponent,
     XAilyDefaultViewerComponent,
   ],
@@ -152,6 +154,9 @@ const AILY_TYPES = [
     }
     @if (isType('aily-task-action') && parsedData) {
       <x-aily-task-action-viewer [data]="parsedData" />
+    }
+    @if (isType('aily-question') && parsedData) {
+      <x-aily-question-viewer [data]="parsedData" [streamStatus]="streamStatus" />
     }
     @if (isRegularCode) {
       <x-aily-code-viewer [children]="children" [block]="block" [lang]="lang" />
