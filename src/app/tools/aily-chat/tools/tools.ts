@@ -169,9 +169,7 @@ export const TOOLS = [
         description: `向用户提出一个或多个问题并等待回答。当你需要用户做出决策、提供额外信息或确认操作时使用此工具。
 工具会暂停对话，在聊天界面显示问题和可选项，等待用户回答后继续。
 
-支持两种模式：
-1. 单问题模式：直接传 question 字符串（向后兼容）
-2. 多问题模式：传 questions 数组，一次收集多个信息
+传入 questions 数组，单问题即长度为 1 的数组。
 
 使用场景：
 - 需要用户在多个方案中做选择（提供 options）
@@ -186,13 +184,9 @@ export const TOOLS = [
         input_schema: {
             type: 'object',
             properties: {
-                question: {
-                    type: 'string',
-                    description: '（单问题模式）要向用户提出的问题'
-                },
                 questions: {
                     type: 'array',
-                    description: '（多问题模式）问题列表，一次向用户提出多个问题',
+                    description: '问题列表（单问题传长度为 1 的数组即可）',
                     items: {
                         type: 'object',
                         properties: {
@@ -215,19 +209,9 @@ export const TOOLS = [
                         },
                         required: ['question']
                     }
-                },
-                choices: {
-                    type: 'array',
-                    items: { type: 'string' },
-                    description: '（单问题模式）可选的选择项列表'
-                },
-                allow_freeform: {
-                    type: 'boolean',
-                    description: '（单问题模式）当提供了 choices 时，是否允许自由输入（默认 false）',
-                    default: false
                 }
             },
-            required: []
+            required: ['questions']
         },
         agents: ["mainAgent", "schematicAgent"]
     },
