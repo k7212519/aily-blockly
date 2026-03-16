@@ -155,8 +155,8 @@ const AILY_TYPES = [
     @if (isType('aily-task-action') && parsedData) {
       <x-aily-task-action-viewer [data]="parsedData" />
     }
-    @if (isType('aily-question') && parsedData) {
-      <x-aily-question-viewer [data]="parsedData" [streamStatus]="streamStatus" />
+    @if (isType('aily-question') && (parsedData || parsedArray)) {
+      <x-aily-question-viewer [data]="parsedData || parsedArray" [streamStatus]="streamStatus" />
     }
     @if (isRegularCode) {
       <x-aily-code-viewer [children]="children" [block]="block" [lang]="lang" />

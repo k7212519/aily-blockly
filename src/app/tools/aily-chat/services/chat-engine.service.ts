@@ -33,7 +33,7 @@ import { AilyHost } from '../core/host';
 import { ToolRegistry } from '../core/tool-registry';
 import { createSecurityContext } from './security.service';
 import { TOOLS } from '../tools/tools';
-import { registerAskUserCallback, unregisterAskUserCallback, AskUserResponse } from '../tools/askUserTool';
+import { registerAskUserCallback, unregisterAskUserCallback, AskUserQuestion, AskUserFullResponse, AskUserAnswer } from '../tools/askUserTool';
 import { cleanupAllTerminalSessions } from '../tools/terminalSessionTool';
 
 import { AILY_CHAT_ONBOARDING_CONFIG } from '../../../configs/onboarding.config';
@@ -107,7 +107,9 @@ export class ChatEngineService {
   private _pendingAutoSendText: string | null = null;
 
   /** ask_user 工具的 Promise resolve 回调（等待用户在聊天界面输入） */
-  _resolveAskUser: ((response: AskUserResponse | undefined) => void) | null = null;
+  _resolveAskUser: ((response: AskUserFullResponse | undefined) => void) | null = null;
+  /** 当前 ask_user 的问题列表（用于事件回调时组装答案） */
+  private _askUserQuestions: AskUserQuestion[] | null = null;
 
   // ==================== 订阅 ====================
   messageSubscription: any;
@@ -191,8 +193,8 @@ export class ChatEngineService {
       ? '' : AilyHost.get().project.currentProjectPath;
     this.prjRootPath = AilyHost.get().project.projectRootPath;
 
-    // 注册 ask_user 回调：在聊天界面显示问题并等待用户回答
-    registerAskUserCallback((question, choices, allowFreeform) => this._handleAskUser(question, choices, allowFreeform));
+    // 注册 ask_user 回调：在聊天界面显示全部问题并等待用户回答
+    registerAskUserCallback((questions) => this._handleAskUser(questions));
 
     this.setupSubscriptions();
   }
@@ -904,37 +906,48 @@ Do not create non-existent boards and libraries.
 
   /**
    * ask_user 工具的 UI 层回调。
-   * 在聊天界面显示问题（含可选项/自由输入），等待用户回答后 resolve。
+   * 在聊天界面显示全部问题，等待用户逐题回答后 resolve 完整结果。
    */
-  private _handleAskUser(
-    question: string,
-    choices?: string[],
-    allowFreeform?: boolean,
-  ): Promise<AskUserResponse | undefined> {
-    return new Promise<AskUserResponse | undefined>((resolve) => {
-      // 构建聊天界面中的问题展示（使用 aily-question 自定义块）
-      const questionData: any = { question, choices: choices || [], allowFreeform: !!allowFreeform };
-      const questionJson = JSON.stringify(questionData).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  private _handleAskUser(questions: AskUserQuestion[]): Promise<AskUserFullResponse | undefined> {
+    return new Promise<AskUserFullResponse | undefined>((resolve) => {
+      this._askUserQuestions = questions;
 
-      // 在聊天消息中显示问题块
+      const questionBlockData = { questions };
       this.msg.appendMessage('aily',
-        `\n\`\`\`aily-question\n${JSON.stringify(questionData, null, 2)}\n\`\`\`\n\n`
+        `\n\`\`\`aily-question\n${JSON.stringify(questionBlockData)}\n\`\`\`\n\n`
       );
 
-      // 保存 resolve 回调，等待用户通过 resolveAskUserResponse() 触发
       this._resolveAskUser = resolve;
+
+      const handler = (e: Event) => {
+        const detail = (e as CustomEvent).detail;
+        if (!detail || !this._resolveAskUser) return;
+        document.removeEventListener('aily-question-answer', handler);
+
+        const resolveRef = this._resolveAskUser;
+        this._resolveAskUser = null;
+        this._askUserQuestions = null;
+        resolveRef(detail as AskUserFullResponse);
+      };
+      document.addEventListener('aily-question-answer', handler);
     });
   }
 
   /**
-   * 用户在聊天界面回答 ask_user 问题后调用此方法。
-   * 由 Component 在用户选择选项或提交自由输入时调用。
+   * 用户在聊天界面回答 ask_user 问题后调用此方法（兼容外部调用）。
    */
   resolveAskUserResponse(answer: string, wasFreeform: boolean): void {
-    if (this._resolveAskUser) {
+    if (this._resolveAskUser && this._askUserQuestions) {
       const resolve = this._resolveAskUser;
       this._resolveAskUser = null;
-      resolve({ answer, wasFreeform });
+
+      const q = this._askUserQuestions[0];
+      const questionKey = q?.question || 'unknown';
+      const ans: AskUserAnswer = wasFreeform
+        ? { selected: [], freeText: answer, skipped: false }
+        : { selected: [answer], freeText: null, skipped: false };
+      this._askUserQuestions = null;
+      resolve({ answers: { [questionKey]: ans } });
     }
   }
 
@@ -945,6 +958,7 @@ Do not create non-existent boards and libraries.
     if (this._resolveAskUser) {
       const resolve = this._resolveAskUser;
       this._resolveAskUser = null;
+      this._askUserQuestions = null;
       resolve(undefined);
     }
   }

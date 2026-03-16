@@ -42,6 +42,11 @@ export interface AskUserAnswer {
   skipped: boolean;
 }
 
+/** 全部问题的回答 */
+export interface AskUserFullResponse {
+  answers: Record<string, AskUserAnswer>;
+}
+
 /** 兼容旧回调的单问题应答 */
 export interface AskUserResponse {
   answer: string;
@@ -52,15 +57,15 @@ export interface AskUserResponse {
 // 全局回调注册
 // ============================
 
-type AskUserCallback = (question: string, choices?: string[], allowFreeform?: boolean) => Promise<AskUserResponse | undefined>;
+type AskUserFullCallback = (questions: AskUserQuestion[]) => Promise<AskUserFullResponse | undefined>;
 
-let _registeredCallback: AskUserCallback | null = null;
+let _registeredCallback: AskUserFullCallback | null = null;
 
 /**
- * 注册用户交互回调。由 UI 层（aily-chat 组件或 ChatEngineService）初始化时调用。
- * 回调负责在聊天界面显示问题和选项，等待用户选择后返回结果。
+ * 注册用户交互回调。由 UI 层（ChatEngineService）初始化时调用。
+ * 回调负责在聊天界面显示全部问题和选项，等待用户逐题回答后返回完整结果。
  */
-export function registerAskUserCallback(cb: AskUserCallback): void {
+export function registerAskUserCallback(cb: AskUserFullCallback): void {
   _registeredCallback = cb;
 }
 
@@ -69,33 +74,6 @@ export function registerAskUserCallback(cb: AskUserCallback): void {
  */
 export function unregisterAskUserCallback(): void {
   _registeredCallback = null;
-}
-
-// ============================
-// 内部辅助：执行单个问题
-// ============================
-
-async function askSingleQuestion(
-  question: string,
-  choices?: string[],
-  allowFreeform?: boolean,
-): Promise<AskUserAnswer> {
-  let response: AskUserResponse | undefined;
-
-  if (_registeredCallback) {
-    response = await _registeredCallback(question, choices, allowFreeform);
-  } else {
-    response = await fallbackPrompt(question, choices, allowFreeform);
-  }
-
-  if (!response || !response.answer) {
-    return { selected: [], freeText: null, skipped: true };
-  }
-
-  if (response.wasFreeform) {
-    return { selected: [], freeText: response.answer, skipped: false };
-  }
-  return { selected: [response.answer], freeText: null, skipped: false };
 }
 
 // ============================
@@ -112,34 +90,30 @@ export async function askUserTool(args: AskUserArgs): Promise<ToolUseResult> {
       };
     }
 
-    const answers: Record<string, AskUserAnswer> = {};
-    let allSkipped = true;
-
-    for (const q of questions) {
-      if (!q.question || typeof q.question !== 'string' || q.question.trim().length === 0) {
-        continue;
-      }
-      // 将 AskUserOption[] 转换为 string[] 供现有回调使用
-      const choiceLabels = q.options?.map(o => {
-        if (o.description) return `${o.label} — ${o.description}`;
-        return o.label;
-      });
-      const allowFreeform = choiceLabels && choiceLabels.length > 0 ? (q.allow_freeform ?? false) : true;
-
-      const answer = await askSingleQuestion(q.question.trim(), choiceLabels, allowFreeform);
-
-      // 如果用户选择了带描述的选项，提取纯 label
-      if (answer.selected.length > 0 && q.options) {
-        answer.selected = answer.selected.map(sel => {
-          const match = q.options!.find(o => `${o.label} — ${o.description}` === sel || o.label === sel);
-          return match ? match.label : sel;
-        });
-      }
-
-      answers[q.question.trim()] = answer;
-      if (!answer.skipped) allSkipped = false;
+    const validQuestions = questions.filter(
+      q => q.question && typeof q.question === 'string' && q.question.trim().length > 0,
+    );
+    if (validQuestions.length === 0) {
+      return { is_error: true, content: '参数错误：无有效问题' };
     }
 
+    let fullResponse: AskUserFullResponse | undefined;
+
+    if (_registeredCallback) {
+      fullResponse = await _registeredCallback(validQuestions);
+    } else {
+      fullResponse = await fallbackPromptAll(validQuestions);
+    }
+
+    if (!fullResponse || Object.keys(fullResponse.answers).length === 0) {
+      return {
+        is_error: false,
+        content: '用户未提供任何回答（全部跳过或取消）。',
+        metadata: { skipped: true },
+      };
+    }
+
+    const allSkipped = Object.values(fullResponse.answers).every(a => a.skipped);
     if (allSkipped) {
       return {
         is_error: false,
@@ -148,10 +122,9 @@ export async function askUserTool(args: AskUserArgs): Promise<ToolUseResult> {
       };
     }
 
-    // 单问题时简化输出格式
-    if (questions.length === 1) {
-      const key = Object.keys(answers)[0];
-      const ans = answers[key];
+    if (validQuestions.length === 1) {
+      const key = Object.keys(fullResponse.answers)[0];
+      const ans = fullResponse.answers[key];
       const answerText = ans.freeText || ans.selected.join(', ');
       return {
         is_error: false,
@@ -162,8 +135,8 @@ export async function askUserTool(args: AskUserArgs): Promise<ToolUseResult> {
 
     return {
       is_error: false,
-      content: JSON.stringify({ answers }, null, 2),
-      metadata: { questionCount: questions.length },
+      content: JSON.stringify({ answers: fullResponse.answers }, null, 2),
+      metadata: { questionCount: validQuestions.length },
     };
   } catch (error: any) {
     return {
@@ -174,51 +147,43 @@ export async function askUserTool(args: AskUserArgs): Promise<ToolUseResult> {
 }
 
 // ============================
-// 降级实现
+// 降级实现（逐题 window.prompt）
 // ============================
 
-async function fallbackPrompt(
-  question: string,
-  choices?: string[],
-  allowFreeform?: boolean,
-): Promise<AskUserResponse | undefined> {
-  if (typeof window === 'undefined') {
-    return undefined;
-  }
+async function fallbackPromptAll(questions: AskUserQuestion[]): Promise<AskUserFullResponse | undefined> {
+  if (typeof window === 'undefined') return undefined;
 
-  if (choices && choices.length > 0 && !allowFreeform) {
-    const choiceText = choices.map((c, i) => `${i + 1}. ${c}`).join('\n');
-    const promptText = `${question}\n\n${choiceText}\n\n请输入选项编号 (1-${choices.length}):`;
+  const answers: Record<string, AskUserAnswer> = {};
+
+  for (const q of questions) {
+    const choiceLabels = q.options?.map(o => o.description ? `${o.label} — ${o.description}` : o.label);
+    const allowFreeform = choiceLabels && choiceLabels.length > 0 ? (q.allow_freeform ?? false) : true;
+
+    let promptText = q.question;
+    if (choiceLabels && choiceLabels.length > 0) {
+      const choiceText = choiceLabels.map((c, i) => `${i + 1}. ${c}`).join('\n');
+      promptText = allowFreeform
+        ? `${q.question}\n\n可选：\n${choiceText}\n\n也可以直接输入:`
+        : `${q.question}\n\n${choiceText}\n\n请输入选项编号 (1-${choiceLabels.length}):`;
+    }
+
     const input = window.prompt(promptText);
-
-    if (input === null) return undefined;
-
-    const idx = parseInt(input.trim(), 10);
-    if (idx >= 1 && idx <= choices.length) {
-      return { answer: choices[idx - 1], wasFreeform: false };
+    if (input === null) {
+      answers[q.question] = { selected: [], freeText: null, skipped: true };
+      continue;
     }
-    return { answer: input.trim(), wasFreeform: true };
+
+    if (choiceLabels && choiceLabels.length > 0) {
+      const idx = parseInt(input.trim(), 10);
+      if (idx >= 1 && idx <= choiceLabels.length) {
+        const label = q.options![idx - 1].label;
+        answers[q.question] = { selected: [label], freeText: null, skipped: false };
+        continue;
+      }
+    }
+
+    answers[q.question] = { selected: [], freeText: input.trim(), skipped: !input.trim() };
   }
 
-  let promptText = question;
-  if (choices && choices.length > 0) {
-    const choiceText = choices.map((c, i) => `${i + 1}. ${c}`).join('\n');
-    promptText = `${question}\n\n可选：\n${choiceText}\n\n也可以直接输入:`;
-  }
-
-  const input = window.prompt(promptText);
-  if (input === null) return undefined;
-
-  if (choices && choices.length > 0) {
-    const idx = parseInt(input.trim(), 10);
-    if (idx >= 1 && idx <= choices.length) {
-      return { answer: choices[idx - 1], wasFreeform: false };
-    }
-    const exactMatch = choices.find(c => c.toLowerCase() === input.trim().toLowerCase());
-    if (exactMatch) {
-      return { answer: exactMatch, wasFreeform: false };
-    }
-  }
-
-  return { answer: input.trim(), wasFreeform: true };
+  return { answers };
 }
