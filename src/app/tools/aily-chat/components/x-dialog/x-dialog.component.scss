@@ -76,6 +76,7 @@
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
   border-top: 1px solid rgba(99, 102, 241, 0.2);
+  user-select: text;
 }
 
 @keyframes ac-spin {

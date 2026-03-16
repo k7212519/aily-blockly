@@ -2556,7 +2556,7 @@ IMPORTANT: 任务ID为简单的递增数字（1, 2, 3...），请使用正确的
         name: 'get_current_schematic',
         description: `读取当前项目已保存的连线图完整内容。
 
-**用于编辑流程：** 用户想修改/添加/删除连线时，先调用本工具获取当前完整 JSON，修改后发给 validate_schematic 保存。
+**用于编辑流程：** 用户想修改/添加/删除连线时，先调用本工具获取当前状态，然后编写新的 AWS 内容调用 validate_schematic 保存。
 
 **典型编辑场景：**
 - “删除 DHT20 的 VCC 连线”
@@ -2564,10 +2564,10 @@ IMPORTANT: 任务ID为简单的递增数字（1, 2, 3...），请使用正确的
 - “再添加一个 LED”
 
 **编辑流程：**
-1. **get_current_schematic()**：获取当前连线图完整 JSON（schematicData）
-2. **修改 schematicData**：加创改删其中的 components 和 connections
+1. **get_current_schematic()**：获取当前连线图数据
+2. **修改连线**：基于当前连线信息编写新的 AWS 格式内容
    - 新增组件时：先调用 generate_schematic 获取新组件引脚信息
-3. **validate_schematic(connection_data: modifiedData)**：验证并保存`,
+3. **validate_schematic(aws: "修改后的AWS内容")**：验证并保存`,
         input_schema: {
             type: 'object',
             properties: {},

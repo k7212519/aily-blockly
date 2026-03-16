@@ -111,7 +111,7 @@ export class XDialogComponent implements OnChanges, AfterViewChecked {
   }
 
   ngAfterViewChecked(): void {
-    if (this.shouldScrollSubagent && this.subagentBodyRef?.nativeElement) {
+    if ((this.shouldScrollSubagent || this.doing) && this.subagentBodyRef?.nativeElement) {
       const el = this.subagentBodyRef.nativeElement;
       el.scrollTop = el.scrollHeight;
       this.shouldScrollSubagent = false;

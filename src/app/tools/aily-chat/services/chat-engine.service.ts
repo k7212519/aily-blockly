@@ -276,6 +276,8 @@ export class ChatEngineService {
             this.msg.appendMessage('aily', `\n\n> ❌ ${event.content}\n\n`, agentSource);
             break;
         }
+        // 子Agent内容更新后，驱动外部消息容器也滚动到底部
+        this.scrollManager.scrollToBottom();
       });
 
     // 订阅项目路径变化
@@ -571,6 +573,7 @@ Do not create non-existent boards and libraries.
         const agentText = atMatch[2].trim();
         const availableAgents = SubagentSessionService.getAvailableAgents();
         if (availableAgents.includes(targetAgent) && agentText) {
+          this.isWaiting = true;
           this.msg.appendMessage('user', text);
           this.msg.appendMessage('aily', '[thinking...]', targetAgent);
           if (clear) { this.inputValue = ''; }
