@@ -27,7 +27,6 @@ import {
   ContextBudgetService,
   TiktokenService,
   createSecurityContext,
-  ChatService,
   TOOLS,
   ToolUseResult,
   // 连线图工具
@@ -259,7 +258,15 @@ export class BackgroundAgentService implements OnDestroy {
     if (!this.electronService.isElectron || !window['ipcRenderer']) return;
 
     window['ipcRenderer'].on('iframe-message-connection-graph', (_event: any, payload: { type: string; data?: unknown }) => {
-      // generate-graph-data 已改由 @schematicAgent 直连路由处理，BackgroundAgent 不再响应
+      // send-to-chat：子窗口发送文本到 aily-chat
+      if (payload?.type === 'send-to-chat') {
+        const { text, autoSend } = (payload.data || {}) as { text?: string; autoSend?: boolean };
+        if (text && window.openAndSendToAilyChat) {
+          window.openAndSendToAilyChat(text, { autoSend: autoSend !== false });
+        }
+        return;
+      }
+      // generate-graph-code：兼容旧调用，转发到 aily-chat
       if (payload?.type === 'generate-graph-code') {
         console.log('[BackgroundAgent] 收到同步到代码请求');
         this.handleSyncToCodeRequest();
@@ -749,8 +756,10 @@ ${(connectionData.connections || []).length} 条连线
 
 请分析连线图，在代码中添加或修改对应的传感器初始化和引脚配置代码。`;
 
-    // 通过 ChatService 静态方法发送到 aily-chat 并自动发送
-    ChatService.sendToChat(prompt, { cover: true, autoSend: true });
+    // 通过全局 API 发送到 aily-chat 并自动发送
+    if (window.openAndSendToAilyChat) {
+      window.openAndSendToAilyChat(prompt, { autoSend: true });
+    }
   }
 
   // =========================================================================

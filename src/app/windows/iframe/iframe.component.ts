@@ -17,7 +17,7 @@ import { SubWindowComponent } from '../../components/sub-window/sub-window.compo
 import { NotificationComponent } from '../../components/notification/notification.component';
 import { CommonModule } from '@angular/common';
 import { WindowMessenger, connect, Connection } from 'penpal';
-import type { ProgressEvent } from '../../services/background-agent.service';
+import { UiService } from '../../services/ui.service';
 
 /** iframe IPC 统一载荷（规范：docs/iframe-ipc-spec.md） */
 export interface IframeIpcPayload<T = unknown> {
@@ -29,11 +29,10 @@ export interface IframeIpcPayload<T = unknown> {
 export type ConnectionGraphIpcType =
   | 'generate-graph-data'
   | 'generate-graph-updated'
-  | 'generate-graph-progress'
   | 'get-graph-data'
   | 'set-graph-data'
   | 'save-graph-data'
-  | 'regenerate-graph-data'
+  | 'send-to-chat'
   | 'generate-graph-code';
 
 const IFRAME_CHANNEL_CONNECTION_GRAPH = 'iframe-message-connection-graph';
@@ -92,6 +91,7 @@ export class IframeComponent implements OnInit, OnDestroy {
     private connectionGraphService: ConnectionGraphService,
     private noticeService: NoticeService,
     private ngZone: NgZone,
+    private uiService: UiService,
   ) {
     if (this.data) {
       if (this.data.url) {
@@ -400,28 +400,8 @@ export class IframeComponent implements OnInit, OnDestroy {
           this.ngZone.run(() => this.handleConnectionGraphUpdate(data));
           break;
         case 'set-graph-data': {
-          // const messageId = (data as { messageId?: string })?.messageId;
-          // if (messageId) {
-          //   this.iframeData = (data as { payload?: unknown })?.payload;
-          // }
-          // this.remoteApi?.receiveData(this.iframeData);
           break;
         }
-        case 'generate-graph-data':
-          this.ngZone.run(() => {
-            this.noticeService.update({
-              title: 'AI生成中',
-              text: '正在准备生成连线图...',
-              state: 'doing',
-              showProgress: false,
-            });
-          });
-          break;
-        case 'generate-graph-progress':
-          this.ngZone.run(() =>
-            this.handleProgressEvent(data as ProgressEvent),
-          );
-          break;
       }
     };
 
@@ -485,64 +465,19 @@ export class IframeComponent implements OnInit, OnDestroy {
   }
 
   // =====================================================
-  // 连线图自动生成 - 进度处理
+  // 操作按钮
   // =====================================================
 
   /**
-   * 处理进度事件 → 更新 notice 通知栏
+   * 向 aily-chat 发送消息。
+   * 嵌入模式（主窗口内）直接调用 ChatService；
+   * 独立窗口通过 IPC 转发到主窗口由 BackgroundAgentService 处理。
    */
-  private handleProgressEvent(event: ProgressEvent): void {
-    if (!event) return;
-    switch (event.type) {
-      case 'thinking':
-        this.noticeService.update({
-          title: 'AI生成中',
-          text: event.content || '正在分析项目...',
-          state: 'doing',
-          showProgress: false,
-        });
-        break;
-      case 'tool_call':
-        this.noticeService.update({
-          title: 'AI生成中',
-          text: event.content || '正在执行工具...',
-          state: 'doing',
-          showProgress: false,
-        });
-        break;
-      case 'tool_result':
-        this.noticeService.update({
-          title: 'AI生成中',
-          text: event.content || '工具执行完成',
-          state: 'doing',
-          showProgress: false,
-        });
-        break;
-      case 'complete':
-        this.noticeService.update({
-          title: 'AI生成完成',
-          text: '连线图生成完成',
-          state: 'done',
-          setTimeout: 3000,
-        });
-        break;
-      case 'error':
-        this.noticeService.update({
-          title: 'AI生成失败',
-          text: event.content || '生成失败',
-          state: 'error',
-          setTimeout: 5000,
-        });
-        break;
-      default:
-        if (event.content) {
-          this.noticeService.update({
-            title: 'AI生成中',
-            text: event.content,
-            state: 'doing',
-            showProgress: false,
-          });
-        }
+  private sendToChat(text: string): void {
+    if (this.embedded) {
+      this.uiService.openAndSendToChat(text, { autoSend: true });
+    } else {
+      this.sendToMain('send-to-chat', { text, autoSend: true });
     }
   }
 
@@ -556,14 +491,19 @@ export class IframeComponent implements OnInit, OnDestroy {
       state: 'doing',
       showProgress: false,
     });
-
-    this.sendToMain('generate-graph-data');
+    this.sendToChat('@schematicAgent 请根据当前项目的引脚配置和组件信息，重新生成连线图方案。');
   }
 
   /**
    * 操作按钮: 同步到代码
    */
   onSyncToCode(): void {
-    this.sendToMain('generate-graph-code');
+    // this.noticeService.update({
+    //   title: 'AI生成中',
+    //   text: '正在同步连线配置到代码，请在对话框中查看进度...',
+    //   state: 'doing',
+    //   showProgress: false,
+    // });
+    this.sendToChat('@schematicAgent 请根据当前连线图方案，将硬件连线配置同步到项目代码中。');
   }
 }
