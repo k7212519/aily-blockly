@@ -304,6 +304,13 @@ export class IframeComponent implements OnInit, OnDestroy {
       if (this.isConnectionGraphWindow) {
         this.startConnectionGraphIpcListener();
       }
+
+      // TODO:如果是 component-viewer 窗口，立即推送数据给子页面，新版本为web主动调用，这里临时多推送一次，待web更新后可删除
+      if (this.isComponentViewerWindow) {
+        setTimeout(() => {
+          this.pushDataToRemote();
+        }, 10);
+      }
     } catch (error) {
       console.error('Penpal 连接失败:', error);
       // 连接失败时降级：使用 postMessage 发送数据
