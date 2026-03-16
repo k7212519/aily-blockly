@@ -33,6 +33,7 @@ import { AilyHost } from '../core/host';
 import { ToolRegistry } from '../core/tool-registry';
 import { createSecurityContext } from './security.service';
 import { TOOLS } from '../tools/tools';
+import { registerAskUserCallback, unregisterAskUserCallback, AskUserResponse } from '../tools/askUserTool';
 
 import { AILY_CHAT_ONBOARDING_CONFIG } from '../../../configs/onboarding.config';
 
@@ -103,6 +104,9 @@ export class ChatEngineService {
 
   /** autoSend 消息在 sessionId 未就绪时的暂存区，startSession 完成后自动冲刷 */
   private _pendingAutoSendText: string | null = null;
+
+  /** ask_user 工具的 Promise resolve 回调（等待用户在聊天界面输入） */
+  _resolveAskUser: ((response: AskUserResponse | undefined) => void) | null = null;
 
   // ==================== 订阅 ====================
   messageSubscription: any;
@@ -186,6 +190,9 @@ export class ChatEngineService {
       ? '' : AilyHost.get().project.currentProjectPath;
     this.prjRootPath = AilyHost.get().project.projectRootPath;
 
+    // 注册 ask_user 回调：在聊天界面显示问题并等待用户回答
+    registerAskUserCallback((question, choices, allowFreeform) => this._handleAskUser(question, choices, allowFreeform));
+
     this.setupSubscriptions();
   }
 
@@ -196,6 +203,9 @@ export class ChatEngineService {
     this.chatService.isWaiting = false;
     this.session.saveCurrentSession();
     this.chatHistoryService.flushAll();
+
+    unregisterAskUserCallback();
+    this._resolveAskUser = null;
 
     this.cleanupSubscriptions();
     this.session.disconnect();
@@ -886,5 +896,54 @@ Do not create non-existent boards and libraries.
   private onOnboardingClosed(): void {
     AilyHost.get().config.data.ailyChatOnboardingCompleted = true;
     AilyHost.get().config.save?.();
+  }
+
+  // ==================== ask_user 交互处理 ====================
+
+  /**
+   * ask_user 工具的 UI 层回调。
+   * 在聊天界面显示问题（含可选项/自由输入），等待用户回答后 resolve。
+   */
+  private _handleAskUser(
+    question: string,
+    choices?: string[],
+    allowFreeform?: boolean,
+  ): Promise<AskUserResponse | undefined> {
+    return new Promise<AskUserResponse | undefined>((resolve) => {
+      // 构建聊天界面中的问题展示（使用 aily-question 自定义块）
+      const questionData: any = { question, choices: choices || [], allowFreeform: !!allowFreeform };
+      const questionJson = JSON.stringify(questionData).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+      // 在聊天消息中显示问题块
+      this.msg.appendMessage('aily',
+        `\n\`\`\`aily-question\n${JSON.stringify(questionData, null, 2)}\n\`\`\`\n\n`
+      );
+
+      // 保存 resolve 回调，等待用户通过 resolveAskUserResponse() 触发
+      this._resolveAskUser = resolve;
+    });
+  }
+
+  /**
+   * 用户在聊天界面回答 ask_user 问题后调用此方法。
+   * 由 Component 在用户选择选项或提交自由输入时调用。
+   */
+  resolveAskUserResponse(answer: string, wasFreeform: boolean): void {
+    if (this._resolveAskUser) {
+      const resolve = this._resolveAskUser;
+      this._resolveAskUser = null;
+      resolve({ answer, wasFreeform });
+    }
+  }
+
+  /**
+   * 用户跳过/取消 ask_user 问题。
+   */
+  skipAskUserResponse(): void {
+    if (this._resolveAskUser) {
+      const resolve = this._resolveAskUser;
+      this._resolveAskUser = null;
+      resolve(undefined);
+    }
   }
 }
