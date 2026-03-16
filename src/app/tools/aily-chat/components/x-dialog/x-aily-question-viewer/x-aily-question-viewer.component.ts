@@ -68,7 +68,7 @@ interface QuestionData {
     .aq-container {
       border-radius: 10px;
       padding: 16px;
-      margin: 8px 0;
+      margin: 0;
       background: #1e1e1e;
       border: 1px solid #333;
       transition: border-color 0.2s;
