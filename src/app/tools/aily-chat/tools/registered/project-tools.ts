@@ -672,3 +672,64 @@ class GetTerminalOutputTool implements IAilyTool {
 
 ToolRegistry.register(new StartBackgroundCommandTool());
 ToolRegistry.register(new GetTerminalOutputTool());
+
+// ============================
+// save_arch — 框架图保存工具
+// ============================
+
+class SaveArchTool implements IAilyTool {
+  readonly name = 'save_arch';
+  readonly schema = findLegacySchema('save_arch');
+
+  async invoke(args: any, ctx: ToolContext): Promise<ToolUseResult> {
+    const host = ctx.host;
+    if (!host?.fs || !host?.path) {
+      return { is_error: true, content: '文件系统服务不可用' };
+    }
+
+    const code: string = (args?.code || '').trim();
+    if (!code) {
+      return { is_error: true, content: '参数 code 不能为空' };
+    }
+
+    const content = `\`\`\`mermaid\n${code}\n\`\`\`\n`;
+
+    const projectPath = host.project?.currentProjectPath || host.project?.projectRootPath;
+    const rootPath = host.project?.projectRootPath;
+    const isOrphan = !projectPath || (rootPath && projectPath === rootPath);
+
+    try {
+      if (projectPath && !isOrphan) {
+        const archPath = host.path.join(projectPath, 'arch.md');
+        const dir = host.path.dirname(archPath);
+        if (!host.fs.existsSync(dir)) {
+          host.fs.mkdirSync(dir, { recursive: true });
+        }
+        host.fs.writeFileSync(archPath, content);
+        return { is_error: false, content: `框架图已保存到 ${archPath}` };
+      } else if (isOrphan && rootPath && ctx.sessionId) {
+        const chatHistoryDir = host.path.join(rootPath, '.chat_history');
+        if (!host.fs.existsSync(chatHistoryDir)) {
+          host.fs.mkdirSync(chatHistoryDir, { recursive: true });
+        }
+        const archPath = host.path.join(chatHistoryDir, `${ctx.sessionId}_arch.md`);
+        host.fs.writeFileSync(archPath, content);
+        return { is_error: false, content: `框架图已保存到 ${archPath}` };
+      } else {
+        return { is_error: true, content: '无法确定保存路径：当前未打开项目且无会话 ID' };
+      }
+    } catch (err: any) {
+      return { is_error: true, content: `保存框架图失败: ${err.message || err}` };
+    }
+  }
+
+  getStartText(): string {
+    return '保存框架图到 arch.md...';
+  }
+
+  getResultText(args: any, result?: ToolUseResult): string {
+    return result?.is_error ? '框架图保存失败' : '框架图保存成功';
+  }
+}
+
+ToolRegistry.register(new SaveArchTool());

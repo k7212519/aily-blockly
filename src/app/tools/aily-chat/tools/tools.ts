@@ -55,8 +55,8 @@ export const DEFERRED_TOOL_GROUPS: DeferredToolGroup[] = [
   },
   {
     name: '项目管理',
-    brief: '创建项目、重新加载项目、TODO 任务管理',
-    tools: ['create_project', 'reload_project', 'todo_write_tool']
+    brief: '创建项目、重新加载项目',
+    tools: ['create_project', 'reload_project']
   },
   {
     name: '终端工具',
@@ -2911,7 +2911,7 @@ IMPORTANT: 任务ID为简单的递增数字（1, 2, 3...），请使用正确的
             required: []
         },
         agents: ["mainAgent"]
-    }
+    },
     // {
     //     name: 'verify_block_existence',
     //     description: `验证指定块是否存在于指定库中。快速检查块的可用性，避免使用不存在的块类型。`,
@@ -3164,4 +3164,28 @@ IMPORTANT: 任务ID为简单的递增数字（1, 2, 3...），请使用正确的
     //         required: ['code']
     //     }
     // }
+    // =============================================================================
+    // 框架图工具
+    // =============================================================================
+    {
+        name: 'save_arch',
+        description: `保存/覆盖框架图到项目目录下的 arch.md 文件。当你生成了 mermaid 框架图后，调用此工具将其持久化保存，无需用户手动点击保存按钮。
+
+传入 mermaid 图表代码（不含 \`\`\`mermaid 包裹），工具会自动包裹并写入 arch.md。
+
+**使用时机**：
+- 生成框架图后，直接调用此工具保存，勿等待用户手动操作。
+- 用户要求更新/重新生成框架图时，同样调用此工具覆盖保存。`,
+        input_schema: {
+            type: 'object',
+            properties: {
+                code: {
+                    type: 'string',
+                    description: 'Mermaid 图表代码（不含 \`\`\`mermaid 代码块包裹，工具会自动添加）'
+                }
+            },
+            required: ['code']
+        },
+        agents: ["mainAgent"]
+    },
 ]
