@@ -109,7 +109,8 @@ export function markContentAsHistory(content: string): string {
   if (!content || typeof content !== 'string') {
     return content;
   }
-  return content.replace(
+  // aily-state: 将 doing → done
+  content = content.replace(
     /```aily-state\n([\s\S]*?)```/g,
     (match, json) => {
       try {
@@ -128,6 +129,23 @@ export function markContentAsHistory(content: string): string {
       return match;
     }
   );
+
+  // aily-question: 标记为 isHistory 以便组件以只读模式展示
+  content = content.replace(
+    /```aily-question\n([\s\S]*?)```/g,
+    (match, json) => {
+      try {
+        const data = JSON.parse(json.trim());
+        if (data && typeof data === 'object') {
+          data.isHistory = true;
+          return '```aily-question\n' + JSON.stringify(data) + '\n```';
+        }
+      } catch {}
+      return match;
+    }
+  );
+
+  return content;
 }
 
 /**

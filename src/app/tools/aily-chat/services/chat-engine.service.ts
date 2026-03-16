@@ -924,6 +924,11 @@ Do not create non-existent boards and libraries.
         if (!detail || !this._resolveAskUser) return;
         document.removeEventListener('aily-question-answer', handler);
 
+        // 将用户回答写回 aily-question 块，供历史恢复时显示
+        if (detail.answers) {
+          this._patchAilyQuestionBlock(detail.answers);
+        }
+
         const resolveRef = this._resolveAskUser;
         this._resolveAskUser = null;
         this._askUserQuestions = null;
@@ -931,6 +936,52 @@ Do not create non-existent boards and libraries.
       };
       document.addEventListener('aily-question-answer', handler);
     });
+  }
+
+  /**
+   * 将用户的回答数据写回 chatList 中的 aily-question 块，
+   * 使其在历史模式加载时能恢复选择状态。
+   * 使用 indexOf 替代 regex 以避免转义/匹配问题。
+   */
+  private _patchAilyQuestionBlock(answers: Record<string, any>): void {
+    const MARKER = '```aily-question';
+    const FENCE = '```';
+
+    for (let i = this.list.length - 1; i >= 0; i--) {
+      const item = this.list[i];
+      if (item.role !== 'aily') continue;
+
+      // 使用 lastIndexOf 找最后一个（最新的）aily-question 块
+      const markerIdx = item.content.lastIndexOf(MARKER);
+      if (markerIdx === -1) continue;
+
+      // 找到 marker 后面的换行（JSON 起始位置）
+      const jsonStart = item.content.indexOf('\n', markerIdx) + 1;
+      if (jsonStart <= 0) continue;
+
+      // 找到闭合 ``` （JSON 结束位置）
+      const fenceEnd = item.content.indexOf(FENCE, jsonStart);
+      if (fenceEnd <= jsonStart) continue;
+
+      const jsonStr = item.content.substring(jsonStart, fenceEnd).trim();
+      try {
+        const data = JSON.parse(jsonStr);
+        data.answers = answers;
+        const patched = item.content.substring(0, jsonStart)
+          + JSON.stringify(data) + '\n'
+          + item.content.substring(fenceEnd);
+        item.content = patched;
+        console.log('[ChatEngine] aily-question block patched with answers, keys:', Object.keys(answers));
+      } catch (e) {
+        console.warn('[ChatEngine] Failed to patch aily-question JSON:', e);
+      }
+      break;
+    }
+
+    // 标记脏数据确保 autoSave 能捕获
+    if (this.sessionId) {
+      this.chatHistoryService.markDirty(this.sessionId);
+    }
   }
 
   /**
