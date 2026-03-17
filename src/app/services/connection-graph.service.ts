@@ -414,12 +414,22 @@ export class ConnectionGraphService {
       window['ipcRenderer'].on('iframe-message-connection-graph', async (_event: any, payload: { type: string; data?: any }) => {
         const { type, data } = payload ?? {};
         switch (type) {
-          case 'save-graph-data':
+          case 'save-graph-data': {
             console.log('[ConnectionGraphService] 收到子窗口保存请求');
+            const messageId = data?.messageId;
+            let success = false;
             if (data && data.components && data.connections) {
-              this.saveConnectionGraphSilent(data);
+              const { messageId: _m, ...toSave } = data;
+              success = this.saveConnectionGraphSilent(toSave);
+            }
+            if (window['ipcRenderer']) {
+              window['ipcRenderer'].send('iframe-message-connection-graph', {
+                type: 'save-graph-data-result',
+                data: { messageId, success },
+              });
             }
             break;
+          }
           case 'get-graph-data': {
             // 子窗口请求：data 仅有 messageId 无 payload；主窗口响应：返回 messageId + payload
             const messageId = data?.messageId;
@@ -1518,10 +1528,8 @@ export class ConnectionGraphService {
     console.log('[buildPayload] componentConfigs keys:', Object.keys(componentConfigs));
 
     return {
+      ...connectionData,
       componentConfigs,
-      components: connectionData.components,
-      connections: connectionData.connections,
-      theme: 'dark',
     };
   }
 
