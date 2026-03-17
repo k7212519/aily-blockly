@@ -18,6 +18,7 @@ import { NotificationComponent } from '../../components/notification/notificatio
 import { CommonModule } from '@angular/common';
 import { WindowMessenger, connect, Connection } from 'penpal';
 import { UiService } from '../../services/ui.service';
+import { TranslateService } from '@ngx-translate/core';
 
 /** iframe IPC 统一载荷（规范：docs/iframe-ipc-spec.md） */
 export interface IframeIpcPayload<T = unknown> {
@@ -32,6 +33,7 @@ export type ConnectionGraphIpcType =
   | 'get-graph-data'
   | 'set-graph-data'
   | 'save-graph-data'
+  | 'save-graph-data-result'
   | 'send-to-chat'
   | 'generate-graph-code';
 
@@ -82,6 +84,8 @@ export class IframeComponent implements OnInit, OnDestroy {
   isConnectionGraphWindow = false;
   /** connection-graph IPC 统一监听清理函数 */
   private connectionGraphIpcCleanup: (() => void) | null = null;
+  /** 待响应的保存请求：messageId -> resolve */
+  private pendingSaveResolvers = new Map<string, (result: { success: boolean }) => void>();
 
   constructor(
     @Optional() @Inject(NZ_MODAL_DATA) public data: IframeModalData | null,
@@ -92,6 +96,7 @@ export class IframeComponent implements OnInit, OnDestroy {
     private noticeService: NoticeService,
     private ngZone: NgZone,
     private uiService: UiService,
+    private translate: TranslateService,
   ) {
     if (this.data) {
       if (this.data.url) {
@@ -235,9 +240,9 @@ export class IframeComponent implements OnInit, OnDestroy {
           generateGraphCode: () => {
             this.onSyncToCode();
           },
-          saveGraphData: (data) => {
+          saveGraphData: async (data) => {
             this.iframeData = data;
-            this.sendToMain('save-graph-data', this.iframeData);
+            return this.sendSaveGraphData(this.iframeData);
           },
           // 子页面调用此方法通过 IPC 实时获取连线图 payload（type: get-graph-data）
           getGraphData: () => {
@@ -275,7 +280,16 @@ export class IframeComponent implements OnInit, OnDestroy {
                     components: currentPayload.components,
                     connections: connections,
                   };
-                  this.sendToMain('save-graph-data', updatedData);
+                  this.sendSaveGraphData(updatedData).then(({ success }) => {
+                    if (!success) {
+                      this.ngZone.run(() =>
+                        this.noticeService.update({
+                          state: 'error',
+                          text: this.translate.instant('AILY_CHAT.MERMAID_SAVE_FAILED'),
+                        })
+                      );
+                    }
+                  });
                   this.iframeData = {
                     ...currentPayload,
                     connections: connections,
@@ -331,6 +345,28 @@ export class IframeComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * 发送保存请求并等待主窗口返回结果
+   */
+  private sendSaveGraphData(data: unknown): Promise<{ success: boolean }> {
+    if (!this.electronService.isElectron || !window['ipcRenderer']) {
+      return Promise.resolve({ success: false });
+    }
+    const messageId = Date.now() + '-' + Math.random().toString(36).slice(2);
+    return new Promise<{ success: boolean }>((resolve) => {
+      const timeoutId = setTimeout(() => {
+        this.pendingSaveResolvers.delete(messageId);
+        resolve({ success: false });
+      }, 5000);
+      this.pendingSaveResolvers.set(messageId, (result) => {
+        clearTimeout(timeoutId);
+        this.pendingSaveResolvers.delete(messageId);
+        resolve(result);
+      });
+      this.sendToMain('save-graph-data', { ...(data as object), messageId });
+    });
+  }
+
+  /**
    * 推送数据给已连接的子页面（penpal 方式）
    */
   private async pushDataToRemote(): Promise<void> {
@@ -378,6 +414,16 @@ export class IframeComponent implements OnInit, OnDestroy {
           this.ngZone.run(() => this.handleConnectionGraphUpdate(data));
           break;
         case 'set-graph-data': {
+          break;
+        }
+        case 'save-graph-data-result': {
+          const resultData = data as { messageId?: string; success?: boolean } | undefined;
+          const messageId = resultData?.messageId;
+          const success = !!resultData?.success;
+          const resolver = this.pendingSaveResolvers.get(messageId);
+          if (resolver) {
+            this.ngZone.run(() => resolver({ success }));
+          }
           break;
         }
       }
