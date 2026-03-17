@@ -304,6 +304,9 @@ export class IframeComponent implements OnInit, OnDestroy {
               console.warn('onConnectionsChanged 持久化失败:', e);
             }
           },
+          noticeUpdate: (notification: any) => {
+            this.noticeService.update(notification);
+          }
         },
       });
 
