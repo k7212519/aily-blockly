@@ -16,10 +16,17 @@ export class SessionLifecycleHelper {
   saveCurrentSession(): void {
     if (!this.engine.sessionId || this.engine.list.length === 0) return;
     try {
-      const prjPath = this.engine.chatService.currentSessionPath
-        || AilyHost.get().project.currentProjectPath
-        || AilyHost.get().project.projectRootPath
-        || null;
+      const currentPath = AilyHost.get().project.currentProjectPath;
+      const rootPath = AilyHost.get().project.projectRootPath;
+      const isSameAsRoot = (p: string | null) => {
+        if (!p || !rootPath) return false;
+        const norm = (s: string) => s.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+        return norm(p) === norm(rootPath);
+      };
+      const cached = this.engine.chatService.currentSessionPath;
+      // 优先使用 cached 但不能是 rootPath，否则回退到实时 currentProjectPath
+      let prjPath = (cached && !isSameAsRoot(cached)) ? cached
+        : (currentPath && !isSameAsRoot(currentPath) ? currentPath : null);
       const budgetSnapshot = this.engine.contextBudgetService?.getSnapshot();
 
       // 导出 subagent 会话数据（Plan C 压缩：保留最近 3 轮对话）
@@ -133,7 +140,9 @@ export class SessionLifecycleHelper {
             if (res.data != this.engine.sessionId) {
               this.engine.chatService.currentSessionId = res.data;
               this.engine.chatService.currentSessionTitle = '';
-              this.engine.chatService.currentSessionPath = AilyHost.get().project.currentProjectPath || AilyHost.get().project.projectRootPath;
+              const _curPath = AilyHost.get().project.currentProjectPath;
+              const _rootPath = AilyHost.get().project.projectRootPath;
+              this.engine.chatService.currentSessionPath = (_curPath && _curPath !== _rootPath) ? _curPath : '';
             }
             if (!this.engine.useStatelessMode) { this.engine.stream.streamConnect(); }
             this.engine.isSessionStarting = false;

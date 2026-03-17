@@ -680,6 +680,7 @@ ToolRegistry.register(new GetTerminalOutputTool());
 class SaveArchTool implements IAilyTool {
   readonly name = 'save_arch';
   readonly schema = findLegacySchema('save_arch');
+  readonly displayMode = 'silent' as const;
 
   async invoke(args: any, ctx: ToolContext): Promise<ToolUseResult> {
     const host = ctx.host;

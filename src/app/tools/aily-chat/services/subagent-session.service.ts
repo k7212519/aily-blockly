@@ -606,6 +606,13 @@ export class SubagentSessionService implements OnDestroy {
           await this.handleSubagentStreamEvent(event, session.agentName, toolId, turnState);
         } catch { }
       }
+    } catch (error: any) {
+      // reader.cancel() 或 AbortController.abort() 会导致挂起的 reader.read() 抛出
+      // "BodyStreamBuffer was aborted" (Chromium) 等浏览器级别错误
+      if (this.abortedToolIds.has(toolId)) {
+        throw new Error(`${session.agentName} 执行被取消`);
+      }
+      throw error;
     } finally {
       clearTimeout(timeoutId);
       this.activeReaders.delete(toolId);

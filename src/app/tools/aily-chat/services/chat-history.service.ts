@@ -647,7 +647,17 @@ export class ChatHistoryService implements OnDestroy {
   private writeSessionData(sessionId: string, data: SessionData): void {
     if (!this.hasFs()) return;
 
-    const projectPath = data.metadata.projectPath;
+    let projectPath = data.metadata.projectPath;
+
+    // 安全防护：projectPath 不能是 projectRootPath（项目根目录的父级）
+    if (projectPath) {
+      const rootPath = this.getGlobalProjectRootPath();
+      if (rootPath && this.isSamePath(projectPath, rootPath)) {
+        console.warn(`[ChatHistory] 检测到 projectPath 等于 projectRootPath，降级为全局兜底: ${projectPath}`);
+        projectPath = null;
+        data.metadata.projectPath = null;
+      }
+    }
 
     try {
       // 优先写到项目目录
@@ -809,6 +819,15 @@ export class ChatHistoryService implements OnDestroy {
 
   private getGlobalChatDataDir(): string {
     return this.joinPath(this.getGlobalAilyDir(), this.CHAT_DATA_DIR);
+  }
+
+  /** 获取项目根目录路径（所有项目的父目录，如 Documents/AilyProjects） */
+  private getGlobalProjectRootPath(): string | null {
+    try {
+      return AilyHost.get().project?.projectRootPath || null;
+    } catch {
+      return null;
+    }
   }
 
   private extractProjectName(projectPath: string | null): string | null {

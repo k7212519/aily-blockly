@@ -448,6 +448,11 @@ export class RepetitionDetectionService {
       return null;
     }
 
+    // 跳过由格式化分隔字符组成的模式（如 "===", "---", "***", "###"）
+    if (/^[=\-*#_~.:]+$/.test(pattern)) {
+      return null;
+    }
+
     // 从末尾往前计数连续重复
     let consecutiveCount = 0;
     let pos = text.length;
@@ -503,9 +508,15 @@ export class RepetitionDetectionService {
     const checkLength = Math.min(text.length, 200);
     const checkText = text.slice(-checkLength);
 
-    // 检测 1-5 字符的短模式重复（不过滤空白和控制字符）
+    // 检测 1-5 字符的短模式重复（仅限包含空白/控制字符的模式）
     for (let patternLen = 1; patternLen <= Math.min(5, Math.floor(checkText.length / 5)); patternLen++) {
       const pattern = checkText.slice(-patternLen);
+
+      // Layer 0 只处理包含空白/控制字符的模式（\t、\r、\n、空格等）
+      // 纯可打印字符（如 ===、---）交给 Layer 1 处理
+      if (!/[\x00-\x20]/.test(pattern)) {
+        continue;
+      }
 
       let consecutiveCount = 0;
       let pos = checkText.length;
