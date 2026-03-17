@@ -602,12 +602,32 @@ export class ConnectionGraphService {
   }
 
   /**
-   * 读取库的 pinmap_catalog.json
+   * 解析 pinmap_catalog.json 的实际路径（兼容新旧两种位置）
+   * 优先检查 pinmaps/pinmap_catalog.json（新版），回退到根目录 pinmap_catalog.json（旧版）
+   * @param packagePath 库或开发板包的完整路径
+   * @returns 实际存在的 catalog 文件路径，若均不存在返回 null
+   */
+  resolveCatalogPath(packagePath: string): string | null {
+    // 新版：pinmaps/pinmap_catalog.json
+    const newPath = this.electronService.pathJoin(packagePath, 'pinmaps', 'pinmap_catalog.json');
+    if (this.electronService.exists(newPath)) {
+      return newPath;
+    }
+    // 旧版：根目录 pinmap_catalog.json
+    const legacyPath = this.electronService.pathJoin(packagePath, 'pinmap_catalog.json');
+    if (this.electronService.exists(legacyPath)) {
+      return legacyPath;
+    }
+    return null;
+  }
+
+  /**
+   * 读取库的 pinmap_catalog.json（兼容根目录和 pinmaps/ 子目录两种位置）
    * @param packagePath 库或开发板包的完整路径
    */
   readPinmapCatalog(packagePath: string): PinmapCatalog | null {
-    const catalogPath = this.electronService.pathJoin(packagePath, 'pinmap_catalog.json');
-    if (!this.electronService.exists(catalogPath)) {
+    const catalogPath = this.resolveCatalogPath(packagePath);
+    if (!catalogPath) {
       return null;
     }
     try {
@@ -1836,7 +1856,9 @@ export class ConnectionGraphService {
     try {
       const ref = this.parsePinmapId(pinmapId);
       const packagePath = `${packagesBasePath}/@aily-project/${ref.packageSlug}`;
-      const catalogPath = this.electronService.pathJoin(packagePath, 'pinmap_catalog.json');
+      // 兼容新旧路径：优先使用已存在的位置，新建时使用根目录（旧版）
+      const catalogPath = this.resolveCatalogPath(packagePath)
+        || this.electronService.pathJoin(packagePath, 'pinmap_catalog.json');
 
       let catalog: PinmapCatalog;
 
