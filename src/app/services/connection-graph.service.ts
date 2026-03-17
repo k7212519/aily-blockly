@@ -1518,10 +1518,8 @@ export class ConnectionGraphService {
     console.log('[buildPayload] componentConfigs keys:', Object.keys(componentConfigs));
 
     return {
+      ...connectionData,
       componentConfigs,
-      components: connectionData.components,
-      connections: connectionData.connections,
-      theme: 'dark',
     };
   }
 
