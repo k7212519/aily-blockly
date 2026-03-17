@@ -193,6 +193,14 @@ export class ChatEngineService {
       ? '' : AilyHost.get().project.currentProjectPath;
     this.prjRootPath = AilyHost.get().project.projectRootPath;
 
+    // 初始化时：如果项目已打开，立即执行孤儿领养（订阅的 skip(1) 会跳过初始值）
+    if (this.prjPath) {
+      const adopted = this.chatHistoryService.adoptOrphanSessions(this.prjPath, this.prjRootPath);
+      if (adopted > 0) {
+        console.log(`[ChatEngine] 初始化时领养 ${adopted} 个孤儿会话到: ${this.prjPath}`);
+      }
+    }
+
     // 注册 ask_user 回调：在聊天界面显示全部问题并等待用户回答
     registerAskUserCallback((questions) => this._handleAskUser(questions));
 
@@ -301,6 +309,11 @@ export class ChatEngineService {
       const rootPath = AilyHost.get().project.projectRootPath;
       this.prjPath = newPath === rootPath ? '' : newPath;
       this.prjRootPath = rootPath;
+
+      // 同步更新 currentSessionPath，防止保存到旧路径/rootPath
+      if (newPath && newPath !== rootPath) {
+        this.chatService.currentSessionPath = newPath;
+      }
 
       // 新建项目时自动领养根目录下的孤儿会话
       if (newPath && newPath !== rootPath) {
