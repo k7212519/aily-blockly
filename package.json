@@ -147,8 +147,6 @@
     "@ngx-translate/core": "^16.0.3",
     "@splidejs/splide": "^4.1.4",
     "@tanstack/angular-virtual": "^4.0.6",
-    "@tensorflow/tfjs": "^4.22.0",
-    "@tensorflow/tfjs-backend-webgpu": "^4.22.0",
     "@types/uuid": "^10.0.0",
     "@xterm/addon-clipboard": "^0.1.0",
     "@xterm/addon-fit": "^0.10.0",
