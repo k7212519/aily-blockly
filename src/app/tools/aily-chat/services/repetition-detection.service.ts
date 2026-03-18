@@ -16,6 +16,8 @@ export interface RepetitionCheckResult {
   isRepetitive: boolean;
   pattern?: string;
   suggestion?: string;
+  /** think 状态转换信息（供调用方同步 UI 状态） */
+  thinkTransition?: 'entered' | 'exited';
 }
 
 /**
@@ -70,7 +72,7 @@ export class RepetitionDetectionService {
   private readonly SAME_TOOL_THRESHOLD = 3;
 
   /** 循环模式检测的历史长度 */
-  private readonly CYCLE_PATTERN_LENGTH = 6;
+  private readonly CYCLE_PATTERN_LENGTH = 8;
 
   // ==================== 流式文本检测 ====================
 
@@ -120,7 +122,64 @@ export class RepetitionDetectionService {
   /** Think 内检测间隔（每 N 个 token 检测一次） */
   private readonly THINK_CHECK_INTERVAL = 8;
 
+  // ==================== Think 标签检测状态机 ====================
+
+  /** 标签检测缓冲区（处理跨 token 的 <think>/<\/think> 标签拆分） */
+  private tagBuffer = '';
+
+  /** 非 Think 内容的 token 缓冲区（Layer 1/4/5 只在此缓冲区上检测，避免 think 内容污染） */
+  private nonThinkStreamTokens: string[] = [];
+
+  /** 本次 checkStreamRepetition 调用中发生的 think 转换 */
+  private lastThinkTransition: 'entered' | 'exited' | null = null;
+
   constructor() {}
+
+  // ==================== Think 标签状态机 ====================
+
+  /**
+   * 使用状态机检测 <think> 和 </think> 标签边界
+   * 处理标签被拆分到多个 SSE token 的情况（如 "<thi" + "nk>"）
+   */
+  private detectThinkBoundary(token: string): void {
+    this.tagBuffer += token;
+    this.lastThinkTransition = null;
+
+    // 循环检测，处理单个 token 中包含多个标签的情况
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const openIdx = this.tagBuffer.indexOf('<think>');
+      const closeIdx = this.tagBuffer.indexOf('</think>');
+
+      if (openIdx >= 0 && (closeIdx < 0 || openIdx < closeIdx)) {
+        if (!this.insideThink) {
+          // 进入 think：自动标记 think_start 边界
+          this.markBoundary('think_start');
+          this.lastThinkTransition = 'entered';
+        }
+        this.insideThink = true;
+        this.thinkTokens = [];
+        this.tagBuffer = this.tagBuffer.slice(openIdx + 7);
+        changed = true;
+      } else if (closeIdx >= 0) {
+        if (this.insideThink) {
+          // 退出 think：自动标记 think_end 边界
+          this.markBoundary('think_end');
+          this.lastThinkTransition = 'exited';
+        }
+        this.insideThink = false;
+        this.thinkTokens = [];
+        this.tagBuffer = this.tagBuffer.slice(closeIdx + 8);
+        changed = true;
+      }
+    }
+
+    // 保留尾部字符用于跨 token 检测（'</think>' = 8 字符，20 字符缓冲区足够）
+    if (this.tagBuffer.length > 20) {
+      this.tagBuffer = this.tagBuffer.slice(-20);
+    }
+  }
 
   // ==================== 工具调用重复检测 ====================
 
@@ -233,6 +292,29 @@ export class RepetitionDetectionService {
       }
     }
 
+    // 检测 4 元素循环: A→B→C→D→A→B→C→D（工具名+参数都相同）
+    if (virtualHistory.length >= 8) {
+      const last8 = virtualHistory.slice(-8);
+      const uniqueTools4 = new Set([last8[0].name, last8[1].name, last8[2].name, last8[3].name]);
+      if (
+        uniqueTools4.size >= 2 &&
+        last8[0].name === last8[4].name &&
+        last8[1].name === last8[5].name &&
+        last8[2].name === last8[6].name &&
+        last8[3].name === last8[7].name &&
+        last8[0].argsHash === last8[4].argsHash &&
+        last8[1].argsHash === last8[5].argsHash &&
+        last8[2].argsHash === last8[6].argsHash &&
+        last8[3].argsHash === last8[7].argsHash
+      ) {
+        return {
+          isRepetitive: true,
+          pattern: `${last8[0].name} → ${last8[1].name} → ${last8[2].name} → ${last8[3].name} 循环调用`,
+          suggestion: '检测到四工具循环模式，请尝试不同的解决策略。'
+        };
+      }
+    }
+
     return { isRepetitive: false };
   }
 
@@ -242,10 +324,34 @@ export class RepetitionDetectionService {
    */
   private hashArgs(args: any): string {
     try {
-      return JSON.stringify(this.sortKeysDeep(args));
+      return JSON.stringify(this.sortKeysDeep(this.normalizeArgs(args)));
     } catch (e) {
       return String(args);
     }
+  }
+
+  /**
+   * 归一化工具参数，减少微小差异导致的检测绕过
+   */
+  private normalizeArgs(value: any): any {
+    if (value === null || value === undefined) return value;
+    if (typeof value === 'string') {
+      let normalized = value.trim().replace(/\s+/g, ' ');
+      // 路径值：统一分隔符为 /、转小写
+      if (/[/\\]/.test(normalized)) {
+        normalized = normalized.replace(/\\/g, '/').toLowerCase();
+      }
+      return normalized;
+    }
+    if (typeof value !== 'object') return value;
+    if (Array.isArray(value)) {
+      return value.map(item => this.normalizeArgs(item));
+    }
+    const result: Record<string, any> = {};
+    for (const key of Object.keys(value)) {
+      result[key] = this.normalizeArgs(value[key]);
+    }
+    return result;
   }
 
   /**
@@ -273,22 +379,39 @@ export class RepetitionDetectionService {
    * @returns 检测结果
    */
   checkStreamRepetition(token: string): RepetitionCheckResult {
-    // 检测 think 标签边界
-    if (token.includes('<think>')) {
-      this.insideThink = true;
-      this.thinkTokens = []; // 进入新 think 块时重置缓冲区
-    }
-    if (token.includes('</think>')) {
-      this.insideThink = false;
-      this.thinkTokens = [];
-    }
+    // 记录状态机转换前的 insideThink 状态
+    const wasInsideThink = this.insideThink;
 
-    // 统一加入 streamTokens（保持索引一致性）
+    // 使用状态机检测 think 标签边界（处理跨 token 拆分）
+    this.detectThinkBoundary(token);
+
+    // 统一加入 streamTokens（保持索引一致性，Layer 2/2.5/3 使用）
     this.streamTokens.push(token);
+
+    // 非 think 内容加入独立缓冲区（Layer 1/4/5 使用，避免 think 内容污染）
+    // 只有转换前后都不在 think 内的 token 才加入，排除 <think>/<\/think> 标签本身
+    if (!this.insideThink && !wasInsideThink) {
+      this.nonThinkStreamTokens.push(token);
+      if (this.nonThinkStreamTokens.length > this.MAX_STREAM_TOKENS) {
+        this.nonThinkStreamTokens = this.nonThinkStreamTokens.slice(
+          this.nonThinkStreamTokens.length - this.MAX_STREAM_TOKENS
+        );
+      }
+    }
 
     // 保持 token 数量在限制内
     if (this.streamTokens.length > this.MAX_STREAM_TOKENS) {
       const trimCount = this.streamTokens.length - this.MAX_STREAM_TOKENS;
+      // 如果 lastBoundaryTokenIndex 在被裁剪区域，先保存增量为内容块（防止数据丢失）
+      if (this.lastBoundaryTokenIndex < trimCount) {
+        const lostDelta = this.streamTokens.slice(this.lastBoundaryTokenIndex, trimCount).join('').trim();
+        if (lostDelta.length >= this.MIN_BLOCK_LENGTH) {
+          this.contentBlocks.push(lostDelta);
+          if (this.contentBlocks.length > 10) {
+            this.contentBlocks = this.contentBlocks.slice(-10);
+          }
+        }
+      }
       this.streamTokens = this.streamTokens.slice(trimCount);
       this.lastBoundaryTokenIndex = Math.max(0, this.lastBoundaryTokenIndex - trimCount);
     }
@@ -304,10 +427,10 @@ export class RepetitionDetectionService {
 
       // 按间隔检测
       if (this.thinkTokens.length % this.THINK_CHECK_INTERVAL !== 0) {
-        return { isRepetitive: false };
+        return { isRepetitive: false, thinkTransition: this.lastThinkTransition ?? undefined };
       }
       if (this.thinkTokens.length < this.MIN_TOKENS_FOR_DETECTION) {
-        return { isRepetitive: false };
+        return { isRepetitive: false, thinkTransition: this.lastThinkTransition ?? undefined };
       }
       // Think Layer 0: 垃圾 token 重复（\t\t\t...、\t}\t}... 等卡顿信号）
       const thinkJunkResult = this.checkJunkTokenRepetition(this.thinkTokens);
@@ -332,21 +455,21 @@ export class RepetitionDetectionService {
         return thinkParagraphResult;
       }
 
-      return { isRepetitive: false };
+      return { isRepetitive: false, thinkTransition: this.lastThinkTransition ?? undefined };
     }
 
     // 每 N 个 token 检测一次
     if (this.streamTokens.length % this.CHECK_INTERVAL !== 0) {
-      return { isRepetitive: false };
+      return { isRepetitive: false, thinkTransition: this.lastThinkTransition ?? undefined };
     }
 
     // 至少需要一定数量的 token 才开始检测
     if (this.streamTokens.length < this.MIN_TOKENS_FOR_DETECTION) {
-      return { isRepetitive: false };
+      return { isRepetitive: false, thinkTransition: this.lastThinkTransition ?? undefined };
     }
 
     // Layer 0: 垃圾 token 重复（\t\t\t...、\t}\t}...、}\r}\r... 等卡顿信号）
-    const junkResult = this.checkJunkTokenRepetition(this.streamTokens);
+    const junkResult = this.checkJunkTokenRepetition(this.nonThinkStreamTokens);
     if (junkResult.isRepetitive) {
       return junkResult;
     }
@@ -376,7 +499,7 @@ export class RepetitionDetectionService {
     }
 
     // Layer 4: KMP token 循环模式（ABABAB 级 token 循环）
-    if (this.isRepetitivePattern(this.streamTokens)) {
+    if (this.isRepetitivePattern(this.nonThinkStreamTokens)) {
       return {
         isRepetitive: true,
         pattern: '检测到重复输出模式',
@@ -390,7 +513,7 @@ export class RepetitionDetectionService {
       return lineResult;
     }
 
-    return { isRepetitive: false };
+    return { isRepetitive: false, thinkTransition: this.lastThinkTransition ?? undefined };
   }
 
   // -------------------- Layer 1: 短语连续重复 --------------------
@@ -400,7 +523,7 @@ export class RepetitionDetectionService {
    * 用于检测 "ABCABCABC" 这种纯粹的连续重复
    */
   private checkPhraseRepetition(): RepetitionCheckResult {
-    return this.checkPhraseRepetitionOn(this.streamTokens);
+    return this.checkPhraseRepetitionOn(this.nonThinkStreamTokens);
   }
 
   /**
@@ -722,16 +845,14 @@ export class RepetitionDetectionService {
    * - 'think_end': </think> 结束，不保存内容（think 内容丢弃），只更新索引
    */
   markBoundary(type: 'tool_call' | 'think_start' | 'think_end' = 'tool_call'): void {
-    // 同步 insideThink 状态（防止 token 拆分导致 checkStreamRepetition 内的 includes 检测失败）
-    if (type === 'think_start') {
-      this.insideThink = true;
-      this.thinkTokens = [];
-    } else if (type === 'think_end') {
-      this.insideThink = false;
-      this.thinkTokens = [];
+    if (type === 'think_end') {
       // think 内容不保存为内容块，只更新边界位置
       this.lastBoundaryTokenIndex = this.streamTokens.length;
       return;
+    }
+
+    if (type === 'think_start') {
+      // think 开始：保存之前的输出内容为一个块，然后更新边界
     }
 
     // 提取上次边界到现在的增量 token
@@ -811,8 +932,11 @@ export class RepetitionDetectionService {
     // 从最近的块往前比较，计算连续相似块数
     let consecutiveSimilar = 0;
     for (let i = this.contentBlocks.length - 1; i >= 0; i--) {
+      // 动态阈值：短块需要更高相似度才触发，减少短文本误报
+      const blockLen = Math.min(currentDelta.length, this.contentBlocks[i].length);
+      const dynamicThreshold = Math.min(0.95, this.BLOCK_SIMILARITY_THRESHOLD + 0.1 * (this.MIN_BLOCK_LENGTH / blockLen));
       const similarity = this.computeSimilarity(currentDelta, this.contentBlocks[i]);
-      if (similarity >= this.BLOCK_SIMILARITY_THRESHOLD) {
+      if (similarity >= dynamicThreshold) {
         consecutiveSimilar++;
       } else {
         break; // 不连续了
@@ -891,7 +1015,7 @@ export class RepetitionDetectionService {
    * 检测末尾连续相同的行
    */
   private checkConsecutiveLineRepetition(): RepetitionCheckResult {
-    const text = this.streamTokens.join('');
+    const text = this.nonThinkStreamTokens.join('');
     const lines = text.split('\n').filter(l => l.trim().length > 0);
 
     if (lines.length < 4) {
@@ -954,7 +1078,9 @@ export class RepetitionDetectionService {
    */
   resetStreamTokens(): void {
     this.streamTokens = [];
+    this.nonThinkStreamTokens = [];
     this.thinkTokens = [];
+    this.tagBuffer = '';
     this.lastBoundaryTokenIndex = 0;
     this.insideThink = false;
   }
@@ -967,9 +1093,6 @@ export class RepetitionDetectionService {
     this.resetToolCallHistory();
     this.resetStreamTokens();
     this.contentBlocks = [];
-    this.thinkTokens = [];
-    this.lastBoundaryTokenIndex = 0;
-    this.insideThink = false;
   }
 
   /**

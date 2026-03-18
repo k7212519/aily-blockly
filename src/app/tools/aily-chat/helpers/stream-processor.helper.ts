@@ -72,10 +72,10 @@ export class StreamProcessorHelper {
         try {
           if (data.type === 'ModelClientStreamingChunkEvent') {
             if (data.content) {
-              if (data.content.includes('<think>')) { this.engine.insideThink = true; this.engine.repetitionDetectionService.markBoundary('think_start'); }
-              if (data.content.includes('</think>')) { this.engine.insideThink = false; this.engine.repetitionDetectionService.markBoundary('think_end'); }
-
               const streamRepetitionCheck = this.engine.repetitionDetectionService.checkStreamRepetition(data.content);
+              // 同步 think 状态（由服务内部状态机驱动，支持跨 token 标签拆分）
+              if (streamRepetitionCheck.thinkTransition === 'entered') { this.engine.insideThink = true; }
+              if (streamRepetitionCheck.thinkTransition === 'exited') { this.engine.insideThink = false; }
               if (streamRepetitionCheck.isRepetitive) {
                 console.warn('[重复检测] 流式文本重复:', streamRepetitionCheck.pattern);
                 this.engine.msg.appendMessage('aily', data.content, messageSource);
