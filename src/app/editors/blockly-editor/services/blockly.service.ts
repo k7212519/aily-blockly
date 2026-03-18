@@ -315,6 +315,7 @@ export class BlocklyService {
       if (block.type && Blockly.Blocks[block.type]) {
         console.log(`- delete ${block.type}`);
         delete Blockly.Blocks[block.type];
+        delete (window as any).Arduino.forBlock[block.type];
       }
     }
   }
