@@ -88,19 +88,23 @@ async function main() {
 
         // 5. 执行编译
         const args = [
-            `"${path.join(ailyBuilderPath, 'index.js')}"`,
+            path.join(ailyBuilderPath, 'index.js'),
             'compile',
-            `"${sketchFilePath}"`,
-            '--board', `"${boardType}"`,
-            '--preprocess-result', `"${preprocessCachePath}"`,
+            sketchFilePath,
+            '--board', boardType,
+            '--preprocess-result', preprocessCachePath,
         ];
 
         logger.log(`执行编译: node ${args.join(' ')}`);
 
         const child = spawn('node', args, {
             cwd: currentProjectPath,
-            shell: true,
             stdio: 'inherit'
+        });
+
+        child.on('error', (error) => {
+            logger.error(`编译进程错误: ${error.message}`);
+            process.exit(1);
         });
 
         child.on('close', (code) => {

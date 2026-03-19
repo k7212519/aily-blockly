@@ -253,16 +253,16 @@ async function main() {
         
         logger.log('开始预编译...');
         const pre_args = [
-            `"${path.join(ailyBuilderPath, 'index.js')}"`,
+            path.join(ailyBuilderPath, 'index.js'),
             'preprocess',
             // `...parseArgs(compilerParam)`,
-            `"${sketchFilePath}"`,
-            '--board', `"${boardType}"`,
-            '--libraries-path', `"${librariesPath}"`,
-            '--sdk-path', `"${fullSdkPath}"`,
-            '--tools-path', `"${toolsPath}"`,
-            '--tool-versions', `"${toolVersions.join(',')}"`,
-            '--save-result', `"${preprocessCachePath}"`
+            sketchFilePath,
+            '--board', boardType,
+            '--libraries-path', librariesPath,
+            '--sdk-path', fullSdkPath,
+            '--tools-path', toolsPath,
+            '--tool-versions', toolVersions.join(','),
+            '--save-result', preprocessCachePath
         ];
 
         // 添加项目配置参数（如 UploadSpeed, FlashMode, FlashSize, PartitionScheme, PSRAM 等）
@@ -293,7 +293,6 @@ async function main() {
         await new Promise((resolve, reject) => {
             const preChild = spawn('node', pre_args, {
                 cwd: currentProjectPath,
-                shell: true,
                 stdio: 'inherit'
             });
 

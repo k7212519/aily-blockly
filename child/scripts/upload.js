@@ -306,8 +306,12 @@ async function main() {
         // 12. 执行上传命令
         const child = spawn(command, args, {
             cwd: buildPath,
-            shell: true,
             stdio: 'inherit'
+        });
+
+        child.on('error', (error) => {
+            logger.error('上传命令启动失败:', error.message);
+            process.exit(1);
         });
 
         child.on('close', (code) => {
@@ -340,19 +344,19 @@ async function processUploadParams(uploadParam, buildPath, toolsPath, sdkPath, b
 
     // 替换 ${boot_app0}
     if (paramString.includes('${boot_app0}')) {
-        paramString = paramString.replace(/\$\{boot_app0\}/g, `"${path.join(sdkPath, 'tools', 'partitions', 'boot_app0.bin')}"`);
+        paramString = paramString.replace(/\$\{boot_app0\}/g, path.join(sdkPath, 'tools', 'partitions', 'boot_app0.bin'));
     }
 
     // 替换 ${bootloader}
     if (paramString.includes('${bootloader}')) {
         const bootLoaderFile = await findFile(buildPath, '*.bootloader.bin');
-        paramString = paramString.replace(/\$\{bootloader\}/g, `"${bootLoaderFile}"`);
+        paramString = paramString.replace(/\$\{bootloader\}/g, bootLoaderFile);
     }
 
     // 替换 ${partitions}
     if (paramString.includes('${partitions}')) {
         const partitionsFile = await findFile(buildPath, '*.partitions.bin');
-        paramString = paramString.replace(/\$\{partitions\}/g, `"${partitionsFile}"`);
+        paramString = paramString.replace(/\$\{partitions\}/g, partitionsFile);
     }
 
     // 分割参数
@@ -404,10 +408,7 @@ async function processUploadParams(uploadParam, buildPath, toolsPath, sdkPath, b
             }
 
             if (findRes) {
-                // 检查参数是否已经在引号内，如果是则不再添加引号
-                const paramHasQuotes = param.startsWith('"') || param.includes('"');
-                const replacement = paramHasQuotes ? findRes : `"${findRes}"`;
-                paramList[i] = param.replace(`\$\{\'${fileName}\'\}`, replacement);
+                paramList[i] = param.replace(`\$\{\'${fileName}\'\}`, findRes);
             } else {
                 logger.warn(`无法找到文件: ${fileName}`);
             }
@@ -429,7 +430,6 @@ function parseArgs(str) {
         const char = str[i];
         if (char === '"') {
             inQuote = !inQuote;
-            current += char; // 保留引号，因为使用 shell: true 时需要引号来保护带空格的参数
         } else if (char === ' ' && !inQuote) {
             if (current) {
                 args.push(current);
