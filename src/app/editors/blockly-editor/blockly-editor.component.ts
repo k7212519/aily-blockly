@@ -93,7 +93,7 @@ export class BlocklyEditorComponent implements OnInit, AfterViewInit, OnDestroy 
     private noticeService: NoticeService,
     private el: ElementRef,
     private ngZone: NgZone,
-  ) {}
+  ) { }
 
   ngOnInit(): void {
     this.actionSubscription = this.uiService.actionSubject.subscribe(
@@ -204,6 +204,7 @@ export class BlocklyEditorComponent implements OnInit, AfterViewInit, OnDestroy 
           title: this.translate.instant('NPM.INSTALLING_TITLE'),
           text: this.translate.instant('BLOCKLY_EDITOR.INSTALLING_DEPS'),
           state: 'doing',
+          icon: 'fa-light fa-cubes',
           showProgress: false,
         });
       }, 0);
