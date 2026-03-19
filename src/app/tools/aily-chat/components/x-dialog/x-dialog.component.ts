@@ -13,6 +13,7 @@ import { XMarkdownComponent } from 'ngx-x-markdown';
 import type { StreamingOption, ComponentMap } from 'ngx-x-markdown';
 import { AilyChatCodeComponent } from './aily-chat-code.component';
 import { ChatAPI } from '../../core/api-endpoints';
+import { AilyHost } from '../../core/host';
 
 @Component({
   selector: 'aily-x-dialog',
@@ -95,10 +96,14 @@ export class XDialogComponent implements OnChanges, AfterViewChecked {
   onFeedback(feedback: 'helpful' | 'unhelpful'): void {
     if (this.feedbackState === feedback || !this.sessionId) return;
     this.feedbackState = feedback;
-    fetch(`${ChatAPI.conversationFeedback}/${this.sessionId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ feedback }),
+    AilyHost.get().auth.getToken!().then(token => {
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      fetch(`${ChatAPI.conversationFeedback}/${this.sessionId}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ feedback }),
+      }).catch(() => {});
     }).catch(() => {});
   }
 
