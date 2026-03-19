@@ -263,8 +263,5 @@ export class FloatSiderComponent implements OnInit, OnDestroy {
       width: 900,
       height: 700,
     });
-
-    // 直接切换到 blockly-editor 的连线图 tab
-    // this.uiService.actionSubject.next({ action: 'switch', type: 'editor-tab', data: 'graph' });
   }
 }
