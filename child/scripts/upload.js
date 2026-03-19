@@ -321,33 +321,23 @@ async function main() {
         // 11. 将占位符替换为最终串口，生成最终参数
         logger.log('使用串口:', finalSerialPort);
         const args = templateArgs.map(a => a.replace(SERIAL_PLACEHOLDER, finalSerialPort));
-        logger.log(`Executing: ${command} ${args.join(' ')}`);
+        const shellCommand = wrapInQuotesIfNeeded(command);
+
+        logger.log(`Executing: ${shellCommand} ${args.join(' ')}`);
 
         // 12. 执行上传命令
-        const child = spawn(command, args, {
+        const child = spawn(shellCommand, args, {
             cwd: buildPath,
+            shell: true,
             stdio: 'inherit'
         });
 
-        child.on('error', (error) => {
-            logger.error('上传命令启动失败:', error.message);
-            process.exit(1);
-        });
-
-        child.on('close', (code, signal) => {
-            if (signal) {
-                logger.error(`[ERROR] 上传命令被信号终止: ${signal}`);
-                process.exit(1);
-                return;
-            }
-
+        child.on('close', (code) => {
             if (code !== 0) {
-                logger.error(`[ERROR] 上传命令异常退出，退出码: ${code}`);
-                process.exit(code || 1);
-                return;
+                process.exit(code);
+            } else {
+                process.exit(0);
             }
-
-            process.exit(0);
         });
 
     } catch (error) {
@@ -372,19 +362,19 @@ async function processUploadParams(uploadParam, buildPath, toolsPath, sdkPath, b
 
     // 替换 ${boot_app0}
     if (paramString.includes('${boot_app0}')) {
-        paramString = paramString.replace(/\$\{boot_app0\}/g, path.join(sdkPath, 'tools', 'partitions', 'boot_app0.bin'));
+        paramString = paramString.replace(/\$\{boot_app0\}/g, `"${path.join(sdkPath, 'tools', 'partitions', 'boot_app0.bin')}"`);
     }
 
     // 替换 ${bootloader}
     if (paramString.includes('${bootloader}')) {
         const bootLoaderFile = await findFile(buildPath, '*.bootloader.bin');
-        paramString = paramString.replace(/\$\{bootloader\}/g, bootLoaderFile);
+        paramString = paramString.replace(/\$\{bootloader\}/g, `"${bootLoaderFile}"`);
     }
 
     // 替换 ${partitions}
     if (paramString.includes('${partitions}')) {
         const partitionsFile = await findFile(buildPath, '*.partitions.bin');
-        paramString = paramString.replace(/\$\{partitions\}/g, partitionsFile);
+        paramString = paramString.replace(/\$\{partitions\}/g, `"${partitionsFile}"`);
     }
 
     // 分割参数
@@ -436,7 +426,9 @@ async function processUploadParams(uploadParam, buildPath, toolsPath, sdkPath, b
             }
 
             if (findRes) {
-                paramList[i] = param.replace(`\$\{\'${fileName}\'\}`, findRes);
+                const paramHasQuotes = param.startsWith('"') || param.includes('"');
+                const replacement = paramHasQuotes ? findRes : `"${findRes}"`;
+                paramList[i] = param.replace(`\$\{\'${fileName}\'\}`, replacement);
             } else {
                 logger.warn(`无法找到文件: ${fileName}`);
             }
@@ -458,6 +450,7 @@ function parseArgs(str) {
         const char = str[i];
         if (char === '"') {
             inQuote = !inQuote;
+            current += char;
         } else if (char === ' ' && !inQuote) {
             if (current) {
                 args.push(current);
@@ -469,6 +462,14 @@ function parseArgs(str) {
     }
     if (current) args.push(current);
     return args;
+}
+
+function wrapInQuotesIfNeeded(value) {
+    if (!value || value.startsWith('"') || !/\s/.test(value)) {
+        return value;
+    }
+
+    return `"${value}"`;
 }
 
 // 递归查找文件
