@@ -36,7 +36,7 @@
     (mouseleave)="onDialogMouseLeave()"
   >
     @if (canRenderCheckpointAnchor) {
-      <div class="checkpoint-action-row">
+      <div class="checkpoint-action-row" [class.expanded]="showCheckpointAnchor">
         <span
           class="restore-checkpoint-text"
           [class.visible]="showCheckpointAnchor"

@@ -34,6 +34,7 @@ import { AilyHost } from '../core/host';
 import { ToolRegistry } from '../core/tool-registry';
 import { createSecurityContext } from './security.service';
 import { TOOLS } from '../tools/tools';
+import { syncAbsFileHandler } from '../tools/syncAbsFileTool';
 import { registerAskUserCallback, unregisterAskUserCallback, AskUserQuestion, AskUserFullResponse, AskUserAnswer } from '../tools/askUserTool';
 import { cleanupAllTerminalSessions } from '../tools/terminalSessionTool';
 
@@ -928,8 +929,9 @@ Do not create non-existent boards and libraries.
 
   /**
    * 回滚/还原后重新同步 ABS 到 Blockly 工作区。
-   * 使用 forceImportFromAbs 绕过 isSyncing 互斥锁，
-   * 确保 undo/redo 写盘后能立即重新加载。
+   * 复用 sync_abs_file 工具的导入逻辑（BlocklyAbsParser + createBlockFromConfig），
+   * 而非简化版的 convertAbsToAbi + Blockly.serialization.workspaces.load，
+   * 确保动态块、扩展、mutator 等能正确加载。
    */
   private async reloadAbsWorkspace(): Promise<void> {
     const projectPath = this.getCurrentProjectPath()
@@ -939,9 +941,19 @@ Do not create non-existent boards and libraries.
       this.absAutoSyncService.initialize(projectPath);
     }
     try {
-      const imported = await this.absAutoSyncService.forceImportFromAbs();
-      if (!imported) {
-        console.warn('[reloadAbsWorkspace] ABS 强制导入失败（文件不存在或解析错误），projectPath:', projectPath);
+      const fsCompat = {
+        exists: (p: string) => AilyHost.get().fs.existsSync(p),
+        readFile: (p: string) => AilyHost.get().fs.readFileSync(p, 'utf-8'),
+        writeFile: (p: string, data: string) => AilyHost.get().fs.writeFileSync(p, data),
+      };
+      const result = await syncAbsFileHandler(
+        { operation: 'import' },
+        AilyHost.get().project,
+        fsCompat,
+        this.absAutoSyncService
+      );
+      if (result.is_error) {
+        console.warn('[reloadAbsWorkspace] ABS 导入失败:', result.content);
       }
     } catch (err) {
       console.warn('[reloadAbsWorkspace] ABS 导入异常:', err);
@@ -949,11 +961,12 @@ Do not create non-existent boards and libraries.
   }
 
   /**
-   * 用户保留文件变更 — 保存反馈状态，待下轮发送时注入上下文
+   * 用户保留文件变更 — 将当前状态设为新基线，保存反馈状态
    */
   private onKeepEdits(detail: any): void {
     const { fileCount, totalAdded, totalRemoved } = detail || {};
     this.pendingEditFeedback = `[用户已确认保留上一轮的文件变更：${fileCount || 0} 个文件，+${totalAdded || 0} / -${totalRemoved || 0} 行]`;
+    this.editCheckpointService.acceptAllAsBaseline();
   }
 
   /**

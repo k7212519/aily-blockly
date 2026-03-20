@@ -163,9 +163,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 24px;
+  height: 0;
   padding: 0 6px;
   width: 100%;
+  overflow: hidden;
+  transition: height 0.18s ease;
+
+  &.expanded {
+    height: 24px;
+  }
 }
 
 .restore-checkpoint-text {

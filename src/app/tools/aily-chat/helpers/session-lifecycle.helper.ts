@@ -32,10 +32,10 @@ export class SessionLifecycleHelper {
       // 导出 subagent 会话数据（Plan C 压缩：保留最近 3 轮对话）
       const subagentHistories = this.engine.subagentSessionService.exportSessions(3);
 
-      // checkpoint 数据独立存储到 .aily_checkpoints/ 目录（不再放入 session JSON）
+      // checkpoint 数据独立存储到 .aily_checkpoints/{sessionId}/ 目录
       if (prjPath && this.engine.editCheckpointService?.getTotalEditCount() > 0) {
         try {
-          this.engine.editCheckpointService.saveToDisk(prjPath);
+          this.engine.editCheckpointService.saveToDisk(prjPath, this.engine.sessionId);
         } catch (err) {
           console.warn('[SessionLifecycle] checkpoint saveToDisk failed:', err);
         }
@@ -267,11 +267,8 @@ export class SessionLifecycleHelper {
     this.engine.isCompleted = false;
     this.engine.isCancelled = true;
     this.engine.editCheckpointService.clear();
-    // 清理项目目录下的 checkpoint 文件
-    const cpPath = AilyHost.get().project.currentProjectPath;
-    if (cpPath) {
-      try { this.engine.editCheckpointService.cleanDisk(cpPath); } catch {}
-    }
+    this.engine.editCheckpointService.dismissSummary();
+    // 旧会话的 checkpoint 文件保留在磁盘（随会话历史删除时清除）
     if (this.engine.messageSubscription) { this.engine.messageSubscription.unsubscribe(); this.engine.messageSubscription = null; }
     this.engine.activeToolExecutions = 0;
     this.engine.sseStreamCompleted = false;
@@ -324,16 +321,24 @@ export class SessionLifecycleHelper {
         this.engine.subagentSessionService.importSessions(sessionData.subagentHistories);
       }
 
-      // 恢复文件变更 checkpoint — 优先从 .aily_checkpoints/ 目录加载
+      // 恢复文件变更 checkpoint — 优先从 .aily_checkpoints/{sessionId}/ 目录加载
       const cpProjectPath = sessionData.metadata?.projectPath;
-      if (cpProjectPath) {
-        const loaded = this.engine.editCheckpointService?.loadFromDisk(cpProjectPath);
+      const cpSessionId = this.engine.sessionId;
+      if (cpProjectPath && cpSessionId) {
+        const loaded = this.engine.editCheckpointService?.loadFromDisk(cpProjectPath, cpSessionId);
         if (!loaded && sessionData.editCheckpoints) {
           // 兼容旧 JSON 格式
           this.engine.editCheckpointService?.restoreFromJSON(sessionData.editCheckpoints);
         }
       } else if (sessionData.editCheckpoints) {
         this.engine.editCheckpointService?.restoreFromJSON(sessionData.editCheckpoints);
+      }
+
+      // 恢复后刷新编辑摘要面板
+      if (this.engine.editCheckpointService?.getTotalEditCount() > 0) {
+        this.engine.editCheckpointService.publishCurrentSummary();
+      } else {
+        this.engine.editCheckpointService?.dismissSummary();
       }
 
       this.engine.scrollManager.scrollToBottom('auto');
