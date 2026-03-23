@@ -161,6 +161,7 @@ interface AnswerRecord {
       color: #d4d4d4;
       line-height: 1.5;
       flex: 1;
+      white-space: pre-wrap;
     }
     .aq-close {
       flex-shrink: 0;
@@ -225,6 +226,8 @@ interface AnswerRecord {
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      white-space: pre-wrap;
+      word-break: break-all;
     }
     .aq-badge-rec {
       display: inline-block;
@@ -236,11 +239,14 @@ interface AnswerRecord {
       padding: 1px 5px;
       line-height: 1.4;
       vertical-align: middle;
+      white-space: nowrap;
     }
     .aq-option-desc {
       font-size: 11px;
       color: #777;
       line-height: 1.3;
+      white-space: pre-wrap;
+      word-break: break-all;
     }
 
     .aq-hidden-input {
@@ -332,7 +338,7 @@ interface AnswerRecord {
       color: #52c41a;
     }
     .aq-done-bar i { font-size: 13px; }
-    .aq-done-bar span { color: #888; }
+    .aq-done-bar span { color: #888; white-space: pre-wrap; word-break: break-all; }
 
 
   `],
