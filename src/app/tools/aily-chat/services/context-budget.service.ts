@@ -240,7 +240,8 @@ export class ContextBudgetService {
   private static readonly INFO_TOOLS = new Set([
     'read_file', 'fetch', 'web_search', 'grep', 'grep_tool', 'glob_tool',
     'get_directory_tree', 'list_directory', 'search_boards_libraries',
-    'get_abs_syntax', 'get_workspace_overview_tool',
+    // 'get_abs_syntax', 
+    'get_workspace_overview_tool',
   ]);
 
   /** 保留最近 N 条消息不压缩（确保最近上下文完整） */

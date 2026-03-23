@@ -213,8 +213,14 @@ export class ToolCallLoopHelper {
 
       // 如果本轮有文件变更，通过服务推送摘要到面板
       if (this.engine.editCheckpointService.hasEditsInCurrentTurn()) {
-        const summary = this.engine.editCheckpointService.getEditsSummary();
-        this.engine.editCheckpointService.publishSummary(summary);
+        if (this.engine.ailyChatConfigService.autoSaveEdits) {
+          // 自动保存模式：直接保留变更，不弹出面板
+          this.engine.editCheckpointService.acceptAllAsBaseline();
+          this.engine.editCheckpointService.dismissSummary();
+        } else {
+          const summary = this.engine.editCheckpointService.getEditsSummary();
+          this.engine.editCheckpointService.publishSummary(summary);
+        }
       }
 
       if (this.engine.list.length > 0 && this.engine.list[this.engine.list.length - 1].role === 'aily') {

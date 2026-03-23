@@ -6,6 +6,7 @@
 
 import type { ChatEngineService } from '../services/chat-engine.service';
 import { AilyHost } from '../core/host';
+import { SkillRegistry } from '../core/skill-registry';
 import { markContentAsHistory as _markContentAsHistory } from '../services/content-sanitizer.service';
 
 export class SessionLifecycleHelper {
@@ -108,6 +109,13 @@ export class SessionLifecycleHelper {
     this.engine.insideThink = false;
     this.engine.rulesInjectedThisSession = false;
     this.engine.activatedDeferredTools.clear();
+    SkillRegistry.clearSessionState();
+
+    // 初始化 Skills 系统（扫描全局 + 项目级 skills）
+    const projectRoot = AilyHost.get().project?.currentProjectPath || AilyHost.get().project?.projectRootPath;
+    SkillRegistry.initialize(projectRoot).catch(err => {
+      console.warn('[AilyChat] Skills 初始化失败:', err);
+    });
 
     if (!this.engine.mcpInitialized) {
       this.engine.mcpInitialized = true;

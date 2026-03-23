@@ -1,13 +1,17 @@
 /**
  * EditCheckpointService — Copilot-style 文件变更快照与回滚服务
  *
- * 完全对标 VS Code Copilot 的 ChatEditingSession 实现：
- *
  * 核心设计：
- * - initialFileContents: 每个文件首次被 AI 编辑前的原始内容（只写一次，不更新）
+ * - initialFileContents: 每个文件首次被 AI 编辑前的原始内容（保留后刷新为当前态）
+ * - currentTurnBaselines: 本轮 AI 编辑前的磁盘快照（每轮 recordEdit 时重新捕获）
  * - timeline: 线性快照时间线，每个 turn 一个 TurnSnapshot，内含 SnapshotStop
  * - timelineIndex: 当前游标位置，支持 undo/redo 双向导航
  * - pendingSnapshot: Undo 前自动保存的"最新磁盘状态"快照，确保 redo 可恢复
+ *
+ * 基线规则：
+ * - 用户手动编辑不纳入 diff：recordEdit 在 AI 操作开始时捕获磁盘态作为本轮基线
+ * - 保留后刷新 initialFileContents：其他 session 修改同文件不影响已保留会话
+ * - 回到 session 时以最新磁盘内容为基准：新轮次 recordEdit 重新捕获
  */
 
 import { Injectable } from '@angular/core';
@@ -85,6 +89,13 @@ export class EditCheckpointService {
   /** 当前 turn 中各文件的操作类型（用于摘要显示） */
   private currentTurnOperations = new Map<string, 'create' | 'modify' | 'delete'>();
 
+  /**
+   * 本轮 AI 编辑前的磁盘基线（per-turn baseline）。
+   * 每次 recordEdit 时捕获该文件此刻的磁盘内容。
+   * 用于 getEditsSummary 计算 diff — 确保用户手动编辑不纳入统计。
+   */
+  private currentTurnBaselines = new Map<string, string | null>();
+
   /** 是否在活跃 turn 中 */
   private isInTurn = false;
 
@@ -112,12 +123,25 @@ export class EditCheckpointService {
   /**
    * 用户"保留"当前所有变更 — 将当前状态设为新基线。
    * - undo/redo 不再回退到此时间点之前
-   * - getEditsSummary 以此状态为 diff 基线下限，不再显示已保留的变更
+   * - 刷新 initialFileContents 为当前磁盘态，避免跨 session 产生幻影 diff
    * - restoreToCheckpoint（还原检查点）不受此限制，可跨保留边界回滚
    */
   acceptAllAsBaseline(): void {
     this.keptTimelineIndex = this.timelineIndex;
     this.pendingSnapshot = null;
+
+    // 刷新 initialFileContents 为当前磁盘态
+    // 确保保留后其他 session 对同文件的修改不产生幻影 diff
+    const fs = AilyHost.get().fs;
+    for (const filePath of [...this.initialFileContents.keys()]) {
+      try {
+        if (fs.existsSync(filePath)) {
+          this.initialFileContents.set(filePath, fs.readFileSync(filePath, 'utf-8'));
+        } else {
+          this.initialFileContents.set(filePath, null);
+        }
+      } catch { /* ignore */ }
+    }
   }
 
   // ==================== Turn 管理 ====================
@@ -152,16 +176,19 @@ export class EditCheckpointService {
 
     this.currentTurnTrackedPaths.clear();
     this.currentTurnOperations.clear();
+    this.currentTurnBaselines.clear();
     this.isInTurn = true;
   }
 
   /**
    * 记录一次文件编辑（在工具实际写盘前调用）。
-   * 首次编辑某文件时自动捕获初始内容（对标 Copilot _initialFileContents 只写一次）。
+   * - initialFileContents: 仅首次写入（用于 undo 回退到最初状态）
+   * - currentTurnBaselines: 每轮重新捕获（用于 diff 计算，排除用户手动编辑）
    */
   recordEdit(filePath: string, type: 'create' | 'modify' | 'delete'): void {
     const fs = AilyHost.get().fs;
 
+    // initialFileContents 仅首次写入 — 用于 undo 回退到最初状态
     if (!this.initialFileContents.has(filePath)) {
       let content: string | null = null;
       try {
@@ -170,6 +197,18 @@ export class EditCheckpointService {
         }
       } catch { /* ignore */ }
       this.initialFileContents.set(filePath, content);
+    }
+
+    // currentTurnBaselines 每轮首次编辑同一文件时捕获当前磁盘态
+    // 这确保 diff 只反映本轮 AI 的实际变更，不包含用户手动编辑或其他 session 的变更
+    if (!this.currentTurnBaselines.has(filePath)) {
+      let content: string | null = null;
+      try {
+        if (fs.existsSync(filePath)) {
+          content = fs.readFileSync(filePath, 'utf-8');
+        }
+      } catch { /* ignore */ }
+      this.currentTurnBaselines.set(filePath, content);
     }
 
     this.currentTurnTrackedPaths.add(filePath);
@@ -252,6 +291,9 @@ export class EditCheckpointService {
 
   acceptFile(filePath: string): void {
     this.initialFileContents.delete(filePath);
+    this.currentTurnTrackedPaths.delete(filePath);
+    this.currentTurnBaselines.delete(filePath);
+    this.currentTurnOperations.delete(filePath);
 
     for (const turn of this.timeline) {
       for (const stop of turn.stops) {
@@ -279,6 +321,9 @@ export class EditCheckpointService {
     }
 
     this.initialFileContents.delete(filePath);
+    this.currentTurnTrackedPaths.delete(filePath);
+    this.currentTurnBaselines.delete(filePath);
+    this.currentTurnOperations.delete(filePath);
 
     return result;
   }
@@ -386,7 +431,6 @@ export class EditCheckpointService {
     }
 
     // 所有变更已保留且当前 turn 无新编辑 — 无需展示摘要
-    // 避免加载已保留会话后因磁盘被其他 session 修改而产生幻影 diff
     if (this.keptTimelineIndex >= this.timelineIndex && this.currentTurnTrackedPaths.size === 0) {
       return null;
     }
@@ -394,16 +438,6 @@ export class EditCheckpointService {
     const fs = AilyHost.get().fs;
     const pathUtil = AilyHost.get().path;
     const projectPath = AilyHost.get().project.currentProjectPath || '';
-
-    // diff 基线索引：取 keptTimelineIndex 和 timelineIndex-1 的较大值
-    // 保证已保留的变更不再显示
-    const baselineIndex = Math.max(
-      this.keptTimelineIndex,
-      this.timelineIndex > 0 ? this.timelineIndex - 1 : -1
-    );
-    const prevStop = baselineIndex >= 0
-      ? this.getLastStopAt(baselineIndex)
-      : null;
 
     let totalAdded = 0;
     let totalRemoved = 0;
@@ -415,8 +449,10 @@ export class EditCheckpointService {
       : this.initialFileContents.keys();
 
     for (const filePath of filesToCheck) {
-      // baseline: 优先使用前一轮快照中的内容，否则使用 initialFileContents
-      const baselineContent = prevStop?.entries[filePath]?.current
+      // 基线优先级：
+      // 1. currentTurnBaselines — 本轮 AI 开始编辑前的磁盘态（最精确，排除用户手动编辑）
+      // 2. initialFileContents — 兜底（保留后已刷新为当前态，不会产生幻影 diff）
+      const baselineContent = this.currentTurnBaselines.get(filePath)
         ?? this.initialFileContents.get(filePath)
         ?? null;
 
@@ -651,6 +687,7 @@ export class EditCheckpointService {
       this.pendingSnapshot = state.pendingSnapshot ? deserializeStop(state.pendingSnapshot) : null;
       this.currentTurnTrackedPaths.clear();
       this.currentTurnOperations.clear();
+      this.currentTurnBaselines.clear();
       this.isInTurn = false;
 
       return true;
@@ -750,6 +787,7 @@ export class EditCheckpointService {
     this.pendingSnapshot = data.pendingSnapshot || null;
     this.currentTurnTrackedPaths.clear();
     this.currentTurnOperations.clear();
+    this.currentTurnBaselines.clear();
     this.isInTurn = false;
   }
 
@@ -761,6 +799,7 @@ export class EditCheckpointService {
     this.pendingSnapshot = null;
     this.currentTurnTrackedPaths.clear();
     this.currentTurnOperations.clear();
+    this.currentTurnBaselines.clear();
     this.isInTurn = false;
   }
 

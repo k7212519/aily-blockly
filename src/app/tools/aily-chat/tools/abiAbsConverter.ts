@@ -62,20 +62,20 @@ export function convertAbiToAbs(abiJson: any, options: AbiToAbsOptions = {}): st
   // 1. @var 是 Blockly 工作区内部变量，不生成 C++ 代码
   // 2. variable_define 等块才会生成实际的 C++ 变量声明
   // 3. 避免 LLM 混淆两种不同的变量概念
-  if (abiJson.variables && Array.isArray(abiJson.variables)) {
-    if (abiJson.variables.length > 0) {
-      // 仅注册变量用于ID→名称转换，不输出到ABS
-      for (const variable of abiJson.variables) {
-        context.registerVariable(variable.id, variable.name, variable.type || 'int');
-      }
-      // 输出为注释，供参考但不影响导入
-      lines.push('# Blockly workspace variables (auto-managed, do not edit):');
-      for (const variable of abiJson.variables) {
-        lines.push(`# - ${variable.name}: ${variable.type || 'int'}`);
-      }
-      lines.push('');
-    }
-  }
+  // if (abiJson.variables && Array.isArray(abiJson.variables)) {
+  //   if (abiJson.variables.length > 0) {
+  //     // 仅注册变量用于ID→名称转换，不输出到ABS
+  //     for (const variable of abiJson.variables) {
+  //       context.registerVariable(variable.id, variable.name, variable.type || 'int');
+  //     }
+  //     // 输出为注释，供参考但不影响导入
+  //     lines.push('# Blockly workspace variables (auto-managed, do not edit):');
+  //     for (const variable of abiJson.variables) {
+  //       lines.push(`# - ${variable.name}: ${variable.type || 'int'}`);
+  //     }
+  //     lines.push('');
+  //   }
+  // }
   
   // 设置 lineOffset 为当前 header 行数（后续块转换时使用）
   context.lineOffset = lines.length;
@@ -137,18 +137,18 @@ export function convertAbiToAbsWithLineMap(
     lines.push('');
   }
   
-  if (abiJson.variables && Array.isArray(abiJson.variables)) {
-    if (abiJson.variables.length > 0) {
-      for (const variable of abiJson.variables) {
-        context.registerVariable(variable.id, variable.name, variable.type || 'int');
-      }
-      lines.push('# Blockly workspace variables (auto-managed, do not edit):');
-      for (const variable of abiJson.variables) {
-        lines.push(`# - ${variable.name}: ${variable.type || 'int'}`);
-      }
-      lines.push('');
-    }
-  }
+  // if (abiJson.variables && Array.isArray(abiJson.variables)) {
+  //   if (abiJson.variables.length > 0) {
+  //     for (const variable of abiJson.variables) {
+  //       context.registerVariable(variable.id, variable.name, variable.type || 'int');
+  //     }
+  //     lines.push('# Blockly workspace variables (auto-managed, do not edit):');
+  //     for (const variable of abiJson.variables) {
+  //       lines.push(`# - ${variable.name}: ${variable.type || 'int'}`);
+  //     }
+  //     lines.push('');
+  //   }
+  // }
   
   context.lineOffset = lines.length;
   

@@ -90,6 +90,8 @@ export class ChatEngineService {
 
   /** 缓存的编辑反馈（用户保留/撤销变更后，在下次发送时注入上下文） */
   private pendingEditFeedback: string | null = null;
+  /** 用于中止当前轮次中工具执行的 AbortController */
+  private abortController: AbortController | null = null;
 
   setServerSessionInactive() { this.serverSessionActive = false; }
   pendingUserInput = false;
@@ -324,6 +326,8 @@ export class ChatEngineService {
 
       // 新建项目时自动领养根目录下的孤儿会话
       if (newPath && newPath !== rootPath) {
+        // 先加载新项目的本地索引（项目级优先）
+        this.chatHistoryService.reloadProjectIndex(newPath);
         const adopted = this.chatHistoryService.adoptOrphanSessions(newPath, rootPath);
         if (adopted > 0) {
           console.log(`[ChatEngine] 项目切换，自动领养 ${adopted} 个孤儿会话到: ${newPath}`);
@@ -433,6 +437,7 @@ export class ChatEngineService {
       securityContext: this.securityContext,
       sessionId: this.sessionId,
       editCheckpoint: this.editCheckpointService,
+      abortSignal: this.abortController?.signal,
     };
   }
 
@@ -644,6 +649,10 @@ Do not create non-existent boards and libraries.
         this.msg.appendMessage('aily', '[thinking...]');
         this.currentMessageSource = 'mainAgent';
         this.toolCallingIteration = 0;
+        // 创建新的 AbortController 用于本轮工具执行中止
+        this.abortController = new AbortController();
+        // Turn 开始前自动导出 ABS，确保磁盘态与图形工作区同步
+        this.absAutoSyncService.exportToAbs().catch(() => {});
         // 启动新 turn 的 checkpoint（记录 conversationMessages 和 list 的当前位置）
         this.editCheckpointService.startTurn(
           0,
@@ -712,15 +721,17 @@ Do not create non-existent boards and libraries.
 
       // 将 subagent 回复记录到主对话历史
       this.conversationMessages.push({ role: 'assistant', content: `[${agentName}] ${result}` });
-
-      // 确保最后一条消息标记完成
+    } catch (error: any) {
+      // 用户主动停止时不显示错误消息
+      if (!this.isCancelled) {
+        const errMsg = error?.message || `${agentName} 执行失败`;
+        this.msg.appendMessage('aily', `\n\`\`\`aily-error\n{\n  "message": "${this.msg.makeJsonSafe(errMsg)}"}\n\`\`\`\n\n`, agentName);
+      }
+    } finally {
+      // 确保最后一条消息标记完成（包括超时/错误场景）
       if (this.list.length > 0 && this.list[this.list.length - 1].role === 'aily') {
         this.list[this.list.length - 1].state = 'done';
       }
-    } catch (error: any) {
-      const errMsg = error?.message || `${agentName} 执行失败`;
-      this.msg.appendMessage('aily', `\n\`\`\`aily-error\n{\n  "message": "${this.msg.makeJsonSafe(errMsg)}"}\n\`\`\`\n\n`, agentName);
-    } finally {
       this.currentMessageSource = 'mainAgent';
       this.isWaiting = false;
       this.isCompleted = true;
@@ -732,6 +743,11 @@ Do not create non-existent boards and libraries.
 
   stop(): void {
     this.isCancelled = true;
+    // 中止正在进行的异步工具操作
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
+    }
     const wasStatelessTurn = this.currentStatelessMode;
     if (this.messageSubscription) { this.messageSubscription.unsubscribe(); this.messageSubscription = null; }
     this.pendingUserInput = false;
@@ -1142,6 +1158,8 @@ Do not create non-existent boards and libraries.
     // 添加新的助手消息占位
     this.msg.appendMessage('aily', '[thinking...]');
 
+    // Turn 开始前自动导出 ABS，确保磁盘态与图形工作区同步
+    this.absAutoSyncService.exportToAbs().catch(() => {});
     // 创建新的 checkpoint
     this.editCheckpointService.startTurn(
       0,

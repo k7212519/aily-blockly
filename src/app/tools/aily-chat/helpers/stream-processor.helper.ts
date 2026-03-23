@@ -21,6 +21,9 @@ import {
   BLOCKLY_RULES_TEXT, ASK_MODE_ROLE_TEXT,
 } from '../services/stream-constants';
 import { searchDeferredTools, getDeferredToolsListing } from '../tools/tools';
+import { SkillRegistry } from '../core/skill-registry';
+import { loadSkillHandler } from '../tools/loadSkillTool';
+// import { manageSkillsHandler } from '../tools/manageSkillsTool'; // TODO: Skills Hub 后续完善
 
 export class StreamProcessorHelper {
   constructor(private engine: ChatEngineService) {}
@@ -333,6 +336,15 @@ export class StreamProcessorHelper {
                   toolResult = { is_error: false, content: `未找到匹配 "${query}" 的工具。\n${getDeferredToolsListing(messageSource, agentExcluded)}` };
                   resultText = `未找到匹配的工具`;
                 }
+              } else if (data.tool_name === 'load_skill') {
+                // 技能加载器：搜索并加载领域技能的详细指南
+                toolResult = await loadSkillHandler(toolArgs || {});
+                resultText = toolResult.is_error ? '加载技能失败' : '技能已加载';
+              /* } else if (data.tool_name === 'manage_skills') {
+                // TODO: Skills Hub 后续完善
+                const projectRoot = AilyHost.get().project?.currentProjectPath || AilyHost.get().project?.projectRootPath;
+                toolResult = await manageSkillsHandler(toolArgs || {}, projectRoot);
+                resultText = '技能管理完成'; */
               } else {
                 if (ToolRegistry.has(data.tool_name)) {
                   console.log(`[ToolDispatch] 调用工具: ${data.tool_name}，参数:`, toolArgs);
@@ -369,7 +381,9 @@ export class StreamProcessorHelper {
               ? '<info>如果子任务已完成，请返回结果给主Agent</info>'
               : '<info>如果想结束对话，转交给用户，可以使用[to_xxx]，这里的xxx为user</info>';
 
-            // 会话级注入：仅首次工具调用注入规则/角色提示词
+            // 会话级注入：首次注入完整列表，后续每轮重新注入活跃 skills 内容
+            // 参考 Copilot 的"每轮重新组装"模式：skill 内容用 <rules> 包裹，
+            // 压缩时被清理，下轮通过 getActiveSkillsContent() 重新生成。
             const shouldInjectRules = !this.engine.rulesInjectedThisSession;
 
             if (toolResult?.content && this.engine.chatService.currentMode === 'agent') {
@@ -377,10 +391,30 @@ export class StreamProcessorHelper {
               const needsRules = !isSubagent && isBlocklyTool && (toolResult?.is_error || resultState === 'warn');
 
               if (!isSubagent && (needsRules || shouldInjectRules || toolResult?.metadata?.newProject)) {
+                // 首次注入时包含完整的延迟工具列表和 skills 索引
+                const isFirstInjection = !this.engine.rulesInjectedThisSession;
                 this.engine.rulesInjectedThisSession = true;
-                const deferredListing = getDeferredToolsListing(messageSource, this._getAgentExcludedTools(messageSource));
+
+                const activeSkillsContent = SkillRegistry.getActiveSkillsContent(messageSource);
                 const memorySnippet = getMemoryPromptSnippet();
-                toolContent += `\n${BLOCKLY_RULES_TEXT}\n${deferredListing}\n${memorySnippet}\n<toolResult>${toolResult?.content}</toolResult>\n${agentInfoTip}`;
+
+                if (isFirstInjection) {
+                  // 首次：完整注入（活跃 skills + 延迟工具列表 + skills 索引）
+                  const deferredListing = getDeferredToolsListing(messageSource, this._getAgentExcludedTools(messageSource));
+                  const skillsListing = SkillRegistry.getSkillsListing(messageSource);
+                  toolContent += `\n${activeSkillsContent}\n${deferredListing}\n${skillsListing}\n${memorySnippet}\n<toolResult>${toolResult?.content}</toolResult>\n${agentInfoTip}`;
+                } else {
+                  // 后续错误/新项目触发：只重新注入活跃 skills
+                  toolContent += `\n${activeSkillsContent}\n${memorySnippet}\n<toolResult>${toolResult?.content}</toolResult>\n${agentInfoTip}`;
+                }
+              } else if (!isSubagent) {
+                // 非首次、非错误触发：检查是否有活跃 skills 需要持久注入
+                const activeSkillsContent = SkillRegistry.getActiveSkillsContent(messageSource);
+                if (activeSkillsContent) {
+                  toolContent += `\n${activeSkillsContent}\n<toolResult>${toolResult?.content}</toolResult>${reminder}`;
+                } else {
+                  toolContent += `<toolResult>${toolResult?.content}</toolResult>${reminder}`;
+                }
               } else {
                 toolContent += `<toolResult>${toolResult?.content}</toolResult>${reminder}`;
               }
@@ -388,14 +422,16 @@ export class StreamProcessorHelper {
               if (shouldInjectRules) {
                 this.engine.rulesInjectedThisSession = true;
                 const deferredListing = getDeferredToolsListing(messageSource, this._getAgentExcludedTools(messageSource));
+                const skillsListing = SkillRegistry.getSkillsListing(messageSource);
                 const memorySnippet = getMemoryPromptSnippet();
-                toolContent = `\n<rules>${ASK_MODE_ROLE_TEXT}</rules>\n${deferredListing}\n${memorySnippet}\n<toolResult>${toolResult?.content || '工具执行完成，无返回内容'}</toolResult>\n${agentInfoTip}`;
+                toolContent = `\n<rules>${ASK_MODE_ROLE_TEXT}</rules>\n${deferredListing}\n${skillsListing}\n${memorySnippet}\n<toolResult>${toolResult?.content || '工具执行完成，无返回内容'}</toolResult>\n${agentInfoTip}`;
               } else {
                 toolContent = `<toolResult>${toolResult?.content || '工具执行完成，无返回内容'}</toolResult>`;
               }
             }
 
             if ((data.tool_name !== 'todo_write_tool' && data.tool_name !== 'search_available_tools'
+              && data.tool_name !== 'load_skill'
               && data.tool_name !== 'ask_user' && data.tool_name !== 'save_arch') && resultText) {
               let finalState: ToolCallState;
               switch (resultState) {

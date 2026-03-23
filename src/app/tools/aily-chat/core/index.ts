@@ -5,6 +5,10 @@
 export type { IAilyTool, ToolContext, ToolSchema, ToolUseResult, ToolExecutionCallbacks } from './tool-types';
 export { ToolRegistry } from './tool-registry';
 
+// Skills 系统
+export type { IAilySkill, SkillMetadata, SkillOrigin, SkillSearchResult } from './skill-types';
+export { SkillRegistry } from './skill-registry';
+
 // 宿主环境接口
 export type {
   IAilyHostAPI,

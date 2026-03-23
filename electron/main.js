@@ -1747,3 +1747,85 @@ ipcMain.handle("ripgrep-search-content", async (event, params) => {
     };
   }
 });
+
+// ============================================
+// 异步文件系统 IPC（在主进程执行，不阻塞渲染进程 UI）
+// ============================================
+const fsPromises = require('fs').promises;
+const fsSync = require('fs');
+
+ipcMain.handle("fs-readFile", async (_event, filePath, encoding) => {
+  return await fsPromises.readFile(filePath, encoding || 'utf8');
+});
+
+ipcMain.handle("fs-writeFile", async (_event, filePath, data, encoding) => {
+  await fsPromises.writeFile(filePath, data, encoding || 'utf8');
+});
+
+ipcMain.handle("fs-exists", async (_event, filePath) => {
+  try {
+    await fsPromises.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+});
+
+ipcMain.handle("fs-stat", async (_event, filePath) => {
+  const s = await fsPromises.stat(filePath);
+  return {
+    size: s.size,
+    mtime: s.mtime.toISOString(),
+    birthtime: s.birthtime.toISOString(),
+    _isDirectory: s.isDirectory(),
+    _isFile: s.isFile(),
+  };
+});
+
+ipcMain.handle("fs-readdir", async (_event, dirPath) => {
+  return await fsPromises.readdir(dirPath);
+});
+
+ipcMain.handle("fs-readDir", async (_event, dirPath) => {
+  const entries = await fsPromises.readdir(dirPath, { withFileTypes: true });
+  return entries.map(e => ({
+    name: e.name,
+    _isDirectory: e.isDirectory(),
+    _isFile: e.isFile(),
+  }));
+});
+
+ipcMain.handle("fs-mkdir", async (_event, dirPath, options) => {
+  await fsPromises.mkdir(dirPath, options || { recursive: true });
+});
+
+ipcMain.handle("fs-unlink", async (_event, filePath) => {
+  await fsPromises.unlink(filePath);
+});
+
+// ============================================
+// Glob IPC（在主进程执行，避免 preload 中 require 解析问题）
+// ============================================
+ipcMain.handle("glob-search", async (_event, pattern, options) => {
+  const glob = require("glob");
+  // glob v7: glob.sync exists; glob v10: globSync
+  if (typeof glob.sync === 'function') {
+    return glob.sync(pattern, options || {});
+  } else if (typeof glob.globSync === 'function') {
+    return glob.globSync(pattern, options || {});
+  }
+  throw new Error('glob module API not recognized');
+});
+
+ipcMain.handle("glob-search-async", async (_event, pattern, options) => {
+  const glob = require("glob");
+  // glob v7: default export is callable; glob v10: named export
+  if (typeof glob === 'function') {
+    return new Promise((resolve, reject) => {
+      glob(pattern, options || {}, (err, files) => err ? reject(err) : resolve(files));
+    });
+  } else if (typeof glob.glob === 'function') {
+    return await glob.glob(pattern, options || {});
+  }
+  throw new Error('glob module API not recognized');
+});

@@ -83,6 +83,31 @@ export function createElectronHostAdapter(deps: ElectronAdapterDeps): IAilyHostA
     readdirSync: (path) => wFs.readdirSync(path),
     readDirSync: (path) => wFs.readDirSync?.(path),
     realpathSync: (path) => wFs.realpathSync?.(path),
+    // ---- 异步方法（IPC 到主进程） ----
+    readFile: (path, encoding?) => wFs.readFile(path, encoding ?? 'utf8'),
+    writeFile: (path, data, encoding?) => wFs.writeFile(path, data, encoding),
+    exists: (path) => wFs.exists(path),
+    stat: async (path) => {
+      const raw = await wFs.stat(path);
+      return {
+        size: raw.size,
+        mtime: new Date(raw.mtime),
+        birthtime: raw.birthtime ? new Date(raw.birthtime) : undefined,
+        isDirectory: () => raw._isDirectory,
+        isFile: () => raw._isFile,
+      };
+    },
+    readdir: (path) => wFs.readdir(path),
+    readDir: async (path) => {
+      const entries = await wFs.readDir(path);
+      return entries.map((e: any) => ({
+        name: e.name,
+        isDirectory: () => e._isDirectory,
+        isFile: () => e._isFile,
+      }));
+    },
+    mkdir: (path, options?) => wFs.mkdir(path, options),
+    unlink: (path) => wFs.unlink(path),
   };
 
   // ----- path -----
