@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, SimpleChanges, ChangeDetectionStrategy, ChangeDetectorRef, HostListener, ElementRef } from '@angular/core';
+import { Component, Input, OnChanges, SimpleChanges, ChangeDetectionStrategy, ChangeDetectorRef, HostListener, ElementRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 @Component({
@@ -23,11 +23,11 @@ import { CommonModule } from '@angular/common';
         <div class="aa-nav">
           <div class="aa-split-btn">
             <button class="aa-btn-primary" (click)="onApprove('once')">允许</button>
-            <button class="aa-btn-caret" (click)="toggleDropdown($event)">
+            <button class="aa-btn-caret" #caretBtn (click)="toggleDropdown($event)">
               <i class="fa-solid fa-chevron-down"></i>
             </button>
             @if (dropdownOpen) {
-              <div class="aa-dropdown">
+              <div class="aa-dropdown" [style.top.px]="dropdownTop" [style.left.px]="dropdownLeft">
                 <button class="aa-dropdown-item" (click)="onApprove('session')">后续自动允许</button>
               </div>
             }
@@ -45,7 +45,6 @@ import { CommonModule } from '@angular/common';
       background: #1e1e1e;
       border: 1px solid #333;
       transition: border-color 0.2s;
-      overflow: hidden;
       min-width: 0;
     }
     .aa-container:not(.aa-done):hover { border-color: #444; }
@@ -118,15 +117,12 @@ import { CommonModule } from '@angular/common';
     .aa-btn-caret:hover { background: #40a9ff; }
 
     .aa-dropdown {
-      position: absolute;
-      top: 100%;
-      left: 0;
-      margin-top: 4px;
+      position: fixed;
       background: #252526;
       border: 1px solid #444;
       border-radius: 6px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-      z-index: 10;
+      z-index: 9999;
       min-width: 120px;
       overflow: hidden;
     }
@@ -185,6 +181,10 @@ export class XAilyApprovalViewerComponent implements OnChanges {
   approved = false;
   resolvedText = '';
   dropdownOpen = false;
+  dropdownTop = 0;
+  dropdownLeft = 0;
+
+  @ViewChild('caretBtn', { static: false }) caretBtn!: ElementRef<HTMLButtonElement>;
 
   constructor(private cdr: ChangeDetectorRef, private elRef: ElementRef) {}
 
@@ -215,6 +215,11 @@ export class XAilyApprovalViewerComponent implements OnChanges {
   toggleDropdown(event: MouseEvent): void {
     event.stopPropagation();
     this.dropdownOpen = !this.dropdownOpen;
+    if (this.dropdownOpen && this.caretBtn) {
+      const rect = this.caretBtn.nativeElement.getBoundingClientRect();
+      this.dropdownTop = rect.bottom + 4;
+      this.dropdownLeft = rect.left;
+    }
     this.cdr.markForCheck();
   }
 

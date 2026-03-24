@@ -559,7 +559,7 @@ export const TOOLS = [
             },
             required: ['path']
         },
-        agents: ["mainAgent", "schematicAgent"]
+        agents: ["mainAgent"]
     },
     {
         name: "create_folder",
@@ -579,7 +579,7 @@ export const TOOLS = [
             },
             required: ['path']
         },
-        agents: ["mainAgent", "schematicAgent"]
+        agents: ["mainAgent"]
     },
     {
         name: "edit_file",
