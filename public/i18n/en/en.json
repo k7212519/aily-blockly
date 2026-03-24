@@ -355,6 +355,7 @@
         "NEW_CHAT": "New Chat",
         "SERVICE_TITLE": "ai assistant service",
         "DISCLAIMER": "AI responses are for reference only and may not be accurate. They do not represent the views of the software developers. Users should verify the information themselves.",
+        "USAGE_GUIDE": "Learn AI Usage",
         "ADD_CONTEXT": "Add Context",
         "ADD_FILE": "Add File",
         "ADD_FOLDER": "Add Folder",
