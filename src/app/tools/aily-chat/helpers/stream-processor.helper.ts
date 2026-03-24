@@ -99,6 +99,8 @@ export class StreamProcessorHelper {
       this.engine.turnLoop._compressedMessages = null;
       apiMessages = [...base];
       const contextMsg = this.buildContextMessage();
+      // 更新 budget 中的瞬态上下文 token 计量
+      this.engine.contextBudgetService.updateContextTokens(contextMsg);
       if (contextMsg) apiMessages.unshift(contextMsg);
     }
 
