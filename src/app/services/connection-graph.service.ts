@@ -1848,14 +1848,9 @@ export class ConnectionGraphService {
           }
         }
         if (!matched) {
-          // 仍然未找到 → 报错，列出可用的库名
-          const availableLibs = this.scanAllLibraries(packagesBasePath)
-            .map(lib => lib.packageSlug)
-            .filter(slug => slug.startsWith('lib-'));
-          return {
-            success: false,
-            error: `包目录 @aily-project/${ref.packageSlug} 不存在。pinmapId 的第一段必须是已安装库的目录名。\n已安装的库: ${availableLibs.join(', ') || '(无)'}`,
-          };
+          // 未找到已有匹配 → 自动创建包目录（支持自定义包名场景）
+          console.log(`[savePinmapConfig] 包目录 @aily-project/${ref.packageSlug} 不存在，自动创建`);
+          window['fs'].mkdirSync(packagePath, { recursive: true });
         }
       }
 
