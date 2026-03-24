@@ -725,14 +725,8 @@ export class ContextBudgetService {
         continue;
       }
 
-      // user / system 消息：识别并丢弃 <aily-context> 注入消息（压缩后下轮 turn 会重新注入）
-      // 普通用户文本无 <aily-context> 标记，不受影响
+      // user / system 消息：保持原样
       if (msg.role === 'user' || msg.role === 'system') {
-        const content = msg.content || '';
-        if (msg.role === 'user' && content.startsWith('<aily-context>')) {
-          // 整条消息都是上下文注入，压缩时直接丢弃（下轮 injectContextMessage 会重新生成）
-          continue;
-        }
         result.push(msg);
         continue;
       }
@@ -871,7 +865,8 @@ export class ContextBudgetService {
    * 重置状态（新会话时调用）
    */
   reset(): void {
-    // 注意：不清除 _cachedSystemTokens，因为系统提示词在会话间不变
+    // 切换模型/新会话时，系统提示词 token 数可能不同，需重置为默认估算
+    this._cachedSystemTokens = ContextBudgetService.ESTIMATED_SYSTEM_PROMPT_TOKENS;
     this._cachedToolsTokens = 0;
     this._lastToolsCount = 0;
     this.budgetSubject.next(this.createEmptySnapshot());

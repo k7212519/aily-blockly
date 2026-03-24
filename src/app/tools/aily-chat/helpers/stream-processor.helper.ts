@@ -29,52 +29,39 @@ export class StreamProcessorHelper {
   constructor(private engine: ChatEngineService) {}
 
   /**
-   * Copilot 式上下文注入：将活跃 skills + 延迟工具索引 + skills 索引 + memory
-   * 作为独立 user 消息持久化到 conversationMessages 中。
+   * 构建瞬态上下文消息（不存储到 Turn 中）。
    *
-   * 通过 `<aily-context>` 标记识别该消息，压缩时自动清理，下轮重新注入。
-   * 每个 turn 的 tool-calling loop 中，该消息自然存在于消息数组，不需要重复注入。
+   * 将活跃 skills + 延迟工具索引 + skills 索引 + memory
+   * 组装为 `<aily-context>` 消息，在 API 调用时注入。
    *
    * 参考 Copilot 的 CustomInstructions 组件以 priority 750 渲染到 UserMessage 的模式。
    */
-  private injectContextMessage(): void {
+  private buildContextMessage(): any | null {
     const messageSource = this.engine.currentMessageSource || 'mainAgent';
-    if (messageSource !== 'mainAgent') return;
+    if (messageSource !== 'mainAgent') return null;
 
-    // 检查是否已存在上下文消息（压缩可能已将其移除）
-    const hasContextMessage = this.engine.conversationMessages.some(
-      msg => msg.role === 'user' && msg.content?.startsWith('<aily-context>')
-    );
-    if (hasContextMessage) return;
-
-    // 组装上下文内容
     const parts: string[] = [];
 
     if (this.engine.currentMode === 'agent') {
-      // skills 内容（auto-activate + agent 激活的）
       const skillsContent = SkillRegistry.getActiveSkillsContent(messageSource);
       if (skillsContent) parts.push(skillsContent);
     } else {
-      // ASK 模式角色提示
       parts.push(`<rules>${ASK_MODE_ROLE_TEXT}</rules>`);
     }
 
-    // 延迟工具索引
     const deferredListing = getDeferredToolsListing(messageSource, this._getAgentExcludedTools(messageSource));
     if (deferredListing) parts.push(deferredListing);
 
-    // skills 索引（可按需加载的 skills 列表）
     const skillsListing = SkillRegistry.getSkillsListing(messageSource);
     if (skillsListing) parts.push(skillsListing);
 
-    // memory
     const memorySnippet = getMemoryPromptSnippet();
     if (memorySnippet) parts.push(memorySnippet);
 
-    if (parts.length === 0) return;
+    if (parts.length === 0) return null;
 
     const content = `<aily-context>\n${parts.join('\n')}\n</aily-context>`;
-    this.engine.conversationMessages.push({ role: 'user', content });
+    return { role: 'user', content };
   }
 
   /** 获取指定 agent 在 aily config 中被禁用的工具名称集合 */
@@ -100,13 +87,21 @@ export class StreamProcessorHelper {
     this.engine.pendingUserInput = false;
     this.engine.streamCompleted = false;
 
-    // 每个 turn 开始时注入上下文消息（skills + 延迟工具索引 + skills 索引 + memory）
-    // 压缩丢弃后自动重新注入，tool loop 迭代中自然继承
-    if (statelessMode) this.injectContextMessage();
+    // 从 Turn[] 构建消息（优先使用压缩后的瞬态消息），并注入上下文
+    let apiMessages: any[] | undefined;
+    if (statelessMode) {
+      // 压缩结果由 startChatTurn() 瞬态产出，用完即弃
+      const base = this.engine.turnLoop._compressedMessages
+        ?? this.engine.turnManager.buildMessages();
+      this.engine.turnLoop._compressedMessages = null;
+      apiMessages = [...base];
+      const contextMsg = this.buildContextMessage();
+      if (contextMsg) apiMessages.push(contextMsg);
+    }
 
     const source$ = statelessMode
       ? this.engine.chatService.chatRequest(
-          this.engine.sessionId, this.engine.conversationMessages, this.engine.turnLoop.getCurrentTools(),
+          this.engine.sessionId, apiMessages!, this.engine.turnLoop.getCurrentTools(),
           this.engine.currentMode, this.engine.turnLoop.getCurrentLLMConfig(),
           this.engine.currentModel?.model || undefined, this.engine.ailyChatConfigService.maxCount
         )

@@ -58,10 +58,12 @@ export interface SubagentHistoryEntry {
 export interface SessionData {
   /** UI 显示列表 */
   chatList: ChatListItem[];
-  /** 完整对话历史（用于恢复继续对话） */
+  /** @deprecated 由 turns 派生，仅用于兼容旧格式读取 */
   conversationMessages: any[];
   /** 会话元数据 */
   metadata: SessionMetadata;
+  /** Turn 结构化存储（source of truth） */
+  turns?: any;
   /** Subagent 对话历史（可选，方案 C 压缩后持久化） */
   subagentHistories?: Record<string, SubagentHistoryEntry>;
   /** 文件变更 checkpoint（可选，用于跨会话回滚） */
@@ -183,12 +185,11 @@ export class ChatHistoryService implements OnDestroy {
   saveSession(
     sessionId: string,
     chatList: ChatListItem[],
-    conversationMessages: any[],
+    turns: any,
     metadata: Partial<SessionMetadata> & { sessionId: string },
     subagentHistories?: Record<string, SubagentHistoryEntry>,
-    editCheckpoints?: any,
   ): void {
-    if (!sessionId || (chatList.length === 0 && conversationMessages.length === 0)) {
+    if (!sessionId || chatList.length === 0) {
       return;
     }
 
@@ -209,17 +210,15 @@ export class ChatHistoryService implements OnDestroy {
       toolCallingIteration: metadata.toolCallingIteration || 0,
     };
 
-    // 构建 SessionData
+    // 构建 SessionData（conversationMessages 由 turns 派生，保持兼容）
     const sessionData: SessionData = {
       chatList,
-      conversationMessages,
+      conversationMessages: [], // deprecated: 由 turns 派生
       metadata: fullMetadata,
+      turns,
     };
     if (subagentHistories && Object.keys(subagentHistories).length > 0) {
       sessionData.subagentHistories = subagentHistories;
-    }
-    if (editCheckpoints) {
-      sessionData.editCheckpoints = editCheckpoints;
     }
 
     // 更新内存缓存

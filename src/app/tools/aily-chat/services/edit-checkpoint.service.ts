@@ -41,8 +41,11 @@ export interface SnapshotStop {
 export interface TurnSnapshot {
   requestId: string;
   turnIndex: number;
+  /** @deprecated 使用 turnId 进行 Turn-native 截断 */
   conversationStartIndex: number;
   listStartIndex: number;
+  /** 对应 TurnManager 中 Turn 的 ID，用于 Turn-native 回滚 */
+  turnId?: string;
   stops: SnapshotStop[];
   createdAt: number;
 }
@@ -156,7 +159,7 @@ export class EditCheckpointService {
    * 如果处于 undo 状态（timelineIndex < timeline.length - 1），
    * 截断 redo 历史并清除 pendingSnapshot（新操作取代 redo）。
    */
-  startTurn(turnIndex: number, conversationStartIndex: number, listStartIndex: number): void {
+  startTurn(turnIndex: number, conversationStartIndex: number, listStartIndex: number, turnId?: string): void {
     if (this.isInTurn) {
       this.commitCurrentTurn();
     }
@@ -172,6 +175,7 @@ export class EditCheckpointService {
       turnIndex,
       conversationStartIndex,
       listStartIndex,
+      turnId,
       stops: [],
       createdAt: Date.now(),
     };

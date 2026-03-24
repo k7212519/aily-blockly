@@ -44,6 +44,7 @@ import { MessageDisplayHelper } from '../helpers/message-display.helper';
 import { SessionLifecycleHelper } from '../helpers/session-lifecycle.helper';
 import { StreamProcessorHelper } from '../helpers/stream-processor.helper';
 import { ToolCallLoopHelper } from '../helpers/tool-call-loop.helper';
+import { TurnManager } from '../core/turn-manager';
 
 @Injectable()
 export class ChatEngineService {
@@ -53,6 +54,10 @@ export class ChatEngineService {
   readonly session = new SessionLifecycleHelper(this);
   readonly stream = new StreamProcessorHelper(this);
   readonly turnLoop = new ToolCallLoopHelper(this);
+
+  // ==================== Turn 结构化存储（source of truth） ====================
+  /** Copilot 风格 Turn[] 存储管理器，唯一 source of truth */
+  readonly turnManager = new TurnManager();
 
   // ==================== 公共状态（模板绑定） ====================
   list: ChatMessage[] = [];
@@ -78,7 +83,8 @@ export class ChatEngineService {
   hasInitializedForThisLogin = false;
   isCancelled = false;
   useStatelessMode = true;
-  conversationMessages: any[] = [];
+  /** 只读视图：从 Turn[] 派生的消息数组（不要直接修改） */
+  get conversationMessages(): any[] { return this.turnManager.buildMessages(); }
   pendingToolResults: any[] = [];
   currentTurnAssistantContent = '';
   currentTurnToolCalls: any[] = [];
@@ -642,7 +648,7 @@ Do not create non-existent boards and libraries.
       this.msg.appendMessage('user', displayText);
 
       if (this.useStatelessMode) {
-        this.conversationMessages.push({ role: 'user', content: llmText });
+        this.turnManager.startTurn(llmText);
         this.isWaiting = true;
         this.msg.appendMessage('aily', '[thinking...]');
         this.currentMessageSource = 'mainAgent';
@@ -653,11 +659,12 @@ Do not create non-existent boards and libraries.
         this.ensureAbsExport();
         // 同步自动保存配置
         this.editCheckpointService.autoSaveEdits = this.ailyChatConfigService.autoSaveEdits;
-        // 启动新 turn 的 checkpoint（记录 conversationMessages 和 list 的当前位置）
+        // 启动新 turn 的 checkpoint
         this.editCheckpointService.startTurn(
           0,
           this.conversationMessages.length - 1,
-          this.list.length - 1
+          this.list.length - 1,
+          this.turnManager.currentTurnId
         );
         this.contextBudgetService.updateBudget(this.conversationMessages, this.turnLoop.getCurrentTools());
         if (clear) { this.inputValue = ''; }
@@ -713,15 +720,15 @@ Do not create non-existent boards and libraries.
     this.isWaiting = true;
     this.currentMessageSource = agentName;
 
-    // 将 user message 记录到主对话历史（保持对话完整性）
-    this.conversationMessages.push({ role: 'user', content: `@${agentName} ${userText}` });
+    // Turn 结构化存储
+    this.turnManager.startTurn(`@${agentName} ${userText}`);
 
     try {
       const result = await this.subagentSessionService.directChat(agentName, userText);
 
-      // 将 subagent 回复记录到主对话历史
-      this.conversationMessages.push({ role: 'assistant', content: `[${agentName}] ${result}` });
+      this.turnManager.finalizeTurn(`[${agentName}] ${result}`);
     } catch (error: any) {
+      this.turnManager.finalizeTurn('');
       // 用户主动停止时不显示错误消息
       if (!this.isCancelled) {
         const errMsg = error?.message || `${agentName} 执行失败`;
@@ -748,6 +755,8 @@ Do not create non-existent boards and libraries.
       this.abortController.abort();
       this.abortController = null;
     }
+    // 取消正在进行的前台/后台摘要（避免 stop 后仍消耗 LLM 资源）
+    this.contextBudgetService.backgroundSummarizer.cancelActive();
     const wasStatelessTurn = this.currentStatelessMode;
     if (this.messageSubscription) { this.messageSubscription.unsubscribe(); this.messageSubscription = null; }
     this.pendingUserInput = false;
@@ -758,25 +767,38 @@ Do not create non-existent boards and libraries.
     if (this.messageSubscription) { this.messageSubscription.unsubscribe(); this.messageSubscription = null; }
     this.subagentSessionService.cleanupAll();
 
-    if (wasStatelessTurn && this.currentTurnAssistantContent) {
-      const assistantMessage: any = {
-        role: 'assistant',
-        content: this.msg.sanitizeAssistantContent(this.currentTurnAssistantContent)
-      };
-      if (this.currentTurnToolCalls.length > 0) {
-        assistantMessage.tool_calls = this.currentTurnToolCalls.map(tc => ({
-          id: tc.tool_id, type: 'function',
-          function: { name: tc.tool_name, arguments: typeof tc.tool_args === 'string' ? tc.tool_args : JSON.stringify(tc.tool_args) }
-        }));
-      }
-      this.conversationMessages.push(assistantMessage);
-      if (this.pendingToolResults.length > 0) {
-        for (const result of this.pendingToolResults) {
-          this.conversationMessages.push({
-            role: 'tool', tool_call_id: result.tool_id, name: result.tool_name,
-            content: this.msg.truncateToolResult(this.msg.sanitizeToolContent(result.content), result.tool_name)
-          });
+    if (wasStatelessTurn) {
+      // 保存已收到的 assistant 内容和工具结果到 TurnManager
+      const hasAssistantContent = !!this.currentTurnAssistantContent;
+      const hasToolCalls = this.currentTurnToolCalls.length > 0;
+      const hasToolResults = this.pendingToolResults.length > 0;
+
+      if (hasAssistantContent || hasToolCalls) {
+        if (hasToolCalls) {
+          this.turnManager.addToolCallRound(
+            this.currentTurnAssistantContent || '',
+            this.currentTurnToolCalls.map(tc => ({
+              id: tc.tool_id,
+              name: tc.tool_name,
+              arguments: typeof tc.tool_args === 'string' ? tc.tool_args : JSON.stringify(tc.tool_args),
+            }))
+          );
         }
+
+        if (hasToolResults) {
+          for (const result of this.pendingToolResults) {
+            this.turnManager.addToolResult(result.tool_id, {
+              content: result.content,
+              isError: result.is_error ?? false,
+              toolName: result.tool_name,
+            });
+          }
+        }
+
+        this.turnManager.finalizeTurn(this.currentTurnAssistantContent || '');
+      } else {
+        // 没有 assistant 输出也没有工具调用，移除未完成的 turn
+        this.turnManager.removeIncompleteLast();
       }
       this.currentTurnAssistantContent = '';
       this.currentTurnToolCalls = [];
@@ -841,7 +863,7 @@ Do not create non-existent boards and libraries.
   /** 实际执行模型切换（重建会话） */
   private async _doSwitchModel(model: ModelConfig): Promise<void> {
     this.chatService.saveChatModel(model);
-    const savedMessages = [...this.conversationMessages];
+    const savedTurns = this.turnManager.serialize();
     const savedIteration = this.toolCallingIteration;
     const savedTitle = this.chatService.currentSessionTitle;
     const savedPath = this.chatService.currentSessionPath;
@@ -850,12 +872,12 @@ Do not create non-existent boards and libraries.
     await this.session.stopAndCloseSession();
     try { await this.session.startSession(); } catch (err) {
       console.error('切换模型失败:', err);
-      this.conversationMessages = savedMessages;
+      this.turnManager.deserialize(savedTurns);
       this.toolCallingIteration = savedIteration;
       this.list = savedList;
       return;
     }
-    this.conversationMessages = savedMessages;
+    this.turnManager.deserialize(savedTurns);
     this.toolCallingIteration = savedIteration;
     this.chatService.currentSessionTitle = savedTitle;
     this.chatService.currentSessionPath = savedPath;
@@ -883,7 +905,7 @@ Do not create non-existent boards and libraries.
   /** 实际执行模式切换（重建会话） */
   private async _doSwitchMode(mode: string): Promise<void> {
     this.chatService.saveChatMode(mode as 'agent' | 'ask');
-    const savedMessages = [...this.conversationMessages];
+    const savedTurns = this.turnManager.serialize();
     const savedIteration = this.toolCallingIteration;
     const savedTitle = this.chatService.currentSessionTitle;
     const savedPath = this.chatService.currentSessionPath;
@@ -892,13 +914,13 @@ Do not create non-existent boards and libraries.
     await this.session.stopAndCloseSession();
     try { await this.session.startSession(); } catch (err) {
       console.error('切换模式失败:', err);
-      this.conversationMessages = savedMessages;
+      this.turnManager.deserialize(savedTurns);
       this.toolCallingIteration = savedIteration;
       this.list = savedList;
       this.chatService.saveChatMode('agent');
       return;
     }
-    this.conversationMessages = savedMessages;
+    this.turnManager.deserialize(savedTurns);
     this.toolCallingIteration = savedIteration;
     this.chatService.currentSessionTitle = savedTitle;
     this.chatService.currentSessionPath = savedPath;
@@ -1091,9 +1113,17 @@ Do not create non-existent boards and libraries.
 
     await this.reloadAbsWorkspace();
 
-    const convCutIndex = target.conversationStartIndex;
-    if (convCutIndex >= 0 && convCutIndex < this.conversationMessages.length) {
-      this.conversationMessages.splice(convCutIndex);
+    // Turn-native 截断：直接删除该 Turn 及之后的所有 Turn
+    if (target.turnId) {
+      this.turnManager.removeFromTurn(target.turnId);
+    } else {
+      // 兼容旧快照：fallback 到消息级截断
+      const convCutIndex = target.conversationStartIndex;
+      const messages = [...this.turnManager.buildMessages()];
+      if (convCutIndex >= 0 && convCutIndex < messages.length) {
+        messages.splice(convCutIndex);
+        this.turnManager.rebuildFromMessages(messages);
+      }
     }
 
     if (listIndex >= 0 && listIndex < this.list.length) {
@@ -1149,10 +1179,17 @@ Do not create non-existent boards and libraries.
       console.log(`[Regenerate] 回滚了 ${rolledBackFiles} 个文件变更`);
     }
 
-    // 3. 截断 conversationMessages（回到用户消息发送时的位置）
-    const convCutIndex = target.conversationStartIndex;
-    if (convCutIndex >= 0 && convCutIndex < this.conversationMessages.length) {
-      this.conversationMessages.splice(convCutIndex + 1);
+    // 3. Turn-native 截断：保留该 Turn 的 request，清除 response
+    if (target.turnId) {
+      this.turnManager.truncateToTurn(target.turnId);
+    } else {
+      // 兼容旧快照：fallback 到消息级截断
+      const convCutIndex = target.conversationStartIndex;
+      const messages = [...this.turnManager.buildMessages()];
+      if (convCutIndex >= 0 && convCutIndex < messages.length) {
+        messages.splice(convCutIndex + 1);
+        this.turnManager.rebuildFromMessages(messages);
+      }
     }
 
     // 4. 截断 UI list（回到 assistant 回复起始位置）
@@ -1181,7 +1218,8 @@ Do not create non-existent boards and libraries.
     this.editCheckpointService.startTurn(
       0,
       this.conversationMessages.length - 1,
-      this.list.length - 1
+      this.list.length - 1,
+      this.turnManager.currentTurnId
     );
 
     this.contextBudgetService.updateBudget(this.conversationMessages, this.turnLoop.getCurrentTools());

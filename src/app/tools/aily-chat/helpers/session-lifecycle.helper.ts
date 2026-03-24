@@ -45,7 +45,8 @@ export class SessionLifecycleHelper {
       }
 
       this.engine.chatHistoryService.saveSession(
-        this.engine.sessionId, this.engine.list, this.engine.conversationMessages || [],
+        this.engine.sessionId, this.engine.list,
+        this.engine.turnManager.serialize(),
         {
           sessionId: this.engine.sessionId,
           title: this.engine.sessionTitle || '',
@@ -96,7 +97,7 @@ export class SessionLifecycleHelper {
     this.engine.isCancelled = false;
 
     if (this.engine.useStatelessMode) {
-      this.engine.conversationMessages = [];
+      this.engine.turnManager.clear();
       this.engine.pendingToolResults = [];
       this.engine.currentTurnAssistantContent = '';
       this.engine.currentTurnToolCalls = [];
@@ -198,7 +199,7 @@ export class SessionLifecycleHelper {
   }
 
   async ensureServerSession(): Promise<void> {
-    const savedMessages = [...this.engine.conversationMessages];
+    const savedTurns = this.engine.turnManager.serialize();
     const savedIteration = this.engine.toolCallingIteration;
     const savedTitle = this.engine.chatService.currentSessionTitle;
     const savedPath = this.engine.chatService.currentSessionPath;
@@ -206,12 +207,12 @@ export class SessionLifecycleHelper {
     const oldSessionId = this.engine.sessionId;
     try { await this.startSession(); } catch (err) {
       console.warn('[AilyChat] 重新注册服务端会话失败:', err);
-      this.engine.conversationMessages = savedMessages;
+      this.engine.turnManager.deserialize(savedTurns);
       this.engine.toolCallingIteration = savedIteration;
       this.engine.list = savedList;
       throw err;
     }
-    this.engine.conversationMessages = savedMessages;
+    this.engine.turnManager.deserialize(savedTurns);
     this.engine.toolCallingIteration = savedIteration;
     this.engine.chatService.currentSessionTitle = savedTitle;
     this.engine.chatService.currentSessionPath = savedPath;
@@ -299,7 +300,7 @@ export class SessionLifecycleHelper {
   getHistory(): void {
     if (!this.engine.sessionId) return;
     this.engine.list = [];
-    this.engine.conversationMessages = [];
+    this.engine.turnManager.clear();
     this.engine.toolCallingIteration = 0;
     this.engine.contextBudgetService?.reset();
     const currentPrjPath = AilyHost.get().project.currentProjectPath || AilyHost.get().project.projectRootPath;
@@ -317,8 +318,9 @@ export class SessionLifecycleHelper {
         const indexEntry = this.engine.chatHistoryService.findEntry(this.engine.sessionId);
         if (indexEntry?.title) { this.engine.chatService.currentSessionTitle = indexEntry.title; }
       }
-      if (sessionData.conversationMessages && sessionData.conversationMessages.length > 0) {
-        this.engine.conversationMessages = sessionData.conversationMessages;
+      // 从 turns 恢复 Turn 结构
+      if (sessionData.turns) {
+        this.engine.turnManager.deserialize(sessionData.turns);
         this.engine.toolCallingIteration = sessionData.metadata?.toolCallingIteration || 0;
         this.engine.contextBudgetService?.updateBudget(this.engine.conversationMessages, this.engine.turnLoop.getCurrentTools());
       } else {
