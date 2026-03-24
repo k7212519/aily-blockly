@@ -9,6 +9,7 @@ import type { ChatEngineService } from '../services/chat-engine.service';
 import { ToolCallState } from '../core/chat-types';
 import { AilyHost } from '../core/host';
 import { ToolRegistry } from '../core/tool-registry';
+import { toolRequiresApproval, requestToolApproval, approveToolForSession } from '../core/tool-approval';
 import { SubagentSessionService } from '../services/subagent-session.service';
 import { validateRunSubagentArgs, getSubagentDefinition } from '../tools/runSubagentTool';
 import { injectTodoReminder } from '../tools';
@@ -314,6 +315,24 @@ export class StreamProcessorHelper {
                   resultState = 'error';
                   resultText = validationError.content as string;
                 } else {
+                  // ── 子代理审批拦截 ──
+                  if (toolRequiresApproval('run_subagent')) {
+                    const approval = await requestToolApproval(toolCallId, 'run_subagent', toolArgs);
+                    if (!approval.approved) {
+                      const rejectMsg = `操作已取消: ${approval.reason || '用户拒绝执行'}`;
+                      this.engine.msg.startToolCall(toolCallId, data.tool_name, `已取消: 调用子代理 ${toolArgs.agent}`, toolArgs);
+                      this.engine.msg.completeToolCall(toolCallId, data.tool_name, ToolCallState.WARN, `已取消: 调用子代理 ${toolArgs.agent}`);
+                      if (statelessMode) {
+                        this.engine.pendingToolResults.push({ tool_id: data.tool_id, tool_name: data.tool_name, content: rejectMsg, is_error: false });
+                        this.engine.turnLoop.onToolExecutionComplete();
+                      }
+                      return;
+                    }
+                    if (approval.scope === 'session') {
+                      approveToolForSession('run_subagent');
+                    }
+                  }
+
                   const agentDef = getSubagentDefinition(toolArgs.agent);
                   const agentDisplayName = agentDef?.displayName || toolArgs.agent;
                   const agentSource = toolArgs.agent;

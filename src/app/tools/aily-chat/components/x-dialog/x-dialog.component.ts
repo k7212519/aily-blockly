@@ -588,7 +588,7 @@ export class XDialogComponent implements OnChanges, AfterViewChecked {
       .replace(/<info>[\s\S]*?<\/info>/g, '');
 
     const ailyTypes = ['aily-blockly', 'aily-board', 'aily-library', 'aily-state',
-      'aily-button', 'aily-error', 'aily-mermaid', 'aily-task-action', 'aily-think', 'aily-context', 'aily-question'];
+      'aily-button', 'aily-error', 'aily-mermaid', 'aily-task-action', 'aily-think', 'aily-context', 'aily-question', 'aily-approval'];
 
     // 保留 match：当 after 为完整 aily 类型、流式前缀、或有效语言标识符（如 json、typescript）时
     // 若将 ```json 误改为 ```\njson，会导致 lang 解析错误、内容多出 "json" 文字
@@ -602,7 +602,7 @@ export class XDialogComponent implements OnChanges, AfterViewChecked {
 
     return content
       .replace(/```\n\s*flowchart/g, '```aily-mermaid\nflowchart')
-      .replace(/\s*```(aily-(?:board|library|state|button|task-action|think|context|question))/g, '\n```$1\n');
+      .replace(/\s*```(aily-(?:board|library|state|button|task-action|think|context|question|approval))/g, '\n```$1\n');
   }
 
   private replaceAgentNames(content: string): string {

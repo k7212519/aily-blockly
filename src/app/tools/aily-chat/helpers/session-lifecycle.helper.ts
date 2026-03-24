@@ -7,6 +7,7 @@
 import type { ChatEngineService } from '../services/chat-engine.service';
 import { AilyHost } from '../core/host';
 import { SkillRegistry } from '../core/skill-registry';
+import { clearSessionApprovals } from '../core/tool-approval';
 import { markContentAsHistory as _markContentAsHistory } from '../services/content-sanitizer.service';
 
 export class SessionLifecycleHelper {
@@ -282,6 +283,7 @@ export class SessionLifecycleHelper {
     if (this.engine.messageSubscription) { this.engine.messageSubscription.unsubscribe(); this.engine.messageSubscription = null; }
     this.engine.activeToolExecutions = 0;
     this.engine.sseStreamCompleted = false;
+    clearSessionApprovals();
     try {
       await this.stopAndCloseSession(true);
       this.engine.chatService.currentSessionId = '';

@@ -37,6 +37,7 @@ import { TOOLS } from '../tools/tools';
 import { syncAbsFileHandler } from '../tools/syncAbsFileTool';
 import { registerAskUserCallback, unregisterAskUserCallback, AskUserQuestion, AskUserFullResponse, AskUserAnswer } from '../tools/askUserTool';
 import { cleanupAllTerminalSessions } from '../tools/terminalSessionTool';
+import { toolRequiresApproval, requestToolApproval, registerToolApprovalCallback, unregisterToolApprovalCallback, approveToolForSession, clearSessionApprovals, ToolApprovalRequest, ToolApprovalResult } from '../core/tool-approval';
 
 import { AILY_CHAT_ONBOARDING_CONFIG } from '../../../configs/onboarding.config';
 
@@ -121,6 +122,9 @@ export class ChatEngineService {
   _resolveAskUser: ((response: AskUserFullResponse | undefined) => void) | null = null;
   /** 当前 ask_user 的问题列表（用于事件回调时组装答案） */
   private _askUserQuestions: AskUserQuestion[] | null = null;
+
+  /** 工具审批 Promise resolve 回调（等待用户在聊天界面确认） */
+  _resolveToolApproval: ((result: ToolApprovalResult) => void) | null = null;
 
   // ==================== 订阅 ====================
   messageSubscription: any;
@@ -216,6 +220,9 @@ export class ChatEngineService {
     // 注册 ask_user 回调：在聊天界面显示全部问题并等待用户回答
     registerAskUserCallback((questions) => this._handleAskUser(questions));
 
+    // 注册工具审批回调：在聊天界面显示确认 UI 并等待用户批准
+    registerToolApprovalCallback((request) => this._handleToolApproval(request));
+
     this.setupSubscriptions();
   }
 
@@ -229,8 +236,10 @@ export class ChatEngineService {
     this.editCheckpointService.clear();
 
     unregisterAskUserCallback();
+    unregisterToolApprovalCallback();
     cleanupAllTerminalSessions();
     this._resolveAskUser = null;
+    this._resolveToolApproval = null;
 
     this.cleanupSubscriptions();
     this.session.disconnect();
@@ -454,14 +463,48 @@ export class ChatEngineService {
     }
     const displayMode = tool.displayMode || 'toolCall';
     const startText = ToolRegistry.getStartText(toolName, toolArgs);
-    if (displayMode === 'appendMessage') {
-      const safeText = startText.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, ' ').replace(/\r/g, '').replace(/\t/g, ' ');
-      if (safeText) {
-        this.msg.appendMessage('aily', `\n\`\`\`aily-state\n{\n  "state": "doing",\n  "text": "${safeText}",\n  "id": "${toolCallId}"\n}\n\`\`\`\n\n`);
+
+    // ── 工具审批拦截 ──
+    // 对需要审批的工具，等待用户确认后再执行（审批 UI 由 aily-approval 块提供，不需要额外 aily-state）
+    if (toolRequiresApproval(toolName)) {
+      const approval = await requestToolApproval(toolCallId, toolName, toolArgs);
+      if (!approval.approved) {
+        const rejectReason = approval.reason || '用户拒绝执行';
+        const rejectResult = { is_error: false, content: `操作已取消: ${rejectReason}` };
+        if (displayMode === 'toolCall') {
+          this.msg.startToolCall(toolCallId, toolName, `已取消: ${startText}`, toolArgs);
+          this.msg.completeToolCall(toolCallId, toolName, ToolCallState.WARN, `已取消: ${startText}`);
+        } else if (displayMode === 'appendMessage') {
+          const safeText = this.msg.makeJsonSafe(`已取消: ${startText}`);
+          this.msg.appendMessage('aily', `\n\`\`\`aily-state\n{\n  "state": "warn",\n  "text": "${safeText}",\n  "id": "${toolCallId}"\n}\n\`\`\`\n\n`);
+        }
+        return { toolResult: rejectResult, resultState: 'warn', resultText: `已取消: ${startText}` };
       }
-    } else if (displayMode === 'toolCall') {
-      if (startText) { this.msg.startToolCall(toolCallId, toolName, startText, toolArgs); }
+      // 用户已批准，处理会话级授权
+      if (approval.scope === 'session') {
+        approveToolForSession(toolName);
+      }
+      // 批准后显示正常执行状态
+      if (displayMode === 'toolCall') {
+        if (startText) { this.msg.startToolCall(toolCallId, toolName, startText, toolArgs); }
+      } else if (displayMode === 'appendMessage') {
+        const safeText = startText.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, ' ').replace(/\r/g, '').replace(/\t/g, ' ');
+        if (safeText) {
+          this.msg.appendMessage('aily', `\n\`\`\`aily-state\n{\n  "state": "doing",\n  "text": "${safeText}",\n  "id": "${toolCallId}"\n}\n\`\`\`\n\n`);
+        }
+      }
+    } else {
+      // 不需要审批的工具，直接显示正常执行状态
+      if (displayMode === 'appendMessage') {
+        const safeText = startText.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, ' ').replace(/\r/g, '').replace(/\t/g, ' ');
+        if (safeText) {
+          this.msg.appendMessage('aily', `\n\`\`\`aily-state\n{\n  "state": "doing",\n  "text": "${safeText}",\n  "id": "${toolCallId}"\n}\n\`\`\`\n\n`);
+        }
+      } else if (displayMode === 'toolCall') {
+        if (startText) { this.msg.startToolCall(toolCallId, toolName, startText, toolArgs); }
+      }
     }
+
     const ctx = this.buildToolContext();
     const toolResult = await ToolRegistry.execute(toolName, toolArgs, ctx);
     const resultText = ToolRegistry.getResultText(toolName, toolArgs, toolResult);
@@ -1355,6 +1398,118 @@ Do not create non-existent boards and libraries.
       this._resolveAskUser = null;
       this._askUserQuestions = null;
       resolve(undefined);
+    }
+  }
+
+  // ==================== 工具审批交互处理 ====================
+
+  /**
+   * 工具审批的 UI 层回调。
+   * 在聊天界面显示确认按钮，等待用户批准或拒绝后 resolve。
+   */
+  private _handleToolApproval(request: ToolApprovalRequest): Promise<ToolApprovalResult> {
+    return new Promise<ToolApprovalResult>((resolve) => {
+      this._resolveToolApproval = resolve;
+
+      // 将审批请求以 aily-approval 块的形式追加到聊天界面
+      // 注意：不包含 args 字段，args 中可能含有换行/特殊字符，
+      // 经 fixContent 的 \n→newline 全局替换后会破坏 JSON 解析
+      const approvalBlockData = {
+        toolCallId: request.toolCallId,
+        toolName: request.toolName,
+        title: request.title,
+        message: request.message,
+      };
+      this.msg.appendMessage('aily',
+        `\n\`\`\`aily-approval\n${JSON.stringify(approvalBlockData)}\n\`\`\`\n\n`
+      );
+
+      // 监听审批结果事件
+      const handler = (e: Event) => {
+        const detail = (e as CustomEvent).detail;
+        if (!detail || !this._resolveToolApproval) return;
+        // 检查事件是否对应当前审批请求
+        if (detail.toolCallId && detail.toolCallId !== request.toolCallId) return;
+
+        document.removeEventListener('aily-approval-result', handler);
+
+        // 更新审批块为已处理状态
+        this._patchAilyApprovalBlock(request.toolCallId, detail.approved, detail.scope);
+
+        const resolveRef = this._resolveToolApproval;
+        this._resolveToolApproval = null;
+        resolveRef({
+          approved: !!detail.approved,
+          reason: detail.reason || (detail.approved ? undefined : '用户拒绝执行'),
+          scope: detail.scope || 'once'
+        });
+      };
+      document.addEventListener('aily-approval-result', handler);
+    });
+  }
+
+  /**
+   * 将审批结果写回 chatList 中的 aily-approval 块，
+   * 使其在历史模式加载时能恢复状态。
+   */
+  private _patchAilyApprovalBlock(toolCallId: string, approved: boolean, scope?: string): void {
+    const MARKER = '```aily-approval';
+    const FENCE = '```';
+
+    for (let i = this.list.length - 1; i >= 0; i--) {
+      const item = this.list[i];
+      if (item.role !== 'aily') continue;
+
+      const markerIdx = item.content.lastIndexOf(MARKER);
+      if (markerIdx === -1) continue;
+
+      const jsonStart = item.content.indexOf('\n', markerIdx) + 1;
+      if (jsonStart <= 0) continue;
+
+      const fenceEnd = item.content.indexOf(FENCE, jsonStart);
+      if (fenceEnd <= jsonStart) continue;
+
+      const jsonStr = item.content.substring(jsonStart, fenceEnd).trim();
+      try {
+        const data = JSON.parse(jsonStr);
+        if (data.toolCallId !== toolCallId) continue;
+        data.resolved = true;
+        data.approved = approved;
+        if (scope) data.scope = scope;
+        const patched = item.content.substring(0, jsonStart)
+          + JSON.stringify(data) + '\n'
+          + item.content.substring(fenceEnd);
+        item.content = patched;
+      } catch (e) {
+        console.warn('[ChatEngine] Failed to patch aily-approval JSON:', e);
+      }
+      break;
+    }
+
+    if (this.sessionId) {
+      this.chatHistoryService.markDirty(this.sessionId);
+    }
+  }
+
+  /**
+   * 外部调用：用户批准工具执行。
+   */
+  approveToolExecution(toolCallId: string, scope: 'once' | 'session' = 'once'): void {
+    if (this._resolveToolApproval) {
+      document.dispatchEvent(new CustomEvent('aily-approval-result', {
+        detail: { toolCallId, approved: true, scope }
+      }));
+    }
+  }
+
+  /**
+   * 外部调用：用户拒绝工具执行。
+   */
+  rejectToolExecution(toolCallId: string, reason?: string): void {
+    if (this._resolveToolApproval) {
+      document.dispatchEvent(new CustomEvent('aily-approval-result', {
+        detail: { toolCallId, approved: false, reason: reason || '用户拒绝执行' }
+      }));
     }
   }
 }
