@@ -2488,6 +2488,7 @@ Workflow: plan todos → mark in-progress → do work → mark completed → nex
 Operations:
 - **update**: 全量替换todo列表（传入完整的todos数组，替换当前所有任务）
 - **add**: 追加任务（传todos数组追加，或传content追加单个任务）
+- **toggle**: 切换任务状态（需id）
 - **list**: 查看当前任务列表
 - **delete**: 删除指定任务（需id）
 - **clear**: 清空所有任务
@@ -2498,7 +2499,7 @@ IMPORTANT: update是全量替换，必须包含所有任务。只想添加新任
             properties: {
                 operation: {
                     type: 'string',
-                    enum: ['update', 'add', 'list', 'delete', 'clear'],
+                    enum: ['update', 'add', 'toggle', 'list', 'delete', 'clear'],
                     description: '操作类型'
                 },
                 sessionId: {

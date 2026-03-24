@@ -313,6 +313,37 @@ export async function todoWriteTool(toolArgs: any): Promise<ToolUseResult> {
         return { is_error: false, content: ` 添加了 ${newTodos.length} 个任务\n\n${formatTodoList(updatedTodos)}` };
       }
 
+      // ====== 切换状态 ======
+      case 'toggle': {
+        const id = Number(toolArgs.id);
+        if (isNaN(id)) {
+          return { is_error: true, content: ' 缺少有效的任务 ID (数字)' };
+        }
+
+        const todos = getTodos(sessionId);
+        const todo = todos.find(t => t.id === id);
+        if (!todo) {
+          return { is_error: true, content: ` 找不到 ID 为 ${id} 的任务。当前任务IDs: ${todos.map(t => t.id).join(', ')}` };
+        }
+
+        const statusCycle: Record<string, TodoItem['status']> = {
+          'not-started': 'in-progress',
+          'in-progress': 'completed',
+          'completed': 'not-started'
+        };
+        const newStatus = statusCycle[todo.status];
+
+        if (newStatus === 'in-progress' && todos.some(t => t.id !== id && t.status === 'in-progress')) {
+          return { is_error: true, content: ' 已有其他任务在进行中' };
+        }
+
+        todo.status = newStatus;
+        todo.updatedAt = Date.now();
+        setTodos(todos, sessionId);
+        notifyTodoUpdate(sessionId);
+        return { is_error: false, content: ` 任务 ${id} 状态更新:  ${newStatus}\n\n${formatTodoList(todos)}` };
+      }
+
       // ====== 查询/列表 ======
       case 'list':
       case 'read': {
