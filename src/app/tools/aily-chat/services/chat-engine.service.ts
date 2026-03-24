@@ -101,8 +101,6 @@ export class ChatEngineService {
   mcpInitialized = false;
   private _aiNoticeShown = false;
   lastStopReason = '';
-  /** 会话级标记：规则/角色提示词是否已注入（仅首次工具调用时注入） */
-  rulesInjectedThisSession = false;
   /** 会话级：已激活的 deferred 工具名称集合（通过 search_available_tools 加载） */
   activatedDeferredTools = new Set<string>();
 

@@ -725,18 +725,15 @@ export class ContextBudgetService {
         continue;
       }
 
-      // user / system 消息：清理 skills 注入的 <rules> 标签（压缩后下轮 turn 会重新注入）
-      // 普通用户文本无 <rules> 标签，不受影响
+      // user / system 消息：识别并丢弃 <aily-context> 注入消息（压缩后下轮 turn 会重新注入）
+      // 普通用户文本无 <aily-context> 标记，不受影响
       if (msg.role === 'user' || msg.role === 'system') {
         const content = msg.content || '';
-        if (msg.role === 'user' && content.includes('<rules>')) {
-          const cleaned = content.replace(/<rules>[\s\S]*?<\/rules>/g, '').trim();
-          // 如果整条消息只有 <rules> 内容（skills 注入消息），压缩后变为空，可以丢弃
-          if (!cleaned) continue;
-          result.push({ ...msg, content: cleaned });
-        } else {
-          result.push(msg);
+        if (msg.role === 'user' && content.startsWith('<aily-context>')) {
+          // 整条消息都是上下文注入，压缩时直接丢弃（下轮 injectContextMessage 会重新生成）
+          continue;
         }
+        result.push(msg);
         continue;
       }
 

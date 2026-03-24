@@ -107,7 +107,6 @@ export class SessionLifecycleHelper {
     this.engine.sessionAllowedPaths = [];
     this.engine.repetitionDetectionService.resetAll();
     this.engine.insideThink = false;
-    this.engine.rulesInjectedThisSession = false;
     this.engine.activatedDeferredTools.clear();
     SkillRegistry.clearSessionState();
 

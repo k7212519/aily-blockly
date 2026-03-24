@@ -41,6 +41,7 @@ export interface LoadSkillResult {
 export async function loadSkillHandler(
   args: LoadSkillArgs,
 ): Promise<LoadSkillResult> {
+  console.log(`[load_skill] Received args: ${JSON.stringify(args)}`);
   // 卸载操作
   if (args.action === 'unload') {
     return handleUnload(args.query);

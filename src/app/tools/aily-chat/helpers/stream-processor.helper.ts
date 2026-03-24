@@ -17,7 +17,7 @@ import {
   getPreferredHttpErrorMessage as _getPreferredHttpErrorMessage,
 } from '../services/http-error-handler.service';
 import {
-  BLOCK_TOOLS, BLOCKLY_TOOL_NAMES,
+  BLOCK_TOOLS,
   ASK_MODE_ROLE_TEXT,
 } from '../services/stream-constants';
 import { searchDeferredTools, getDeferredToolsListing } from '../tools/tools';
@@ -29,28 +29,52 @@ export class StreamProcessorHelper {
   constructor(private engine: ChatEngineService) {}
 
   /**
-   * Copilot 式 skills 注入：将活跃 skills 作为独立 user 消息持久化到 conversationMessages。
+   * Copilot 式上下文注入：将活跃 skills + 延迟工具索引 + skills 索引 + memory
+   * 作为独立 user 消息持久化到 conversationMessages 中。
    *
-   * 通过检查消息数组中是否已存在 skills 消息来决定是否注入，而非依赖迭代计数。
-   * 这样即使压缩丢弃了 skills 消息，下次 API 调用时会自动重新注入。
+   * 通过 `<aily-context>` 标记识别该消息，压缩时自动清理，下轮重新注入。
+   * 每个 turn 的 tool-calling loop 中，该消息自然存在于消息数组，不需要重复注入。
    *
    * 参考 Copilot 的 CustomInstructions 组件以 priority 750 渲染到 UserMessage 的模式。
    */
-  private injectSkillsMessage(): void {
-    if (this.engine.currentMode !== 'agent') return;
+  private injectContextMessage(): void {
     const messageSource = this.engine.currentMessageSource || 'mainAgent';
     if (messageSource !== 'mainAgent') return;
 
-    const skillsContent = SkillRegistry.getActiveSkillsContent(messageSource);
-    if (!skillsContent) return;
-
-    // 检查是否已存在 skills 消息（压缩可能已将其移除）
-    const hasSkillsMessage = this.engine.conversationMessages.some(
-      msg => msg.role === 'user' && msg.content?.includes('<rules>') && msg.content?.includes('</rules>')
+    // 检查是否已存在上下文消息（压缩可能已将其移除）
+    const hasContextMessage = this.engine.conversationMessages.some(
+      msg => msg.role === 'user' && msg.content?.startsWith('<aily-context>')
     );
-    if (hasSkillsMessage) return;
+    if (hasContextMessage) return;
 
-    this.engine.conversationMessages.push({ role: 'user', content: skillsContent });
+    // 组装上下文内容
+    const parts: string[] = [];
+
+    if (this.engine.currentMode === 'agent') {
+      // skills 内容（auto-activate + agent 激活的）
+      const skillsContent = SkillRegistry.getActiveSkillsContent(messageSource);
+      if (skillsContent) parts.push(skillsContent);
+    } else {
+      // ASK 模式角色提示
+      parts.push(`<rules>${ASK_MODE_ROLE_TEXT}</rules>`);
+    }
+
+    // 延迟工具索引
+    const deferredListing = getDeferredToolsListing(messageSource, this._getAgentExcludedTools(messageSource));
+    if (deferredListing) parts.push(deferredListing);
+
+    // skills 索引（可按需加载的 skills 列表）
+    const skillsListing = SkillRegistry.getSkillsListing(messageSource);
+    if (skillsListing) parts.push(skillsListing);
+
+    // memory
+    const memorySnippet = getMemoryPromptSnippet();
+    if (memorySnippet) parts.push(memorySnippet);
+
+    if (parts.length === 0) return;
+
+    const content = `<aily-context>\n${parts.join('\n')}\n</aily-context>`;
+    this.engine.conversationMessages.push({ role: 'user', content });
   }
 
   /** 获取指定 agent 在 aily config 中被禁用的工具名称集合 */
@@ -76,8 +100,9 @@ export class StreamProcessorHelper {
     this.engine.pendingUserInput = false;
     this.engine.streamCompleted = false;
 
-    // 每个 turn 开始时注入 skills 消息（仅 toolCallingIteration === 0 时生效）
-    if (statelessMode) this.injectSkillsMessage();
+    // 每个 turn 开始时注入上下文消息（skills + 延迟工具索引 + skills 索引 + memory）
+    // 压缩丢弃后自动重新注入，tool loop 迭代中自然继承
+    if (statelessMode) this.injectContextMessage();
 
     const source$ = statelessMode
       ? this.engine.chatService.chatRequest(
@@ -153,8 +178,6 @@ export class StreamProcessorHelper {
               this.engine.msg.appendMessage('aily', `\n\n\n\`\`\`aily-state\n{\n  "state": "doing",\n  "text": "${data.content}",\n  "id": "${data.id}"\n}\n\`\`\`\n\n\n`, messageSource);
             } else {
               this.engine.msg.appendMessage('aily', `\n\n\n\`\`\`aily-state\n{\n  "state": "done",\n  "text": "${data.content}",\n  "id": "${data.id}"\n}\n\`\`\`\n\n\n`, messageSource);
-              // 上下文压缩后规则可能被清除，允许下一次工具调用重新注入
-              this.engine.rulesInjectedThisSession = false;
             }
           } else if (data.type === 'error') {
             if (this.engine.list.length > 0 && this.engine.list[this.engine.list.length - 1].role === 'aily') {
@@ -406,45 +429,12 @@ export class StreamProcessorHelper {
 
             let toolContent = '';
 
-            // 会话级注入：首次注入延迟工具列表 + skills 索引 + memory（一次性上下文）
-            // Skills 内容已通过 getMessagesWithSkillsInjection() 作为独立 user 消息瞬态注入，
-            // 不再嵌入到 tool result 中。参考 Copilot 的 CustomInstructions 独立渲染模式。
-            const shouldInjectRules = !this.engine.rulesInjectedThisSession;
-
-            if (toolResult?.content && this.engine.chatService.currentMode === 'agent') {
-              const isBlocklyTool = BLOCKLY_TOOL_NAMES.includes(data.tool_name);
-              const needsRules = !isSubagent && isBlocklyTool && (toolResult?.is_error || resultState === 'warn');
-
-              if (!isSubagent && (needsRules || shouldInjectRules || toolResult?.metadata?.newProject)) {
-                const isFirstInjection = !this.engine.rulesInjectedThisSession;
-                this.engine.rulesInjectedThisSession = true;
-
-                const memorySnippet = getMemoryPromptSnippet();
-
-                if (isFirstInjection) {
-                  // 首次：注入延迟工具列表 + skills 索引 + memory（skills 内容已通过独立消息注入）
-                  const deferredListing = getDeferredToolsListing(messageSource, this._getAgentExcludedTools(messageSource));
-                  const skillsListing = SkillRegistry.getSkillsListing(messageSource);
-                  toolContent += `\n${deferredListing}\n${skillsListing}\n${memorySnippet}\n<toolResult>${toolResult?.content}</toolResult>`;
-                } else {
-                  // 后续错误/新项目触发：重新注入 memory
-                  toolContent += `\n${memorySnippet}\n<toolResult>${toolResult?.content}</toolResult>`;
-                }
-              } else if (!isSubagent) {
-                toolContent += `<toolResult>${toolResult?.content}</toolResult>${reminder}`;
-              } else {
-                toolContent += `<toolResult>${toolResult?.content}</toolResult>${reminder}`;
-              }
+            // 所有上下文（skills + 延迟工具索引 + skills 索引 + memory）已通过
+            // injectContextMessage() 作为独立 user 消息注入，tool result 只包含工具实际返回值。
+            if (toolResult?.content) {
+              toolContent = `<toolResult>${toolResult.content}</toolResult>${reminder}`;
             } else {
-              if (shouldInjectRules) {
-                this.engine.rulesInjectedThisSession = true;
-                const deferredListing = getDeferredToolsListing(messageSource, this._getAgentExcludedTools(messageSource));
-                const skillsListing = SkillRegistry.getSkillsListing(messageSource);
-                const memorySnippet = getMemoryPromptSnippet();
-                toolContent = `\n<rules>${ASK_MODE_ROLE_TEXT}</rules>\n${deferredListing}\n${skillsListing}\n${memorySnippet}\n<toolResult>${toolResult?.content || '工具执行完成，无返回内容'}</toolResult>`;
-              } else {
-                toolContent = `<toolResult>${toolResult?.content || '工具执行完成，无返回内容'}</toolResult>`;
-              }
+              toolContent = `<toolResult>${toolResult?.content || '工具执行完成，无返回内容'}</toolResult>`;
             }
 
             if ((data.tool_name !== 'todo_write_tool' && data.tool_name !== 'search_available_tools'

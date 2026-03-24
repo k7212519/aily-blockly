@@ -391,6 +391,10 @@ class SkillRegistryImpl {
    * 生成 skills 索引列表文本（注入到系统提示中）。
    * 格式参考 getDeferredToolsListing()。
    */
+  /**
+   * 生成 skills 索引列表（渐进式发现：名称 → load_skill 加载完整内容）。
+   * 只列出名称，类似 deferred tools 的渐进式索引模式。
+   */
   getSkillsListing(agentName?: string): string {
     const skills = agentName
       ? this.getSkillsForAgent(agentName)
@@ -400,18 +404,12 @@ class SkillRegistryImpl {
     const listable = skills.filter(s => !s.metadata.autoActivate && !this._activatedSkills.has(s.metadata.name));
     if (listable.length === 0) return '';
 
-    const lines = listable.map(s => {
-      const tags = s.metadata.tags?.length ? ` [${s.metadata.tags.join(', ')}]` : '';
-      const origin = s.origin.type === 'global' ? '(全局)' : s.origin.type === 'project' ? '(项目)' : '';
-      return `- **${s.metadata.name}**: ${s.metadata.description}${tags}${origin}`;
-    });
+    const names = listable.map(s => s.metadata.name);
 
     return [
       '<availableSkills>',
-      '以下领域技能可通过 load_skill 工具按需加载详细指南：',
-      ...lines,
-      '调用 load_skill 时传入技能名称或关键词即可获取完整的最佳实践指南。',
-      '已激活的技能可通过 load_skill({query: "技能名", action: "unload"}) 卸载。',
+      `可用技能: ${names.join(', ')}`,
+      '调用 load_skill 加载技能的完整指南。',
       '</availableSkills>',
     ].join('\n');
   }
