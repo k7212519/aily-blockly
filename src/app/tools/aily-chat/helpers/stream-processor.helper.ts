@@ -89,6 +89,8 @@ export class StreamProcessorHelper {
     this.engine.streamCompleted = false;
 
     // 从 Turn[] 构建消息（优先使用压缩后的瞬态消息），并注入上下文
+    // 参考 Copilot PromptRenderer：instructions 在消息数组开头（历史对话之前），
+    // 每轮 tool call 都重新注入，确保 LLM 始终看到完整指令。
     let apiMessages: any[] | undefined;
     if (statelessMode) {
       // 压缩结果由 startChatTurn() 瞬态产出，用完即弃
@@ -97,7 +99,7 @@ export class StreamProcessorHelper {
       this.engine.turnLoop._compressedMessages = null;
       apiMessages = [...base];
       const contextMsg = this.buildContextMessage();
-      if (contextMsg) apiMessages.push(contextMsg);
+      if (contextMsg) apiMessages.unshift(contextMsg);
     }
 
     const source$ = statelessMode

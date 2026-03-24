@@ -154,17 +154,17 @@ export function generateApprovalMessage(toolName: string, args: any): { title: s
     case 'execute_command':
       return {
         title: '执行命令',
-        message: `即将执行命令：${args?.command || '(未知命令)'}${args?.cwd ? '，工作目录：' + args.cwd : ''}`
+        message: `即将执行命令：\n${args?.command || '(未知命令)'}${args?.cwd ? '\n工作目录：' + args.cwd : ''}`
       };
     case 'start_background_command':
       return {
         title: '启动后台命令',
-        message: `即将在后台启动命令：${args?.command || '(未知命令)'}`
+        message: `即将在后台启动命令：\n${args?.command || '(未知命令)'}`
       };
     case 'create_project':
       return {
         title: '创建项目',
-        message: `即将创建新项目：${args?.name || args?.projectName || '(未命名)'}${args?.board ? '，开发板：' + args.board : ''}`
+        message: `即将创建新项目：${args?.name || args?.projectName || '(未命名)'}${args?.board ? '\n开发板：' + args.board : ''}`
       };
     case 'build_project':
       return {
@@ -209,7 +209,7 @@ export function generateApprovalMessage(toolName: string, args: any): { title: s
     case 'run_subagent':
       return {
         title: `调用子代理: ${args?.agent || '(未知)'}`,
-        message: `即将调用子代理 ${args?.agent || '(未知)'} 执行任务：${args?.task || '(未指定任务)'}`
+        message: `即将调用子代理 ${args?.agent || '(未知)'} 执行任务：\n${args?.task || '(未指定任务)'}`
       };
     default:
       return {

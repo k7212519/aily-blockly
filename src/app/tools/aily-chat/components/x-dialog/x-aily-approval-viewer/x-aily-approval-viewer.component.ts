@@ -45,6 +45,8 @@ import { CommonModule } from '@angular/common';
       background: #1e1e1e;
       border: 1px solid #333;
       transition: border-color 0.2s;
+      overflow: hidden;
+      min-width: 0;
     }
     .aa-container:not(.aa-done):hover { border-color: #444; }
     .aa-done { opacity: 0.72; }
@@ -60,6 +62,9 @@ import { CommonModule } from '@angular/common';
       color: #d4d4d4;
       line-height: 1.5;
       flex: 1;
+      min-width: 0;
+      word-break: break-word;
+      overflow-wrap: break-word;
     }
     .aa-message {
       margin-top: 6px;
@@ -67,6 +72,8 @@ import { CommonModule } from '@angular/common';
       color: #888;
       line-height: 1.4;
       word-break: break-word;
+      overflow-wrap: break-word;
+      white-space: pre-wrap;
     }
 
     .aa-nav {

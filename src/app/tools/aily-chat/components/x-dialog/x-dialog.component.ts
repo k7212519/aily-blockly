@@ -578,10 +578,17 @@ export class XDialogComponent implements OnChanges, AfterViewChecked {
    * [thinking...] 占位符在此处被移除，x-markdown 渲染空内容
    */
   private fixContent(content: string): string {
+    // 将 \n \t \r 转义转为真实字符，但跳过代码块内部（避免破坏 JSON 结构）
+    content = content.replace(/(```[\s\S]*?```)|\\([ntr])/g, (match, codeBlock, escChar) => {
+      if (codeBlock) return codeBlock;
+      switch (escChar) {
+        case 'n': return '\n';
+        case 't': return '\t';
+        case 'r': return '\r';
+        default: return match;
+      }
+    });
     content = content
-      .replace(/\\n/g, '\n')
-      .replace(/\\t/g, '\t')
-      .replace(/\\r/g, '\r')
       .replace(/\[thinking\.\.\.?\]/g, '')
       // 移除工具结果/系统信息标签（AI 可能回显到响应文本中）
       .replace(/<toolResult>[\s\S]*?<\/toolResult>/g, '')

@@ -143,6 +143,8 @@ interface AnswerRecord {
       background: #1e1e1e;
       border: 1px solid #333;
       transition: border-color 0.2s;
+      overflow: hidden;
+      min-width: 0;
     }
     .aq-container:not(.aq-all-done):hover { border-color: #444; }
     .aq-all-done { opacity: 0.72; }
@@ -161,6 +163,10 @@ interface AnswerRecord {
       color: #d4d4d4;
       line-height: 1.5;
       flex: 1;
+      min-width: 0;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      white-space: pre-wrap;
     }
     .aq-close {
       flex-shrink: 0;

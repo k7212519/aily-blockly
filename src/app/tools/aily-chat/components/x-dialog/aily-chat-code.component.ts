@@ -171,7 +171,7 @@ const AILY_TYPES = [
     }
   `,
   styles: [`
-    :host { display: block; padding: 0.5em 0; }
+    :host { display: block; padding: 0.5em 0; overflow: hidden; min-width: 0; max-width: 100%; }
     .aily-mermaid-wrapper {
       position: relative;
       cursor: pointer;
