@@ -48,11 +48,11 @@ export const DEFERRED_TOOL_GROUPS: DeferredToolGroup[] = [
 //     brief: '版本控制',
 //     tools: ['abs_version_control']
 //   },
-  {
-    name: '接线图工具',
-    brief: '生成/验证/保存接线图、组件目录、引脚映射',
-    tools: ['generate_schematic', 'get_pinmap_summary', 'get_component_catalog', 'validate_schematic', 'apply_schematic', 'get_current_schematic', 'generate_pinmap', 'save_pinmap']
-  },
+//   {
+//     name: '接线图工具',
+//     brief: '生成/验证/保存接线图、组件目录、引脚映射',
+//     tools: ['generate_schematic', 'get_pinmap_summary', 'get_component_catalog', 'validate_schematic', 'apply_schematic', 'get_current_schematic', 'generate_pinmap', 'save_pinmap']
+//   },
   {
     name: '项目管理',
     brief: '创建项目、重新加载项目、切换开发板、开发板配置',
