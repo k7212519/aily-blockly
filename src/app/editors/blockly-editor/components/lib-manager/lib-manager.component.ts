@@ -315,6 +315,17 @@ export class LibManagerComponent {
     });
   }
 
+  getLocalizedField(lib: any, field: string): string {
+    const lang = this.translate.currentLang;
+    if (lang) {
+      const localizedKey = `${field}_${lang}`;
+      if (lib[localizedKey]) {
+        return lib[localizedKey];
+      }
+    }
+    return lib[field] || '';
+  }
+
   openExample(packageName) {
     this.electronService.openNewInStance('/main/playground/s/' + packageName.replace('@aily-project/', ''))
   }
